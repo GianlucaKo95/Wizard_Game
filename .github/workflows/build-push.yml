@@ -40,8 +40,14 @@ jobs:
           VITE_SUPABASE_ANON_KEY=__SUPABASE_ANON_KEY__ \
           npm run build
 
-      - name: Copy dist into Docker context
-        run: cp -r wizard/frontend/dist wizard/dist
+      - name: Verify and copy dist into Docker context
+        run: |
+          echo "=== Frontend dist inhalt ==="
+          ls -la wizard/frontend/dist/
+          mkdir -p wizard/dist
+          cp -r wizard/frontend/dist/. wizard/dist/
+          echo "=== Docker context dist inhalt ==="
+          ls -la wizard/dist/
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -79,4 +85,4 @@ jobs:
             io.hass.type=addon
             io.hass.arch=${{ matrix.arch }}
           cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=amd64
