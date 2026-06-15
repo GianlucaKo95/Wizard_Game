@@ -1,8 +1,8 @@
 name: Wizard
 version: "2.0.0"
 slug: wizard
-description: Wizard Kartenspiel – Online Multiplayer mit Supabase
-url: https://github.com/DEIN_USERNAME/wizard
+description: Wizard Kartenspiel – Online Multiplayer für 2–6 Spieler
+url: https://github.com/GianlucaKo95/wizard
 arch:
   - amd64
   - aarch64
@@ -20,4 +20,4 @@ schema:
   supabase_url: str
   supabase_anon_key: str
 
-image: "ghcr.io/DEIN_USERNAME/wizard-addon-{arch}"
+image: "ghcr.io/gianlucako95/wizard-{arch}"
