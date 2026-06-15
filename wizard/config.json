@@ -1,13 +1,10 @@
 {
   "name": "Wizard",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "slug": "wizard",
-  "description": "Wizard Kartenspiel \u2013 Online Multiplayer f\u00fcr 2\u20136 Spieler",
+  "description": "Wizard Kartenspiel – Online Multiplayer für 2–6 Spieler",
   "url": "https://github.com/GianlucaKo95/Wizard_Game",
-  "arch": [
-    "aarch64",
-    "amd64"
-  ],
+  "arch": ["aarch64", "amd64"],
   "startup": "application",
   "boot": "auto",
   "homeassistant_api": false,
@@ -26,6 +23,6 @@
     "SUPABASE_ANON_KEY": "{{supabase_anon_key}}"
   },
   "ports": {
-    "3043/tcp": 3043
+    "80/tcp": 3043
   }
 }
