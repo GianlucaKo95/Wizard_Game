@@ -41,14 +41,21 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Read version from config.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' wizard/config.yaml | sed 's/version: *"//' | sed 's/"//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_BASE }}-${{ matrix.arch }}
           tags: |
-            type=sha,prefix=sha-
             type=raw,value=latest
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=sha,prefix=sha-
 
       - name: Build & push (${{ matrix.arch }})
         uses: docker/build-push-action@v5
