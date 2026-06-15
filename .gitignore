@@ -1,6 +1,6 @@
+.vs/
+.DS_Store
 node_modules/
 dist/
 .env
 *.local
-.DS_Store
-.vs/
