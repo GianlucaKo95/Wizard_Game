@@ -2,9 +2,8 @@
 set -euo pipefail
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
-log "Wizard v2.0.0 startet..."
+log "Wizard v2.0.1 startet..."
 
-# Supabase config aus Umgebungsvariablen (via environment block in config.json)
 SUPA_URL="${SUPABASE_URL:-}"
 SUPA_KEY="${SUPABASE_ANON_KEY:-}"
 
@@ -19,15 +18,4 @@ find /app/frontend/dist -name "*.js" \
     -exec sed -i "s|__SUPABASE_ANON_KEY__|${SUPA_KEY}|g" {} \;
 
 log "Starte nginx auf Port 3043..."
-nginx &
-NGINX_PID=$!
-
-cleanup() {
-    log "Beende Wizard..."
-    kill "${NGINX_PID}" 2>/dev/null || true
-    wait
-}
-trap cleanup SIGTERM SIGINT
-
-log "Wizard läuft"
-wait "${NGINX_PID}"
+exec nginx -g "daemon off;"
