@@ -3,18 +3,12 @@ FROM ${BUILD_FROM}
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apk add --no-cache nginx bash curl nodejs npm
+RUN apk add --no-cache nginx bash curl
 
 WORKDIR /app
 
-# Build frontend
-COPY frontend/ ./frontend-src/
-RUN cd frontend-src \
-    && npm install --no-audit --no-fund \
-    && VITE_SUPABASE_URL=__SUPABASE_URL__ VITE_SUPABASE_ANON_KEY=__SUPABASE_ANON_KEY__ npm run build \
-    && mkdir -p /app/frontend \
-    && mv frontend-src/dist /app/frontend/dist \
-    && cd / && rm -rf /app/frontend-src
+# Nur das fertige dist/ wird hineinkopiert (gebaut im Workflow)
+COPY dist/ /app/frontend/dist/
 
 COPY nginx.conf /etc/nginx/http.d/default.conf
 

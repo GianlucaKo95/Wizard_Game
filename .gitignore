@@ -1,6 +1,7 @@
 .vs/
 .DS_Store
 node_modules/
-dist/
+wizard/frontend/dist/
+wizard/dist/
 .env
 *.local

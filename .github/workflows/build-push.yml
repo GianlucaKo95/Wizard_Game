@@ -29,6 +29,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: wizard/frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: wizard/frontend
+        run: |
+          npm install --no-audit --no-fund
+          VITE_SUPABASE_URL=__SUPABASE_URL__ \
+          VITE_SUPABASE_ANON_KEY=__SUPABASE_ANON_KEY__ \
+          npm run build
+
+      - name: Copy dist into Docker context
+        run: cp -r wizard/frontend/dist wizard/dist
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -45,10 +63,9 @@ jobs:
       - name: Extract version and owner
         id: version
         run: |
-          VERSION=$(cat wizard/config.json | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
+          VERSION=$(python3 -c "import json; print(json.load(open('wizard/config.json'))['version'])")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
 
       - name: Build and push
         uses: docker/build-push-action@v5
