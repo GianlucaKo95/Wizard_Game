@@ -2,7 +2,7 @@
 set -euo pipefail
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
-log "Wizard v2.0.4 startet..."
+log "Wizard v2.0.6 startet..."
 
 SUPA_URL="${SUPABASE_URL:-}"
 SUPA_KEY="${SUPABASE_ANON_KEY:-}"
@@ -19,5 +19,5 @@ find /app/frontend/dist -name "*.js" \
 
 nginx -t 2>&1 && log "nginx config OK" || { log "nginx config FEHLER!"; exit 1; }
 
-log "Starte nginx auf Port 80..."
+log "Starte nginx auf Port 3043..."
 exec nginx -g "daemon off;" 2>&1
