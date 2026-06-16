@@ -1,0 +1,19 @@
+name: Wizard
+version: "3.0.0"
+slug: wizard
+description: "Wizard Kartenspiel – Online Multiplayer für 2–6 Spieler"
+url: "https://github.com/GianlucaKo95/Wizard_Game"
+homeassistant: "2024.1.0"
+startup: application
+boot: auto
+host_network: false
+init: true
+ingress: false
+ports:
+  3043/tcp: 3043
+ports_description:
+  3043/tcp: "Wizard Web UI"
+arch:
+  - amd64
+  - aarch64
+image: ghcr.io/gianlucako95/wizard-addon
