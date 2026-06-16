@@ -1,6 +1,6 @@
 {
   "name": "Wizard",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "slug": "wizard",
   "description": "Wizard Kartenspiel – Online Multiplayer für 2–6 Spieler",
   "url": "https://github.com/GianlucaKo95/Wizard_Game",
@@ -9,6 +9,7 @@
   "boot": "auto",
   "homeassistant_api": false,
   "hassio_api": false,
+  "host_network": true,
   "image": "ghcr.io/gianlucako95/homeassistant-addon-wizard-{arch}",
   "options": {
     "supabase_url": "",
