@@ -237,7 +237,7 @@ export function WizardArt({ index }: { index: number }) {
 
       {/* Hair */}
       {index === 2 // Tom – almost no hair
-        ? <ellipse cx="50" cy={c.hat ? 40 : 44}" rx="17" ry="5" fill={c.hair} />
+        ? <ellipse cx="50" cy={c.hat ? 40 : 44} rx="17" ry="5" fill={c.hair} />
         : index === 3 // Minerva – bun
         ? <>
             <ellipse cx="50" cy={c.hat ? 40 : 44} rx="16" ry="7" fill={c.hair} />
