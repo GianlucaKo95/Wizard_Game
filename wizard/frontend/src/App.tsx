@@ -591,7 +591,7 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
         </div>
 
         {isHost ? (
-          <button onClick={() => act("startGame", { aiCount })} disabled={loading || players.length + aiCount < 2}
+          <button onClick={() => act("startGame", { aiCount, edition: room?.edition ?? "classic" })} disabled={loading || players.length + aiCount < 2}
             style={{ ...goldBtn(), padding: "13px 32px", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
             ✦ Spiel starten
           </button>
