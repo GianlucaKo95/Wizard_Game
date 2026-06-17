@@ -1,11 +1,12 @@
 export type Suit = "red" | "blue" | "green" | "yellow";
-export type CardType = "number" | "fool" | "wizard";
+export type CardType = "number" | "fool" | "wizard" | "special";
 
 export interface Card {
   id: string;
   type: CardType;
   suit: Suit | null;
   value: number;
+  specialType?: string;
 }
 
 export interface Player {

@@ -118,3 +118,13 @@ select
 from public.profiles p
 left join public.game_stats gs on gs.user_id = p.id
 group by p.id, p.username;
+
+-- Add edition column (run this if table already exists)
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS edition text NOT NULL DEFAULT 'classic';
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS pending_rainbow7 jsonb;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS pending_rainbow7_buffer jsonb;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS pending_rainbow9 int;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS werewolf_suit text;
+
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS remaining_deck jsonb;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS vampire_revealed jsonb;

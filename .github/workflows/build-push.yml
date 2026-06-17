@@ -1,4 +1,4 @@
-name: Build & Push Add-on Images
+name: Build & Push Add-on
 
 on:
   push:
@@ -6,27 +6,20 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/gianlucako95/wizard-addon
 
 jobs:
   build:
-    name: Build ${{ matrix.arch }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-            platform: linux/amd64
-          - arch: aarch64
-            platform: linux/arm64
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Build frontend on runner (x86, native, fast)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -34,20 +27,13 @@ jobs:
 
       - name: Build frontend
         working-directory: wizard/frontend
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           npm install --no-audit --no-fund
-          VITE_SUPABASE_URL=__SUPABASE_URL__ \
-          VITE_SUPABASE_ANON_KEY=__SUPABASE_ANON_KEY__ \
           npm run build
-
-      - name: Verify and copy dist into Docker context
-        run: |
-          echo "=== Frontend dist inhalt ==="
-          ls -la wizard/frontend/dist/
-          mkdir -p wizard/dist
-          cp -r wizard/frontend/dist/. wizard/dist/
-          echo "=== Docker context dist inhalt ==="
-          ls -la wizard/dist/
+          cp -r dist ../dist
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -62,27 +48,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version and owner
+      - name: Extract version
         id: version
         run: |
-          VERSION=$(python3 -c "import json; print(json.load(open('wizard/config.json'))['version'])")
+          VERSION=$(grep '^version:' wizard/config.yaml | sed 's/version: *"//' | sed 's/"//')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      - name: Build and push
+      - name: Build and push multi-arch
         uses: docker/build-push-action@v5
         with:
           context: wizard
           file: wizard/Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ steps.version.outputs.owner }}/homeassistant-addon-wizard-${{ matrix.arch }}:latest
-            ${{ env.REGISTRY }}/${{ steps.version.outputs.owner }}/homeassistant-addon-wizard-${{ matrix.arch }}:${{ steps.version.outputs.version }}
-          labels: |
-            io.hass.version=${{ steps.version.outputs.version }}
-            io.hass.name=Wizard
-            io.hass.type=addon
-            io.hass.arch=${{ matrix.arch }}
-          cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=amd64
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

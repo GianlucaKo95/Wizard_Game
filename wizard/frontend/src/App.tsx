@@ -1,40 +1,105 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
-import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid, type GameState } from "./types";
+import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const S = {
-  table: {
-    minHeight: "100vh",
-    background: "radial-gradient(ellipse at center,#1b4332 0%,#081c15 100%)",
-    display: "flex", flexDirection: "column" as const,
-    alignItems: "center", padding: 12, gap: 10,
-  } as React.CSSProperties,
-  btn: (bg = "#4a0072"): React.CSSProperties => ({
-    background: bg, color: "#e8d5a0",
-    border: "1px solid rgba(255,255,255,0.2)",
-    borderRadius: 8, padding: "10px 20px",
-    fontSize: 14, cursor: "pointer",
-  }),
-  input: {
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.2)",
-    borderRadius: 6, color: "#e8d5a0",
-    padding: "8px 12px", fontSize: 14, width: "100%",
-  } as React.CSSProperties,
-  card: (color = "rgba(0,0,0,0.45)"): React.CSSProperties => ({
-    background: color, borderRadius: 10,
-    padding: "10px 16px", display: "flex",
-    flexDirection: "column" as const, gap: 6,
-  }),
+// ─── Design Tokens ────────────────────────────────────────────────────────────
+const C = {
+  midnight: "#0D1B2A",
+  deepBlue: "#162032",
+  violet: "#3D1C6E",
+  violetLight: "#5A2D99",
+  gold: "#C9A84C",
+  goldLight: "#E4C97A",
+  ivory: "#F2E8D5",
+  ivoryDim: "#B8A98A",
+  glass: "rgba(255,255,255,0.04)",
+  glassBorder: "rgba(201,168,76,0.2)",
+  error: "#CF4444",
+  success: "#2D9E5F",
 };
 
-function Pill({ children, highlight }: { children: React.ReactNode; highlight?: boolean }) {
+// ─── Shared Styles ────────────────────────────────────────────────────────────
+const cinzel: React.CSSProperties = { fontFamily: "'Cinzel', serif" };
+
+const glass = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+  background: "rgba(22,32,50,0.85)",
+  backdropFilter: "blur(12px)",
+  border: `1px solid ${C.glassBorder}`,
+  borderRadius: 12,
+  ...extra,
+});
+
+const goldBtn = (active = true): React.CSSProperties => ({
+  ...cinzel,
+  background: active ? `linear-gradient(135deg, ${C.violet}, ${C.violetLight})` : "rgba(255,255,255,0.06)",
+  color: active ? C.goldLight : C.ivoryDim,
+  border: `1px solid ${active ? C.gold : "rgba(255,255,255,0.1)"}`,
+  borderRadius: 8,
+  padding: "clamp(8px,2vw,12px) clamp(12px,3vw,20px)",
+  fontSize: "clamp(12px, 3vw, 14px)",
+  cursor: "pointer",
+  letterSpacing: "0.05em",
+  transition: "all 0.2s",
+  fontWeight: 600,
+  WebkitTapHighlightColor: "transparent",
+  touchAction: "manipulation",
+  minHeight: 44,
+  userSelect: "none",
+  WebkitUserSelect: "none",
+});
+
+const inputStyle: React.CSSProperties = {
+  background: "rgba(0,0,0,0.3)",
+  border: `1px solid ${C.glassBorder}`,
+  borderRadius: 8,
+  color: C.ivory,
+  padding: "clamp(9px,2vw,12px) clamp(10px,3vw,14px)",
+  fontSize: 16, // must be 16px+ to prevent iOS zoom
+  width: "100%",
+  outline: "none",
+  fontFamily: "Inter, sans-serif",
+  WebkitAppearance: "none",
+};
+
+// Applied as className to prevent selection
+const tableStyle: React.CSSProperties = {
+  minHeight: "100dvh",
+  background: `radial-gradient(ellipse at 20% 0%, ${C.violet}33 0%, transparent 60%), radial-gradient(ellipse at 80% 100%, #1A3A6E33 0%, transparent 60%), ${C.midnight}`,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  padding: `max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))`,
+  gap: "clamp(6px, 1.5vw, 10px)",
+};
+
+function GoldDivider() {
+  return <div style={{ width: "100%", maxWidth: 500, height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />;
+}
+
+// ─── Install Banner ───────────────────────────────────────────────────────────
+function InstallBanner() {
+  const [prompt, setPrompt] = useState<any>(null);
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: any) => { e.preventDefault(); setPrompt(e); setShow(true); };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  if (!show) return null;
+
   return (
-    <div style={{ background: highlight ? "rgba(100,60,150,0.7)" : "rgba(0,0,0,0.45)", borderRadius: 8, padding: "5px 12px", display: "inline-flex", alignItems: "center", gap: 6 }}>
-      {children}
+    <div style={{ ...glass(), position: "fixed", bottom: "max(16px, env(safe-area-inset-bottom))", left: "max(16px, env(safe-area-inset-left))", right: "max(16px, env(safe-area-inset-right))", padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, zIndex: 1000 }}>
+      <div style={{ fontSize: 28 }}>🧙</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ ...cinzel, fontSize: 13, color: C.gold }}>Als App installieren</div>
+        <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Wizard direkt vom Homescreen starten</div>
+      </div>
+      <button onClick={() => { prompt?.prompt(); setShow(false); }} style={{ ...goldBtn(), padding: "7px 14px", fontSize: 12 }}>Installieren</button>
+      <button onClick={() => setShow(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 18, padding: 4 }}>✕</button>
     </div>
   );
 }
@@ -48,17 +113,14 @@ function AuthScreen() {
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
+    if (!username.trim() || !password.trim()) { setError("Benutzername und Passwort eingeben"); return; }
     setError(""); setLoading(true);
     try {
+      const email = `${username.toLowerCase().replace(/\s+/g, "")}@wizard.local`;
       if (mode === "register") {
-        const email = `${username.toLowerCase().replace(/\s+/g,"")}@wizard.local`;
-        const { error: e } = await supabase.auth.signUp({
-          email, password,
-          options: { data: { username } }
-        });
+        const { error: e } = await supabase.auth.signUp({ email, password, options: { data: { username } } });
         if (e) throw e;
       } else {
-        const email = `${username.toLowerCase().replace(/\s+/g,"")}@wizard.local`;
         const { error: e } = await supabase.auth.signInWithPassword({ email, password });
         if (e) throw e;
       }
@@ -70,62 +132,86 @@ function AuthScreen() {
   }
 
   return (
-    <div style={{ ...S.table, justifyContent: "center", gap: 20 }}>
-      <div style={{ fontSize: 52 }}>🧙</div>
-      <div style={{ fontSize: 32, fontWeight: "bold", color: "#ffd700", letterSpacing: 4 }}>WIZARD</div>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 24 }}>
+      {/* Logo */}
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: "clamp(44px,12vw,64px)", marginBottom: 8 }}>🧙</div>
+        <div style={{ ...cinzel, fontSize: "clamp(26px,8vw,38px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,2vw,8px)", textShadow: `0 0 40px ${C.violet}` }}>WIZARD</div>
+        <div style={{ fontSize: 12, color: C.ivoryDim, letterSpacing: 3, marginTop: 4 }}>DAS KARTENSPIEL</div>
+      </div>
 
-      <div style={{ ...S.card(), width: 300, gap: 12 }}>
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["login","register"] as const).map(m => (
-            <button key={m} onClick={() => setMode(m)}
-              style={{ ...S.btn(mode===m?"#4a0072":"#222"), flex: 1, fontSize: 13 }}>
+      <GoldDivider />
+
+      {/* Auth Card */}
+      <div style={{ ...glass({ padding: 24 }), width: "min(340px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 4 }}>
+          {(["login", "register"] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)} style={{
+              flex: 1, padding: "9px 0", borderRadius: 6, fontSize: 13,
+              ...cinzel, fontWeight: 600, letterSpacing: "0.05em", border: "none", cursor: "pointer",
+              background: mode === m ? `linear-gradient(135deg, ${C.violet}, ${C.violetLight})` : "transparent",
+              color: mode === m ? C.goldLight : C.ivoryDim,
+              transition: "all 0.2s",
+            }}>
               {m === "login" ? "Anmelden" : "Registrieren"}
             </button>
           ))}
         </div>
-        <input value={username} onChange={e=>setUsername(e.target.value)}
-          placeholder="Benutzername" style={S.input} />
-        <input value={password} onChange={e=>setPassword(e.target.value)}
-          placeholder="Passwort" type="password" style={S.input}
-          onKeyDown={e=>e.key==="Enter"&&handleSubmit()} />
-        <button onClick={handleSubmit} disabled={loading}
-          style={{ ...S.btn(), opacity: loading ? 0.5 : 1 }}>
-          {loading ? "…" : mode==="login" ? "Anmelden" : "Account erstellen"}
+
+        <input value={username} onChange={e => setUsername(e.target.value)}
+          placeholder="Benutzername" style={inputStyle}
+          onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+        <input value={password} onChange={e => setPassword(e.target.value)}
+          placeholder="Passwort" type="password" style={inputStyle}
+          onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+
+        <button onClick={handleSubmit} disabled={loading} style={{
+          ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14,
+          opacity: loading ? 0.6 : 1,
+        }}>
+          {loading ? "…" : mode === "login" ? "Anmelden" : "Account erstellen"}
         </button>
-        {error && <div style={{ color: "#eb5757", fontSize: 12 }}>{error}</div>}
+
+        {error && (
+          <div style={{ background: `${C.error}22`, border: `1px solid ${C.error}55`, borderRadius: 6, padding: "8px 12px", fontSize: 12, color: "#FF8080", textAlign: "center" }}>
+            {error}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ─── Stats Screen ──────────────────────────────────────────────────────────────
+// ─── Stats Screen ─────────────────────────────────────────────────────────────
 function StatsScreen({ userId, onBack }: { userId: string; onBack: () => void }) {
   const [stats, setStats] = useState<any>(null);
-
   useEffect(() => {
-    supabase.from("user_stats").select("*").eq("id", userId).single()
-      .then(({ data }) => setStats(data));
+    supabase.from("user_stats").select("*").eq("id", userId).single().then(({ data }) => setStats(data));
   }, [userId]);
 
+  const statItems = stats ? [
+    { label: "Spiele", value: stats.games_played ?? 0, icon: "🎮" },
+    { label: "Siege", value: stats.games_won ?? 0, icon: "🏆" },
+    { label: "Ø Punkte", value: stats.avg_score ?? 0, icon: "⭐" },
+    { label: "Ø Platz", value: stats.avg_placement ?? "–", icon: "🎯" },
+    { label: "Trefferquote", value: `${stats.bid_accuracy_pct ?? 0}%`, icon: "🎪" },
+    { label: "Stiche geboten", value: stats.total_bid ?? 0, icon: "🃏" },
+  ] : [];
+
   return (
-    <div style={{ ...S.card(), minWidth: 280, gap: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ color: "#ffd700", fontSize: 16 }}>📊 Statistiken</div>
-        <button onClick={onBack} style={{ ...S.btn("#333"), padding: "4px 10px", fontSize: 12 }}>✕</button>
+    <div style={{ ...glass({ padding: 20 }), width: "min(380px, 92vw)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>📊 Statistiken</div>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 20 }}>✕</button>
       </div>
-      {!stats ? <div style={{ opacity: 0.5 }}>Lade…</div> : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          {[
-            ["Spiele", stats.games_played ?? 0],
-            ["Siege", stats.games_won ?? 0],
-            ["Ø Punkte", stats.avg_score ?? 0],
-            ["Ø Platz", stats.avg_placement ?? "–"],
-            ["Trefferquote", `${stats.bid_accuracy_pct ?? 0}%`],
-            ["Geboten", stats.total_bid ?? 0],
-          ].map(([label, val]) => (
-            <div key={label as string} style={{ background: "rgba(0,0,0,0.4)", borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
-              <div style={{ fontSize: 11, opacity: 0.6 }}>{label}</div>
-              <div style={{ fontSize: 18, fontWeight: "bold", color: "#ffd700" }}>{val}</div>
+      {!stats ? <div style={{ textAlign: "center", padding: 24, color: C.ivoryDim }}>Lade…</div> : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          {statItems.map(({ label, value, icon }) => (
+            <div key={label} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center" }}>
+              <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
+              <div style={{ ...cinzel, fontSize: 18, fontWeight: 700, color: C.gold }}>{value}</div>
+              <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 2 }}>{label}</div>
             </div>
           ))}
         </div>
@@ -134,250 +220,855 @@ function StatsScreen({ userId, onBack }: { userId: string; onBack: () => void })
   );
 }
 
-// ─── Lobby Screen ─────────────────────────────────────────────────────────────
+// ─── Lobby ────────────────────────────────────────────────────────────────────
 function LobbyScreen({ session }: { session: Session }) {
+  const [view, setView] = useState<"home" | "create" | "join" | "rules">("home");
+  const [reconnectRoom, setReconnectRoom] = useState<string|null>(null);
+
+  // Check for reconnectable room on mount
+  useEffect(() => {
+    const savedRoom = sessionStorage.getItem("wizard_room");
+    if (savedRoom) {
+      const { roomId, code } = JSON.parse(savedRoom);
+      supabase.from("rooms").select("phase").eq("id", roomId).single()
+        .then(({ data }) => {
+          if (data && data.phase !== "gameEnd") setReconnectRoom(code);
+          else sessionStorage.removeItem("wizard_room");
+        });
+    }
+  }, []);
   const [codeInput, setCodeInput] = useState("");
   const [aiCount, setAiCount] = useState(2);
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [humanCount, setHumanCount] = useState(1);
+  const [edition, setEdition] = useState<"classic"|"anniversary">("classic");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const username = session.user.user_metadata?.username ?? session.user.email;
+  const username = session.user.user_metadata?.username ?? "Spieler";
+  const maxAI = Math.max(0, 6 - humanCount);
+  const minAI = Math.max(0, 3 - humanCount); // minimum 3 players total
 
   async function createRoom() {
     setLoading(true); setError("");
-    const code = Math.random().toString(36).substring(2,6).toUpperCase();
-    const { data, error: e } = await supabase.from("rooms").insert({
-      code, host_id: session.user.id, phase: "lobby"
-    }).select().single();
+    const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const { data, error: e } = await supabase.from("rooms").insert({ code, host_id: session.user.id, phase: "lobby", edition }).select().single();
     if (e || !data) { setError(e?.message ?? "Fehler"); setLoading(false); return; }
-    await supabase.from("room_players").insert({
-      room_id: data.id, user_id: session.user.id,
-      player_index: 0, is_ai: false,
-      ai_name: username, hand: [], score: 0, tricks_won: 0, connected: true
-    });
+    await supabase.from("room_players").insert({ room_id: data.id, user_id: session.user.id, player_index: 0, is_ai: false, ai_name: username, hand: [], score: 0, tricks_won: 0, connected: true });
+    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: data.id, code }));
     setRoomId(data.id);
     setLoading(false);
   }
 
   async function joinRoom() {
     setLoading(true); setError("");
-    const { data: room } = await supabase.from("rooms")
-      .select("*").eq("code", codeInput.toUpperCase()).single();
+    const { data: room } = await supabase.from("rooms").select("*").eq("code", codeInput.toUpperCase()).single();
     if (!room) { setError("Raum nicht gefunden"); setLoading(false); return; }
     if (room.phase !== "lobby") { setError("Spiel bereits gestartet"); setLoading(false); return; }
-    const { data: existing } = await supabase.from("room_players")
-      .select("player_index").eq("room_id", room.id).order("player_index");
-    if ((existing?.length ?? 0) >= 6) { setError("Raum voll"); setLoading(false); return; }
-    const nextIdx = (existing?.length ?? 0);
-    await supabase.from("room_players").insert({
-      room_id: room.id, user_id: session.user.id,
-      player_index: nextIdx, is_ai: false,
-      ai_name: username, hand: [], score: 0, tricks_won: 0, connected: true
-    });
+    const { data: existing } = await supabase.from("room_players").select("player_index").eq("room_id", room.id);
+    if ((existing?.length ?? 0) >= 6) { setError("Raum voll (max. 6 Spieler)"); setLoading(false); return; }
+    await supabase.from("room_players").insert({ room_id: room.id, user_id: session.user.id, player_index: existing?.length ?? 0, is_ai: false, ai_name: username, hand: [], score: 0, tricks_won: 0, connected: true });
+    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: room.id, code: codeInput.toUpperCase() }));
     setRoomId(room.id);
     setLoading(false);
   }
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} aiCount={aiCount} />;
+  // Reconnect function
+  async function reconnect() {
+    if (!reconnectRoom) return;
+    setCodeInput(reconnectRoom);
+    await joinRoom();
+  }
 
-  return (
-    <div style={{ ...S.table, justifyContent: "center", gap: 18 }}>
-      <div style={{ fontSize: 52 }}>🧙</div>
-      <div style={{ fontSize: 32, fontWeight: "bold", color: "#ffd700", letterSpacing: 4 }}>WIZARD</div>
 
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <span style={{ fontSize: 13, opacity: 0.7 }}>👤 {username}</span>
-        <button onClick={() => setShowStats(s=>!s)} style={{ ...S.btn("#1b4d3e"), padding: "4px 10px", fontSize: 12 }}>📊</button>
-        <button onClick={() => supabase.auth.signOut()} style={{ ...S.btn("#333"), padding: "4px 10px", fontSize: 12 }}>Abmelden</button>
+  // ── Rules ──
+  if (view === "rules") return (
+    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(500px,96vw)" }}>
+        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
+        <button onClick={() => setView("home")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>← Zurück</button>
       </div>
 
-      {showStats && <StatsScreen userId={session.user.id} onBack={() => setShowStats(false)} />}
+      {/* Basic rules */}
+      <div style={{ ...glass({ padding: 16 }), width: "min(500px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>GRUNDREGELN</div>
+        {[
+          ["Ziel", "Genau so viele Stiche machen wie angesagt"],
+          ["Treffer", "+20 Punkte + 10 pro angesagtem Stich"],
+          ["Fehler", "-10 Punkte pro Differenz"],
+          ["Zauberer", "Schlägt alles (außer Drachen)"],
+          ["Narr", "Verliert immer"],
+          ["Stichzwang", "Der Dealer darf nicht die Zahl bieten, die die Gesamtansagen gleich der Rundenzahl macht"],
+          ["Farbzwang", "Angespielte Farbe muss bedient werden wenn möglich"],
+        ].map(([title, desc]) => (
+          <div key={title} style={{ display: "flex", gap: 10, padding: "6px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
+            <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 90 }}>{title}</div>
+            <div style={{ fontSize: 11, color: C.ivoryDim, flex: 1 }}>{desc}</div>
+          </div>
+        ))}
+      </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, width: 300 }}>
-        <div style={S.card()}>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>KI-Spieler beim Start</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {[0,1,2,3,4,5].map(n => (
-              <button key={n} onClick={() => setAiCount(n)}
-                style={{ ...S.btn(aiCount===n?"#4a0072":"#333"), padding: "6px 12px" }}>
-                {n===0?"Keine":n}
+      {/* Special cards */}
+      <div style={{ ...glass({ padding: 16 }), width: "min(500px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>⚡ 30 JAHRE EDITION – SPEZIALKARTEN</div>
+        {[
+          ["🐉 Seidenschnabel", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
+          ["✦ Fee", "Verliert immer – außer wenn der Drache gespielt wurde. Dann gewinnt die Fee."],
+          ["🧹 Bellatrix (Hexe)", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
+          ["🐺 Lupin (Werwolf)", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
+          ["🧛 Quirrell (Vampir)", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
+          ["💥 Elderstab (Bombe)", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
+          ["😄 George Weasley (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
+          ["🚂 Gleis 9¾ (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
+          ["❓ Ron Weasley (Zauberernarr)", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
+        ].map(([title, desc]) => (
+          <div key={title as string} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
+            <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 120 }}>{title}</div>
+            <div style={{ fontSize: 11, color: C.ivoryDim, flex: 1, lineHeight: 1.5 }}>{desc}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (roomId) return <GameRoom roomId={roomId} session={session} aiCount={Math.min(aiCount, maxAI)} edition={edition} />;
+
+  const HeaderBlock = () => (
+    <>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: "clamp(36px,10vw,52px)" }}>🧙</div>
+        <div style={{ ...cinzel, fontSize: "clamp(22px,7vw,32px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(3px,1.5vw,6px)" }}>WIZARD</div>
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ ...glass({ padding: "6px 14px" }), ...cinzel, fontSize: 13, color: C.ivory }}>👤 {username}</div>
+        <button onClick={() => setShowStats(s => !s)} style={{ ...goldBtn(false), padding: "6px 12px" }}>📊</button>
+        <button onClick={() => supabase.auth.signOut()} style={{ ...goldBtn(false), padding: "6px 12px" }}>Abmelden</button>
+      </div>
+      {showStats && <StatsScreen userId={session.user.id} onBack={() => setShowStats(false)} />}
+      <GoldDivider />
+    </>
+  );
+
+  if (view === "home") return (
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+      <HeaderBlock />
+      {reconnectRoom && (
+        <div style={{ ...glass({ padding: "12px 16px" }), width: "min(320px,92vw)", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ ...cinzel, fontSize: 12, color: C.gold }}>Laufendes Spiel gefunden</div>
+            <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Raum: {reconnectRoom}</div>
+          </div>
+          <button onClick={reconnect} style={{ ...goldBtn(), padding: "8px 14px", fontSize: 12 }}>Zurück</button>
+          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 16 }}>✕</button>
+        </div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "min(320px, 92vw)" }}>
+        <button onClick={() => setView("create")} style={{ ...goldBtn(), width: "100%", padding: "16px 0", fontSize: 15 }}>
+          ✦ Spiel erstellen
+        </button>
+        <button onClick={() => setView("join")} style={{ ...goldBtn(false), width: "100%", padding: "16px 0", fontSize: 15 }}>
+          ⬡ Spiel beitreten
+        </button>
+        <button onClick={() => setView("rules")} style={{ ...goldBtn(false), width: "100%", padding: "12px 0", fontSize: 13 }}>
+          📖 Regeln & Spezialkarten
+        </button>
+      </div>
+    </div>
+  );
+
+  if (view === "create") return (
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+      <HeaderBlock />
+      <div style={{ ...glass({ padding: 24 }), width: "min(340px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
+        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
+        <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
+        <div>
+          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>MENSCHLICHE SPIELER (inkl. dir)</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[1,2,3,4,5,6].map(n => (
+              <button key={n} onClick={() => { setHumanCount(n); const newMax = Math.max(0, 6-n); const newMin = Math.max(0, 3-n); setAiCount(Math.min(Math.max(aiCount, newMin), newMax)); }}
+                style={{ ...goldBtn(humanCount===n), flex: 1, padding: "8px 0", fontSize: 13 }}>{n}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>
+            KI-MITSPIELER {maxAI === 0 ? "(Raum voll)" : `(max. ${maxAI})`}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {Array.from({ length: maxAI + 1 }, (_, n) => (
+              <button key={n} onClick={() => setAiCount(Math.max(n, minAI))}
+                disabled={n < minAI}
+                style={{ ...goldBtn(aiCount===Math.max(n,minAI) && n>=minAI), flex: 1, padding: "8px 0", fontSize: 13, opacity: n < minAI ? 0.25 : 1 }}>
+                {n===0?"–":n}
               </button>
             ))}
           </div>
         </div>
-
-        <button onClick={createRoom} disabled={loading} style={{ ...S.btn(), opacity: loading?0.5:1 }}>
-          Raum erstellen
-        </button>
-
-        <div style={{ display: "flex", gap: 8 }}>
-          <input value={codeInput} onChange={e=>setCodeInput(e.target.value.toUpperCase())}
-            placeholder="XXXX" maxLength={4}
-            style={{ ...S.input, flex: 1, textAlign: "center", letterSpacing: 4 }} />
-          <button onClick={joinRoom} disabled={loading} style={S.btn("#1b4d3e")}>Beitreten</button>
+        <div style={{ ...glass({ padding: "10px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
+          <span style={{ color: C.gold, ...cinzel }}>{humanCount + aiCount}</span> Spieler gesamt ·{" "}
+          {humanCount} 👤 + {aiCount} 🤖 · <span style={{ color: C.gold }}>{Math.floor(60/(humanCount+aiCount))} Runden</span>{humanCount+aiCount < 3 ? <span style={{color:"#FF8080"}}> · min. 3 Spieler</span> : ""}
         </div>
-        {error && <div style={{ color: "#eb5757", fontSize: 13 }}>{error}</div>}
+        <button onClick={createRoom} disabled={loading || humanCount+aiCount < 3}
+          style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading?0.5:1 }}>
+          {loading ? "Erstelle Raum…" : "✦ Raum erstellen"}
+        </button>
+        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+      <HeaderBlock />
+      <div style={{ ...glass({ padding: 24 }), width: "min(340px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
+        <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Spiel beitreten</div>
+        <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
+          placeholder="XXXX" maxLength={4}
+          style={{ ...inputStyle, textAlign: "center", letterSpacing: 8, fontSize: 22, ...cinzel }}
+          onKeyDown={e => e.key==="Enter" && joinRoom()} autoFocus />
+        <button onClick={joinRoom} disabled={loading || codeInput.length < 4}
+          style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading||codeInput.length<4?0.5:1 }}>
+          {loading ? "Suche Raum…" : "⬡ Beitreten"}
+        </button>
+        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
       </div>
     </div>
   );
 }
 
+
+
+// ─── Playability Check (client-side hint) ────────────────────────────────────
+function isCardPlayable(card: any, hand: any[], trick: any[], werewolfSuit?: string|null): boolean {
+  const alwaysOk = (c: any) =>
+    c.type === "fool" || c.type === "wizard" ||
+    ["witch","wizardfool","dragon","fairy","bomb","werewolf"].includes(c.specialType ?? "");
+
+  if (alwaysOk(card)) return true;
+
+  const ledEntry = trick.find((t:any) =>
+    t.card.type === "number" ||
+    (t.card.specialType === "rainbow7" && t.card.suit) ||
+    (t.card.specialType === "rainbow9" && t.card.suit)
+  );
+  const led = werewolfSuit ?? ledEntry?.card.suit ?? null;
+  if (!led) return true;
+
+  const canFollow = hand.some((c:any) => c.suit === led && !alwaysOk(c));
+  if (canFollow && card.suit !== led) return false;
+  return true;
+}
+
+// ─── Hand Sorting ─────────────────────────────────────────────────────────────
+const SUIT_ORDER: Record<string, number> = { red: 0, blue: 1, green: 2, yellow: 3 };
+const TYPE_ORDER: Record<string, number> = { fool: 0, number: 1, wizard: 2, special: 3 };
+
+function sortHand(hand: any[]): any[] {
+  return [...hand].sort((a, b) => {
+    // 1. Type order
+    const tA = TYPE_ORDER[a.type] ?? 1;
+    const tB = TYPE_ORDER[b.type] ?? 1;
+    if (tA !== tB) return tA - tB;
+    // 2. For number cards: suit order
+    if (a.type === "number" && b.type === "number") {
+      const sA = SUIT_ORDER[a.suit] ?? 0;
+      const sB = SUIT_ORDER[b.suit] ?? 0;
+      if (sA !== sB) return sA - sB;
+      // 3. Within same suit: value ascending
+      return a.value - b.value;
+    }
+    return 0;
+  });
+}
+
 // ─── Game Room ────────────────────────────────────────────────────────────────
-function GameRoom({ roomId, session, aiCount }: { roomId: string; session: Session; aiCount: number }) {
+function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; session: Session; aiCount: number; edition?: string }) {
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
-  const [myIdx, setMyIdx] = useState<number>(-1);
+  const [myIdx, setMyIdx] = useState(-1);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showScoresheet, setShowScoresheet] = useState(false);
+
+  // Reload round history when scoresheet opens
+  useEffect(() => {
+    if (showScoresheet) {
+      supabase.from("round_history").select("*").eq("room_id", roomId).order("round")
+        .then(({ data }) => { if (data) setRoundHistory(data); });
+    }
+  }, [showScoresheet]);
+  const [roundHistory, setRoundHistory] = useState<any[]>([]);
+  const [specialAction, setSpecialAction] = useState<null|{type:string;cardId:string;trickCards?:any[]}>(null);
+  const [pendingCard, setPendingCard] = useState<any>(null);
+  const [passingCard, setPassingCard] = useState<string|null>(null); // for 7½
+  const logRef = useRef<HTMLDivElement>(null);
 
   const act = useCallback(async (action: string, extra = {}) => {
     setLoading(true); setError("");
     const res = await callGameAction(roomId, action, extra);
-    if (res.error) setError(res.error);
+    if (res.error) {
+      setError(res.error);
+      // Auto-dismiss non-critical errors, keep critical ones
+      if (!res.error.includes("Verbindung") && !res.error.includes("Server")) {
+        setTimeout(() => setError(""), 4000);
+      }
+    }
     setLoading(false);
   }, [roomId]);
 
-  // Load initial state
   useEffect(() => {
-    supabase.from("rooms").select("*").eq("id", roomId).single()
-      .then(({ data }) => { if (data) setRoom(data); });
-    supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index")
-      .then(({ data }) => {
-        if (data) {
-          setPlayers(data);
-          const mine = data.find((p: any) => p.user_id === session.user.id);
-          if (mine) setMyIdx(mine.player_index);
+    supabase.from("rooms").select("*").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
+    supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => {
+      if (data) { setPlayers(data); const mine = data.find((p: any) => p.user_id === session.user.id); if (mine) setMyIdx(mine.player_index); }
+    });
+  }, [roomId]);
+
+  useEffect(() => {
+    const ch = supabase.channel(`room:${roomId}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => setRoom(payload.new))
+      .on("postgres_changes", { event: "*", schema: "public", table: "room_players", filter: `room_id=eq.${roomId}` }, (payload) => {
+        if (payload.eventType === "UPDATE" && payload.new) {
+          setPlayers(prev => {
+            const exists = prev.some(p => p.id === payload.new.id);
+            if (exists) return prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p);
+            return [...prev, payload.new].sort((a,b) => a.player_index - b.player_index);
+          });
+        } else if (payload.eventType === "INSERT") {
+          setPlayers(prev => [...prev, payload.new].sort((a,b) => a.player_index - b.player_index));
+        } else {
+          supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => { if (data) setPlayers(data); });
         }
-      });
-  }, [roomId]);
-
-  // Realtime subscriptions
-  useEffect(() => {
-    const roomSub = supabase.channel(`room:${roomId}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` },
-        payload => setRoom(payload.new))
-      .on("postgres_changes", { event: "*", schema: "public", table: "room_players", filter: `room_id=eq.${roomId}` },
-        () => {
-          supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index")
-            .then(({ data }) => { if (data) setPlayers(data); });
-        })
+      })
       .subscribe();
-    return () => { supabase.removeChannel(roomSub); };
+    return () => { supabase.removeChannel(ch); };
   }, [roomId]);
 
-  if (!room) return <div style={{ ...S.table, justifyContent: "center", opacity: 0.5 }}>Lade…</div>;
+  useEffect(() => { if (logRef.current) logRef.current.scrollTop = 0; }, [room?.log]);
+
+  // Load round history
+  useEffect(() => {
+    supabase.from("round_history").select("*").eq("room_id", roomId).order("round")
+      .then(({ data }) => { if (data) setRoundHistory(data); });
+  }, [room?.phase, room?.round]);
+
+  if (!room) return (
+    <div style={{ ...tableStyle, justifyContent: "center" }}>
+      <div style={{ ...cinzel, fontSize: 18, color: C.gold }}>Lade…</div>
+    </div>
+  );
 
   const me = players[myIdx];
-  const myHand: any[] = me?.hand ?? [];
+  const myHand: any[] = sortHand(me?.hand ?? []);
   const isHost = myIdx === 0;
   const isMyTurn = room.current_player === myIdx;
   const log: string[] = room.log ?? [];
   const trick: any[] = room.current_trick ?? [];
+  const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
+  const dealerForbidden = room.dealer === myIdx ? forbidden : null;
 
-  // ── Lobby ──
+  // ── Lobby Phase ──
   if (room.phase === "lobby") {
     return (
-      <div style={{ ...S.table, justifyContent: "center", gap: 16 }}>
-        <div style={{ fontSize: 26, color: "#ffd700" }}>🧙 Wizard</div>
-        <Pill><span style={{ fontSize: 11, opacity: 0.6 }}>Code:</span><span style={{ fontSize: 22, letterSpacing: 4, fontWeight: "bold" }}>{room.code}</span></Pill>
-        <div style={{ fontSize: 11, opacity: 0.4 }}>wizard.heimdns.de – Code teilen!</div>
-        <div style={S.card()}>
+      <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+        <div style={{ ...cinzel, fontSize: 24, color: C.gold }}>🧙 Warteraum</div>
+        <div style={{ ...glass({ padding: "8px 24px" }), ...cinzel, fontSize: 20, letterSpacing: 6, color: C.goldLight }}>{room.code}</div>
+        <div style={{ fontSize: 11, color: C.ivoryDim }}>Code mit Freunden teilen</div>
+        <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim }}>
+          {room?.edition === "anniversary" ? "⚡ 30 Jahre Edition" : "🧙 Classic Edition"}
+        </div>
+
+        <div style={{ ...glass({ padding: 16 }), width: "min(320px, 92vw)" }}>
           {players.map((p: any) => (
-            <div key={p.id} style={{ padding: "4px 0", borderBottom: "1px solid rgba(255,255,255,0.08)", fontSize: 13 }}>
-              {p.player_index===0?"👑 ":"👤 "}{p.ai_name ?? `Spieler ${p.player_index+1}`}{p.user_id===session.user.id?" (Du)":""}
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
+              <div style={{ fontSize: 18 }}>{p.player_index === 0 ? "👑" : "👤"}</div>
+              <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>{p.ai_name}</div>
+              {p.user_id === session.user.id && <div style={{ fontSize: 10, color: C.ivoryDim, marginLeft: "auto" }}>Du</div>}
             </div>
           ))}
         </div>
+
         {isHost ? (
           <button onClick={() => act("startGame", { aiCount })} disabled={loading || players.length + aiCount < 2}
-            style={{ ...S.btn(), opacity: loading?0.5:1 }}>
-            Spiel starten
+            style={{ ...goldBtn(), padding: "13px 32px", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
+            ✦ Spiel starten
           </button>
-        ) : <div style={{ opacity: 0.5 }}>Warte auf Host…</div>}
-        {error && <div style={{ color: "#eb5757", fontSize: 13 }}>{error}</div>}
+        ) : <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf den Host…</div>}
+        {error && <div style={{ color: "#FF8080", fontSize: 12 }}>{error}</div>}
       </div>
     );
   }
 
   // ── Round/Game End ──
   if (room.phase === "roundEnd" || room.phase === "gameEnd") {
-    const sorted = [...players].sort((a,b)=>b.score-a.score);
+    const sorted = [...players].sort((a: any, b: any) => b.score - a.score);
+    const medals = ["🥇", "🥈", "🥉", "4.", "5.", "6."];
+    const lastRound = roundHistory[roundHistory.length - 1];
     return (
-      <div style={{ ...S.table, justifyContent: "center", gap: 14 }}>
-        <div style={{ fontSize: 22, color: "#ffd700" }}>
-          {room.phase==="gameEnd" ? "🏆 Spiel beendet!" : `Runde ${room.round} beendet`}
+      <div style={{ ...tableStyle, justifyContent: "center", gap: 14 }} className="fade-in">
+        <div style={{ ...cinzel, fontSize: "clamp(18px,5vw,26px)", color: C.gold }}>
+          {room.phase === "gameEnd" ? "🏆 Spiel beendet!" : `Runde ${room.round} beendet`}
         </div>
-        <div style={S.card()}>
-          {sorted.map((p:any,i:number) => (
-            <div key={p.id} style={{ display:"flex", justifyContent:"space-between", gap:24, padding:"5px 0", fontSize: i===0?16:13, color: i===0?"#ffd700":"#e8d5a0", borderBottom:"1px solid rgba(255,255,255,0.08)" }}>
-              <span>{["🥇","🥈","🥉","4.","5.","6."][i]} {p.ai_name}</span>
-              <span style={{ fontWeight:"bold" }}>{p.score}</span>
+
+        {/* Round detail */}
+        {lastRound && (
+          <div style={{ ...glass({ padding: 16 }), width: "min(420px, 96vw)", overflowX: "auto" }}>
+            <div style={{ ...cinzel, fontSize: "var(--text-xs)", color: C.gold, letterSpacing: 2, marginBottom: 10 }}>RUNDEN-ERGEBNIS</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-xs)" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.glassBorder}` }}>
+                  <th style={{ ...cinzel, textAlign: "left", padding: "4px 8px", color: C.ivoryDim, fontWeight: 600 }}>Spieler</th>
+                  <th style={{ ...cinzel, textAlign: "center", padding: "4px 8px", color: C.ivoryDim, fontWeight: 600 }}>Geboten</th>
+                  <th style={{ ...cinzel, textAlign: "center", padding: "4px 8px", color: C.ivoryDim, fontWeight: 600 }}>Gemacht</th>
+                  <th style={{ ...cinzel, textAlign: "center", padding: "4px 8px", color: C.ivoryDim, fontWeight: 600 }}>Punkte</th>
+                  <th style={{ ...cinzel, textAlign: "center", padding: "4px 8px", color: C.ivoryDim, fontWeight: 600 }}>Gesamt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lastRound.results?.map((r: any) => {
+                  const hit = r.bid === r.got;
+                  const delta = hit ? 20 + r.bid * 10 : -Math.abs(r.bid - r.got) * 10;
+                  return (
+                    <tr key={r.playerIndex} style={{ borderBottom: "1px solid rgba(201,168,76,0.06)" }}>
+                      <td style={{ padding: "6px 8px", color: C.ivory, ...cinzel }}>{r.name}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "center", color: C.ivoryDim }}>{r.bid}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "center", color: C.ivoryDim }}>{r.got}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "center", ...cinzel, fontWeight: 700, color: hit ? C.success : C.error }}>
+                        {delta > 0 ? "+" : ""}{delta}
+                      </td>
+                      <td style={{ padding: "6px 8px", textAlign: "center", ...cinzel, fontWeight: 700, color: C.gold }}>{r.totalScore}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Ranking */}
+        <div style={{ ...glass({ padding: 14 }), width: "min(360px, 96vw)" }}>
+          <div style={{ ...cinzel, fontSize: "var(--text-xs)", color: C.gold, letterSpacing: 2, marginBottom: 8 }}>GESAMTRANKING</div>
+          {sorted.map((p: any, i: number) => (
+            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: i < sorted.length - 1 ? "1px solid rgba(201,168,76,0.08)" : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 16 }}>{medals[i]}</span>
+                <span style={{ ...cinzel, fontSize: i === 0 ? "clamp(14px,4vw,16px)" : "clamp(12px,3vw,14px)", color: i === 0 ? C.gold : C.ivory }}>{p.ai_name}</span>
+              </div>
+              <span style={{ ...cinzel, fontWeight: 700, fontSize: "clamp(13px,4vw,16px)", color: i === 0 ? C.gold : C.ivory }}>{p.score}</span>
             </div>
           ))}
         </div>
-        {isHost && room.phase==="roundEnd" && (
-          <button onClick={() => act("nextRound")} style={S.btn("#1b4d3e")}>
-            Weiter → Runde {room.round+1}
-          </button>
-        )}
-        {isHost && room.phase==="gameEnd" && (
-          <button onClick={() => act("newGame")} style={S.btn()}>Nochmal spielen</button>
-        )}
-        {!isHost && <div style={{ opacity:0.5, fontSize:13 }}>Warte auf Host…</div>}
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+          {isHost && room.phase === "roundEnd" && (
+            <button onClick={() => act("nextRound")} style={{ ...goldBtn(), padding: "12px 28px" }}>Weiter → Runde {room.round + 1}</button>
+          )}
+          {isHost && room.phase === "gameEnd" && (
+            <button onClick={() => act("newGame")} style={{ ...goldBtn(), padding: "12px 28px" }}>Nochmal spielen</button>
+          )}
+          {!isHost && <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf Host…</div>}
+          <button onClick={() => window.location.reload()} style={{ ...goldBtn(false), padding: "12px 20px", fontSize: 12 }}>Raum verlassen</button>
+        </div>
       </div>
     );
   }
 
-  // ── Main game ──
-  const isBidding = room.phase === "bidding" && isMyTurn;
-  const isChoosingTrump = room.phase === "choosingTrump" && isMyTurn;
-  const isPlaying = room.phase === "playing" && isMyTurn && !loading;
-  const forbidden = forbiddenDealerBid(players.map((p:any)=>p.bid), room.dealer, room.round);
-  const dealerForbidden = room.dealer === myIdx ? forbidden : null;
 
-  return (
-    <div style={S.table}>
-      {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", width:"100%", maxWidth:720, alignItems:"center" }}>
-        <div style={{ fontSize:11, opacity:0.6 }}>Runde {room.round}/{room.max_rounds}</div>
-        <div style={{ fontSize:16, color:"#ffd700", fontWeight:"bold", letterSpacing:3 }}>🧙 WIZARD</div>
-        <div style={{ fontSize:11, opacity:0.7 }}>{room.code}</div>
-      </div>
 
-      {/* Players */}
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center" }}>
-        {players.map((p:any) => (
-          <Pill key={p.id} highlight={room.current_player===p.player_index}>
-            <span style={{ fontSize:10 }}>{p.is_ai?"🤖":p.connected?"👤":"❌"}</span>
-            <span style={{ fontSize:11 }}>{p.ai_name}{p.user_id===session.user.id?" (Du)":""}</span>
-            <span style={{ fontSize:11, color:"#ffd700" }}>{p.score}</span>
-            <span style={{ fontSize:10, color:"#aaa" }}>{p.bid!==null?`${p.tricks_won}/${p.bid}`:"?"}</span>
-          </Pill>
-        ))}
-      </div>
+  // ── Special Card Overlays ──
+  const SpecialOverlay = () => {
+    if (!specialAction) return null;
+    const overlayStyle: React.CSSProperties = {
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)",
+      zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    };
 
-      {/* Trump */}
-      <div style={{ display:"flex", gap:10, flexWrap:"wrap", justifyContent:"center", alignItems:"center" }}>
-        <Pill>
-          <span style={{ fontSize:11, opacity:0.6 }}>Trumpf:</span>
-          {room.trump_card ? <CardView card={room.trump_card} small /> : <span style={{ opacity:0.4 }}>–</span>}
-          {room.trump_suit && <span style={{ color:SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize:18 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</span>}
-        </Pill>
-        <Pill><span style={{ fontSize:11, opacity:0.6 }}>Dealer:</span><span style={{ fontSize:11 }}>{players[room.dealer]?.ai_name}</span></Pill>
-      </div>
-
-      {/* Choose trump */}
-      {isChoosingTrump && (
-        <div style={{ ...S.card("rgba(0,0,0,0.7)"), textAlign:"center", gap:10 }}>
-          <div style={{ fontSize:13 }}>🧙 Zauberer – wähle die Trumpffarbe:</div>
-          <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+    // Werewolf – choose suit for whole round
+    if (specialAction.type === "werewolf") return (
+      <div style={overlayStyle}>
+        <div style={{ ...glass({ padding: 24 }), width: "min(340px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ fontSize: 32 }}>🐺</div>
+          <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Lupin wählt die Stichfarbe</div>
+          <div style={{ fontSize: 12, color: C.ivoryDim }}>Diese Farbe gilt für die gesamte Runde</div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
             {SUITS.map(s => (
-              <button key={s} onClick={() => act("chooseTrump", { suit:s })}
-                style={{ ...S.btn(), background:SUIT_COLORS[s]+"99", fontSize:22, padding:"8px 14px" }}>
+              <button key={s} onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "werewolf", suit: s }); setSpecialAction(null); }}
+                style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer" }}>
                 {SUIT_SYMBOLS[s]}
               </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+
+    // Witch – swap a card from trick
+    if (specialAction.type === "witch") return (
+      <div style={overlayStyle}>
+        <div style={{ ...glass({ padding: 24 }), width: "min(400px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ fontSize: 32 }}>🧹</div>
+          <div style={{ ...cinzel, fontSize: 15, color: C.gold }}>Bellatrix – Karte tauschen</div>
+          <div style={{ fontSize: 11, color: C.ivoryDim }}>Wähle eine Karte aus dem Stich die du auf deine Hand nimmst</div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+            {(specialAction.trickCards ?? []).filter((t:any) => t.card.id !== specialAction.cardId).map((t:any) => (
+              <div key={t.card.id} style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: C.ivoryDim, marginBottom: 3 }}>{players[t.playerIndex]?.ai_name}</div>
+                <CardView card={t.card} onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "witch", takeCardId: t.card.id }); setSpecialAction(null); }} />
+              </div>
+            ))}
+          </div>
+          <button onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "witchSkip" }); setSpecialAction(null); }}
+            style={{ ...goldBtn(false), fontSize: 12, padding: "8px 16px" }}>
+            Keine Karte tauschen
+          </button>
+        </div>
+      </div>
+    );
+
+
+    // Rainbow 7½ suit chooser
+    if (specialAction.type === "rainbow7suit") return (
+      <div style={overlayStyle}>
+        <div style={{ ...glass({ padding: 24 }), width: "min(340px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>George – welche Farbe?</div>
+          <div style={{ fontSize: 11, color: C.ivoryDim }}>Wert 7½ · danach gibt jeder Spieler eine Karte weiter</div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+            {SUITS.map(s => (
+              <button key={s} onClick={() => { act("playCard", { cardId: specialAction.cardId, suit: s }); setSpecialAction(null); }}
+                style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer" }}>
+                {SUIT_SYMBOLS[s]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+
+    // 7½ – pass a card to left neighbor
+    if (specialAction.type === "rainbow7pass") return (
+      <div style={overlayStyle}>
+        <div style={{ ...glass({ padding: 24 }), width: "min(400px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ fontSize: 28 }}>🎁</div>
+          <div style={{ ...cinzel, fontSize: 15, color: C.gold }}>George Weasley – Karte weitergeben</div>
+          <div style={{ fontSize: 11, color: C.ivoryDim }}>
+            Wähle eine Karte die du deinem <span style={{ color: C.gold }}>linken Nachbarn</span> gibst<br/>
+            <span style={{ color: C.ivoryDim, fontSize: 10 }}>
+              {Array.isArray(room?.pending_rainbow7) ? `Noch ${room.pending_rainbow7.length} Spieler ausstehend` : ""}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center" }}>
+            {myHand.map((card:any) => (
+              <div key={card.id} style={{ textAlign: "center" }}>
+                <CardView card={card}
+                  selected={passingCard === card.id}
+                  onClick={() => setPassingCard(card.id)} />
+              </div>
+            ))}
+          </div>
+          <button onClick={() => {
+            if (!passingCard) return;
+            act("passCard", { cardId: passingCard });
+            setPassingCard(null);
+            setSpecialAction(null);
+          }} disabled={!passingCard}
+            style={{ ...goldBtn(), padding: "11px 0", opacity: passingCard ? 1 : 0.4 }}>
+            Karte weitergeben
+          </button>
+        </div>
+      </div>
+    );
+
+    // Rainbow 9¾ suit chooser
+    if (specialAction.type === "rainbow9suit") return (
+      <div style={overlayStyle}>
+        <div style={{ ...glass({ padding: 24 }), width: "min(340px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Gleis 9¾ – welche Farbe?</div>
+          <div style={{ fontSize: 11, color: C.ivoryDim }}>Wert 9¾ · der Stichgewinner ändert seine Vorhersage</div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+            {SUITS.map(s => (
+              <button key={s} onClick={() => { act("playCard", { cardId: specialAction.cardId, suit: s }); setSpecialAction(null); }}
+                style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer" }}>
+                {SUIT_SYMBOLS[s]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+
+        // WizardFool – choose wizard or fool
+    if (specialAction.type === "wizardfool") return (
+      <div style={overlayStyle}>
+        <div style={{ ...glass({ padding: 24 }), width: "min(340px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Ron – Zauberer oder Narr?</div>
+          <div style={{ fontSize: 12, color: C.ivoryDim }}>Ron kann sich nicht entscheiden…</div>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            <button onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "wizardfool", choice: "wizard" }); setSpecialAction(null); }}
+              style={{ ...goldBtn(), flex: 1, padding: "14px 0", fontSize: 14 }}>🧙 Zauberer</button>
+            <button onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "wizardfool", choice: "fool" }); setSpecialAction(null); }}
+              style={{ ...goldBtn(false), flex: 1, padding: "14px 0", fontSize: 14 }}>🃏 Narr</button>
+          </div>
+        </div>
+      </div>
+    );
+
+    // Rainbow 9¾ – adjust bid
+    if (specialAction.type === "rainbow9") return (
+      <div style={overlayStyle}>
+        <div style={{ ...glass({ padding: 24 }), width: "min(340px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Gleis 9¾ – Vorhersage anpassen</div>
+          <div style={{ fontSize: 12, color: C.ivoryDim }}>Der Stichgewinner muss seine Vorhersage um 1 ändern</div>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            <button onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "rainbow9", adjust: 1 }); setSpecialAction(null); }}
+              style={{ ...goldBtn(), flex: 1, padding: "14px 0", fontSize: 16 }}>+1</button>
+            <button onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "rainbow9", adjust: -1 }); setSpecialAction(null); }}
+              style={{ ...goldBtn(false), flex: 1, padding: "14px 0", fontSize: 16 }}>−1</button>
+          </div>
+        </div>
+      </div>
+    );
+
+    // 9¾ pending bid adjustment (triggered by room state after trick end)
+    if (room?.pending_rainbow9 === myIdx) return (
+      <div style={overlayStyle}>
+        <div style={{ ...glass({ padding: 24 }), width: "min(340px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ fontSize: 28 }}>🚂</div>
+          <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Gleis 9¾ – Vorhersage anpassen</div>
+          <div style={{ fontSize: 12, color: C.ivoryDim }}>
+            Du hast den Stich gewonnen – passe deine Vorhersage an<br/>
+            <span style={{ color: C.gold }}>Aktuell: {me?.bid ?? 0}</span>
+          </div>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            {(me?.bid ?? 0) > 0 && (
+              <button onClick={() => act("rainbow9Adjust", { adjust: -1 })}
+                style={{ ...goldBtn(false), flex: 1, padding: "14px 0", fontSize: 16 }}>−1 ({(me?.bid??0)-1})</button>
+            )}
+            <button onClick={() => act("rainbow9Adjust", { adjust: 1 })}
+              style={{ ...goldBtn(), flex: 1, padding: "14px 0", fontSize: 16 }}>+1 ({(me?.bid??0)+1})</button>
+          </div>
+        </div>
+      </div>
+    );
+
+    // 7½ pending card pass – show to all players in pending list
+    if (Array.isArray(room?.pending_rainbow7) && room.pending_rainbow7.includes(myIdx) && !specialAction) {
+      setTimeout(() => setSpecialAction({ type: "rainbow7pass", cardId: "rainbow7" }), 100);
+    }
+
+    // Witch pending swap
+    if (room?.pending_witch === myIdx && !specialAction) {
+      setTimeout(() => setSpecialAction({ type: "witch", cardId: "witch" }), 100);
+    }
+
+    return null;
+  };
+
+  // ── Scoresheet Modal ──
+  const Scoresheet = () => {
+    // Bietreihenfolge: immer rechts vom Dealer (= dealer+1, dealer+2, ...)
+    const bidOrder = Array.from({ length: players.length }, (_, i) => (room.dealer + 1 + i) % players.length);
+    const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
+
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}
+        onClick={() => setShowScoresheet(false)}>
+        <div style={{ ...glass({ padding: 0 }), width: "min(700px, 96vw)", maxHeight: "85vh", overflow: "auto", borderRadius: 12 }}
+          onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: `1px solid ${C.glassBorder}` }}>
+            <div style={{ ...cinzel, fontSize: 15, color: C.gold }}>📋 Spielblatt</div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <div style={{ fontSize: 11, color: C.ivoryDim }}>Runde {room.round}/{room.max_rounds}</div>
+              <button onClick={() => setShowScoresheet(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 20 }}>✕</button>
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table className="scoresheet-table" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "rgba(61,28,110,0.4)" }}>
+                  <th style={{ ...cinzel, padding: "10px 12px", textAlign: "left", color: C.gold, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>RUNDE</th>
+                  {players.map((p: any) => (
+                    <th key={p.id} style={{ ...cinzel, padding: "10px 12px", textAlign: "center", color: p.player_index === myIdx ? C.gold : C.ivory, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>
+                      {p.ai_name}{p.player_index === myIdx ? " ★" : ""}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {/* Past rounds */}
+                {roundHistory.map((rh: any) => (
+                  <tr key={rh.round} style={{ borderBottom: `1px solid rgba(201,168,76,0.08)` }}>
+                    <td style={{ padding: "8px 12px", color: C.ivoryDim, whiteSpace: "nowrap" }}>
+                      <div style={{ ...cinzel, fontSize: 11, color: C.gold }}>R{rh.round}</div>
+                      <div style={{ fontSize: 10, color: C.ivoryDim }}>🎴 {players[((rh.round - 1) % players.length)]?.ai_name ?? "?"}</div>
+                    </td>
+                    {players.map((p: any) => {
+                      const r = rh.results?.find((x: any) => x.playerIndex === p.player_index);
+                      const hit = r && r.bid === r.got;
+                      return (
+                        <td key={p.id} style={{ padding: "8px 12px", textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: C.ivoryDim }}>
+                            <span style={{ color: C.ivory }}>A:{r?.bid ?? "?"}</span>
+                            {" / "}
+                            <span style={{ color: C.ivory }}>G:{r?.got ?? "?"}</span>
+                          </div>
+                          <div style={{ ...cinzel, fontSize: 13, fontWeight: 700, color: hit ? C.success : C.error, marginTop: 2 }}>
+                            {r ? (r.delta > 0 ? "+" : "") + r.delta : "–"}
+                          </div>
+                          <div style={{ fontSize: 10, color: C.gold, marginTop: 1 }}>{r?.totalScore ?? "–"}</div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+
+                {/* Current round – live bidding */}
+                {room.phase !== "gameEnd" && (
+                  <tr style={{ background: "rgba(61,28,110,0.2)", borderBottom: `1px solid ${C.glassBorder}` }}>
+                    <td style={{ padding: "8px 12px" }}>
+                      <div style={{ ...cinzel, fontSize: 11, color: C.goldLight }}>R{room.round} ▶</div>
+                      <div style={{ fontSize: 10, color: C.ivoryDim }}>🎴 {players[room.dealer]?.ai_name}</div>
+                    </td>
+                    {bidOrder.map((pi: number) => {
+                      const p = players[pi];
+                      if (!p) return null;
+                      const bid = p.bid;
+                      const isCurrent = room.phase === "bidding" && room.current_player === pi;
+                      const isDealer = room.dealer === pi;
+                      const isForbidden = isDealer && forbidden !== null;
+                      return (
+                        <td key={p.id} style={{ padding: "8px 12px", textAlign: "center" }}>
+                          <div style={{
+                            ...cinzel, fontSize: 14, fontWeight: 700,
+                            color: bid !== null ? C.goldLight : isCurrent ? C.gold : C.ivoryDim,
+                            background: isCurrent ? "rgba(201,168,76,0.15)" : "transparent",
+                            borderRadius: 6, padding: "4px 6px",
+                            border: isCurrent ? `1px solid ${C.gold}55` : "1px solid transparent",
+                            animation: isCurrent ? "pulse 1.5s infinite" : "none",
+                          }}>
+                            {bid !== null ? `A:${bid}` : isCurrent ? "⟳" : "?"}
+                          </div>
+                          {isForbidden && bid === null && (
+                            <div style={{ fontSize: 9, color: "#E4C97A", marginTop: 2 }}>≠{forbidden}</div>
+                          )}
+                          {room.phase === "playing" || room.phase === "trickEnd" ? (
+                            <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 2 }}>{p.tricks_won}/{bid ?? "?"} Stiche</div>
+                          ) : null}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )}
+
+                {/* Total row */}
+                <tr style={{ background: "rgba(201,168,76,0.08)" }}>
+                  <td style={{ padding: "8px 12px", ...cinzel, fontSize: 11, color: C.gold }}>GESAMT</td>
+                  {players.map((p: any) => (
+                    <td key={p.id} style={{ padding: "8px 12px", textAlign: "center", ...cinzel, fontSize: 15, fontWeight: 700, color: C.gold }}>{p.score}</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Main Game ──
+  const isBidding = room.phase === "bidding" && isMyTurn;
+  const isChoosingTrump = room.phase === "choosingTrump" && isMyTurn;
+  const isChoosingWerewolf = room.phase === "choosingWerewolf" && isMyTurn;
+  const isPlaying = room.phase === "playing" && isMyTurn && !loading;
+
+  return (
+    <div style={tableStyle}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", maxWidth: 720, alignItems: "center" }}>
+        <div style={{ ...cinzel, fontSize: 11, color: C.ivoryDim }}>RUNDE {room.round}/{room.max_rounds}</div>
+        <div style={{ ...cinzel, fontSize: 16, color: C.gold, letterSpacing: 4 }}>🧙 WIZARD</div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <div style={{ ...cinzel, fontSize: 11, color: C.ivoryDim, letterSpacing: 2 }}>{room.code}</div>
+          <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 8px", fontSize: 11 }}>📋</button>
+        </div>
+      </div>
+
+      {/* Player pills */}
+      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "center" }}>
+        {players.map((p: any) => {
+          const isActive = room.current_player === p.player_index;
+          return (
+            <div key={p.id} style={{
+              ...glass({ padding: "5px 10px" }),
+              border: `1px solid ${isActive ? C.gold : C.glassBorder}`,
+              boxShadow: isActive ? `0 0 10px ${C.gold}44` : "none",
+              display: "flex", alignItems: "center", gap: 6,
+            }}>
+              <span style={{ fontSize: 10 }}>{p.is_ai ? "🤖" : p.connected ? "👤" : "❌"}</span>
+              <span style={{ ...cinzel, fontSize: 10, color: isActive ? C.gold : C.ivory }}>{p.ai_name}</span>
+              <span style={{ ...cinzel, fontSize: 11, color: C.goldLight, fontWeight: 700 }}>{p.score}</span>
+              <span style={{ fontSize: 9, color: C.ivoryDim }}>{p.bid !== null ? `${p.tricks_won}/${p.bid}` : "?"}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Trump + Dealer */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+        <div style={{ ...glass({ padding: "6px 12px" }), display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ ...cinzel, fontSize: 10, color: C.ivoryDim }}>TRUMPF</span>
+          {room.trump_card ? <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} /> : <span style={{ color: C.ivoryDim }}>–</span>}
+          {room.trump_suit && <span style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 16 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</span>}
+          {room.werewolf_suit && <span style={{ fontSize: 10, color: "#F7DC6F" }}>🐺 {SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</span>}
+        </div>
+        {room.vampire_revealed && (
+          <div style={{ ...glass({ padding: "6px 10px" }), display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 10, color: "#9B59B6" }}>🧛 Aufgedeckt:</span>
+            <CardView card={room.vampire_revealed} small />
+            {room.vampire_revealed.suit && <span style={{ color: SUIT_COLORS[room.vampire_revealed.suit as keyof typeof SUIT_COLORS], fontSize: 14 }}>{SUIT_SYMBOLS[room.vampire_revealed.suit as keyof typeof SUIT_SYMBOLS]}</span>}
+          </div>
+        )}
+        <div style={{ ...glass({ padding: "6px 12px" }), ...cinzel, fontSize: 10, color: C.ivoryDim }}>
+          DEALER: <span style={{ color: C.ivory }}>{players[room.dealer]?.ai_name}</span>
+        </div>
+      </div>
+
+      {/* Choose Werewolf Suit */}
+      {isChoosingWerewolf && (
+        <div style={{ ...glass({ padding: 16 }), textAlign: "center" }}>
+          <div style={{ fontSize: 28, marginBottom: 6 }}>🐺</div>
+          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 4 }}>STICHFARBE FÜR DIESE RUNDE WÄHLEN</div>
+          <div style={{ fontSize: 11, color: C.ivoryDim, marginBottom: 12 }}>Der Werwolf bestimmt die Anspielfarbe für alle Stiche</div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            {SUITS.map(s => (
+              <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{
+                background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`,
+                borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer",
+              }}>{SUIT_SYMBOLS[s]}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {room.phase === "choosingWerewolf" && !isMyTurn && (
+        <div style={{ ...glass({ padding: "8px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
+          🐺 <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> hat den Werwolf und wählt die Stichfarbe…
+        </div>
+      )}
+
+      {/* Choose Trump */}
+      {isChoosingTrump && (
+        <div style={{ ...glass({ padding: 16 }), textAlign: "center" }}>
+          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>TRUMPFFARBE WÄHLEN</div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            {SUITS.map(s => (
+              <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{
+                background: `${SUIT_COLORS[s]}22`, border: `1px solid ${SUIT_COLORS[s]}`,
+                borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 16px", cursor: "pointer",
+              }}>{SUIT_SYMBOLS[s]}</button>
             ))}
           </div>
         </div>
@@ -385,15 +1076,17 @@ function GameRoom({ roomId, session, aiCount }: { roomId: string; session: Sessi
 
       {/* Bidding */}
       {isBidding && (
-        <div style={{ ...S.card("rgba(0,0,0,0.6)"), textAlign:"center", gap:8 }}>
-          <div style={{ fontSize:13 }}>Wie viele Stiche machst du? (0–{room.round})</div>
-          {dealerForbidden!==null && (
-            <div style={{ color:"#e9c46a", fontSize:11 }}>⚠ Als Dealer darfst du nicht {dealerForbidden} bieten</div>
+        <div style={{ ...glass({ padding: 14 }), textAlign: "center", width: "min(380px, 92vw)" }}>
+          <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 8 }}>WIE VIELE STICHE? (0–{room.round})</div>
+          {dealerForbidden !== null && (
+            <div style={{ fontSize: 11, color: "#E4C97A", marginBottom: 8, background: "rgba(201,168,76,0.1)", borderRadius: 6, padding: "5px 10px" }}>
+              ⚠ Stichzwang: {dealerForbidden} ist verboten
+            </div>
           )}
-          <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center" }}>
-            {Array.from({length:room.round+1},(_,i)=>(
-              <button key={i} onClick={() => act("bid",{bid:i})} disabled={i===dealerForbidden}
-                style={{ ...S.btn("#1b4d3e"), padding:"8px 14px", opacity:i===dealerForbidden?0.3:1 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+            {Array.from({ length: room.round + 1 }, (_, i) => (
+              <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
+                style={{ ...goldBtn(i !== dealerForbidden), padding: "8px 14px", opacity: i === dealerForbidden ? 0.25 : 1 }}>
                 {i}
               </button>
             ))}
@@ -401,39 +1094,45 @@ function GameRoom({ roomId, session, aiCount }: { roomId: string; session: Sessi
         </div>
       )}
 
-      {room.phase==="bidding" && !isMyTurn && (
-        <div style={{ opacity:0.5, fontSize:13 }}>{players[room.current_player]?.ai_name} bietet…</div>
+      {room.phase === "bidding" && !isMyTurn && (
+        <div style={{ ...glass({ padding: "6px 14px" }), fontSize: "var(--text-xs)", color: C.ivoryDim, textAlign: "center" }}>
+          ⏳ <span style={{ color: C.gold, ...cinzel }}>{players[room.current_player]?.ai_name}</span> bietet…
+        </div>
       )}
 
-      {/* Trick */}
-      <div style={{ display:"flex", gap:12, justifyContent:"center", alignItems:"center", minHeight:110, position:"relative", flexWrap:"wrap" }}>
-        {trick.length===0 && room.phase==="playing" && (
-          <div style={{ opacity:0.25, fontSize:13 }}>{players[room.current_player]?.ai_name} beginnt</div>
+      {/* Trick Area */}
+      <div style={{ ...glass({ padding: "clamp(8px,2vw,14px)" }), width: "min(500px, 96vw)", minHeight: "clamp(90px,20vw,120px)", display: "flex", gap: 12, alignItems: "center", justifyContent: "center", position: "relative", flexWrap: "wrap" }}>
+        {trick.length === 0 && room.phase === "playing" && (
+          <div style={{ color: C.ivoryDim, fontSize: 12 }}>{players[room.current_player]?.ai_name} beginnt…</div>
         )}
-        {trick.map((t:any,i:number) => (
-          <div key={i} style={{ textAlign:"center" }}>
-            <div style={{ fontSize:10, opacity:0.6, marginBottom:3 }}>{players[t.playerIndex]?.ai_name}</div>
+        {trick.map((t: any, i: number) => (
+          <div key={i} style={{ textAlign: "center" }}>
+            <div style={{ ...cinzel, fontSize: 9, color: C.ivoryDim, marginBottom: 3 }}>{players[t.playerIndex]?.ai_name}</div>
             <CardView card={t.card} />
           </div>
         ))}
-        {room.phase==="trickEnd" && room.last_trick_winner!==null && (
-          <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", background:"rgba(0,0,0,0.88)", borderRadius:8, padding:"8px 18px", color:"#ffd700", fontSize:14, whiteSpace:"nowrap" }}>
-            {players[room.last_trick_winner]?.ai_name} gewinnt! 🎉
+        {room.phase === "trickEnd" && room.last_trick_winner !== null && (
+          <div style={{ position: "absolute", inset: 0, background: "rgba(13,27,42,0.85)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ ...cinzel, fontSize: 15, color: C.gold, textAlign: "center" }}>
+              {players[room.last_trick_winner]?.ai_name} gewinnt den Stich! 🎉
+            </div>
           </div>
         )}
       </div>
 
       {/* Opponents */}
-      <div style={{ display:"flex", gap:12, flexWrap:"wrap", justifyContent:"center" }}>
-        {players.map((p:any) => {
-          if (p.player_index===myIdx) return null;
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+        {players.map((p: any) => {
+          if (p.player_index === myIdx) return null;
           const count = Array.isArray(p.hand) ? p.hand.length : 0;
           return (
-            <div key={p.id} style={{ textAlign:"center", opacity:room.current_player===p.player_index?1:0.55 }}>
-              <div style={{ fontSize:10, marginBottom:3 }}>{p.is_ai?"🤖":"👤"} {p.ai_name} {room.current_player===p.player_index?"⬇":""}</div>
-              <div style={{ display:"flex", gap:2 }}>
-                {Array.from({length:count}).map((_,ci)=>(
-                  <CardView key={ci} card={{id:"h",type:"fool",suit:null,value:0}} faceDown small />
+            <div key={p.id} style={{ textAlign: "center", opacity: room.current_player === p.player_index ? 1 : 0.55, transition: "opacity 0.3s" }}>
+              <div style={{ ...cinzel, fontSize: 9, color: room.current_player === p.player_index ? C.gold : C.ivoryDim, marginBottom: 3 }}>
+                {p.is_ai ? "🤖" : "👤"} {p.ai_name} {room.current_player === p.player_index ? "▼" : ""}
+              </div>
+              <div style={{ display: "flex", gap: 2 }}>
+                {Array.from({ length: count }).map((_, ci) => (
+                  <CardView key={ci} card={{ id: "h", type: "fool", suit: null, value: 0 }} faceDown small />
                 ))}
               </div>
             </div>
@@ -441,40 +1140,75 @@ function GameRoom({ roomId, session, aiCount }: { roomId: string; session: Sessi
         })}
       </div>
 
-      {/* My hand */}
-      <div style={{ marginTop:"auto", paddingTop:10, borderTop:"1px solid rgba(255,255,255,0.08)", width:"100%", maxWidth:720 }}>
-        <div style={{ fontSize:11, opacity:0.6, textAlign:"center", marginBottom:6 }}>
-          {isPlaying?"🎯 Du bist dran!":room.phase==="playing"?`Warte auf ${players[room.current_player]?.ai_name}…`:"Deine Karten"}
+      {/* My Hand */}
+      <div style={{ marginTop: "auto", paddingTop: 10, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: 720 }}>
+        <div style={{
+          ...cinzel,
+          fontSize: isPlaying ? "clamp(12px,3vw,15px)" : "var(--text-xs)",
+          color: isPlaying ? C.gold : C.ivoryDim,
+          textAlign: "center",
+          marginBottom: 8,
+          letterSpacing: 2,
+          padding: isPlaying ? "6px 16px" : "0",
+          background: isPlaying ? `linear-gradient(135deg, rgba(61,28,110,0.6), rgba(90,45,153,0.4))` : "transparent",
+          borderRadius: isPlaying ? 20 : 0,
+          border: isPlaying ? `1px solid ${C.gold}55` : "none",
+          animation: isPlaying ? "pulse 2s infinite" : "none",
+        }}>
+          {isPlaying ? "✦ DU BIST DRAN ✦" : room.phase === "playing" ? `⏳ ${players[room.current_player]?.ai_name} ist dran` : "DEINE KARTEN"}
         </div>
-        <div style={{ display:"flex", gap:4, flexWrap:"wrap", justifyContent:"center", marginBottom:8 }}>
-          {myHand.map((card:any) => (
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center", marginBottom: 10 }}>
+          {myHand.map((card: any) => (
             <CardView key={card.id} card={card}
-              selected={selected===card.id}
+              selected={selected === card.id}
               disabled={!isPlaying}
-              onClick={isPlaying?()=>setSelected(card.id===selected?null:card.id):undefined}
+              onClick={isPlaying ? () => setSelected(card.id === selected ? null : card.id) : undefined}
             />
           ))}
         </div>
         {isPlaying && selected && (
-          <div style={{ textAlign:"center" }}>
-            <button onClick={() => { act("playCard",{cardId:selected}); setSelected(null); }} style={S.btn()}>
+          <div style={{ textAlign: "center" }}>
+            <button onClick={() => {
+              const card = myHand.find((c:any) => c.id === selected);
+              if (card?.specialType === "werewolf") {
+                setSpecialAction({ type: "werewolf", cardId: selected });
+                setSelected(null);
+              } else if (card?.specialType === "wizardfool") {
+                setSpecialAction({ type: "wizardfool", cardId: selected });
+                setSelected(null);
+              } else if (card?.specialType === "rainbow7") {
+                // Rainbow 7½ – choose suit first
+                setSpecialAction({ type: "rainbow7suit", cardId: selected });
+                setSelected(null);
+              } else if (card?.specialType === "rainbow9") {
+                // Rainbow 9¾ – choose suit first
+                setSpecialAction({ type: "rainbow9suit", cardId: selected });
+                setSelected(null);
+              } else {
+                act("playCard", { cardId: selected });
+                setSelected(null);
+              }
+            }} style={{ ...goldBtn(), padding: "11px 32px" }}>
               Karte ausspielen
             </button>
           </div>
         )}
       </div>
 
-      {/* Error */}
+      {showScoresheet && <Scoresheet />}
+      <SpecialOverlay />
+
+      {/* Error Toast */}
       {error && (
-        <div style={{ position:"fixed", top:12, left:"50%", transform:"translateX(-50%)", background:"#eb5757", color:"#fff", padding:"8px 16px", borderRadius:8, fontSize:13, zIndex:100 }}>
-          {error}
+        <div onClick={() => setError("")} style={{ position: "fixed", top: "max(16px, env(safe-area-inset-top))", left: "50%", transform: "translateX(-50%)", background: `${C.error}EE`, color: "#fff", padding: "10px 18px", borderRadius: 8, fontSize: 13, zIndex: 100, ...cinzel, cursor: "pointer", whiteSpace: "nowrap", maxWidth: "90vw", textAlign: "center" }}>
+          {error} <span style={{ opacity: 0.7, fontSize: 11 }}>✕</span>
         </div>
       )}
 
       {/* Log */}
-      <div style={{ position:"fixed", bottom:8, right:8, width:200, background:"rgba(0,0,0,0.75)", borderRadius:8, padding:8, fontSize:10, maxHeight:130, overflowY:"auto" }}>
-        {log.map((l:string,i:number)=>(
-          <div key={i} style={{ padding:"1px 0", borderBottom:"1px solid rgba(255,255,255,0.05)" }}>{l}</div>
+      <div ref={logRef} className="log-panel" style={{ ...glass({ padding: 8 }), fontSize: "var(--text-xs)", color: C.ivoryDim }}>
+        {log.map((l: string, i: number) => (
+          <div key={i} style={{ padding: "2px 0", borderBottom: "1px solid rgba(201,168,76,0.06)" }}>{l}</div>
         ))}
       </div>
     </div>
@@ -487,15 +1221,21 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_,s) => setSession(s));
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) return <div style={{ ...S.table, justifyContent:"center", opacity:0.5 }}>🧙</div>;
-  if (!session) return <AuthScreen />;
-  return <LobbyScreen session={session} />;
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: C.midnight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ ...cinzel, fontSize: 32, color: C.gold }}>🧙</div>
+    </div>
+  );
+
+  return (
+    <>
+      {session ? <LobbyScreen session={session} /> : <AuthScreen />}
+      <InstallBanner />
+    </>
+  );
 }

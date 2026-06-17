@@ -1,4 +1,216 @@
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:#081c15;font-family:Georgia,serif;color:#e8d5a0;min-height:100vh}
-button{font-family:Georgia,serif;cursor:pointer}
-input{font-family:Georgia,serif}
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+:root {
+  --midnight: #0D1B2A;
+  --deep-blue: #162032;
+  --violet: #3D1C6E;
+  --violet-light: #5A2D99;
+  --gold: #C9A84C;
+  --gold-light: #E4C97A;
+  --ivory: #F2E8D5;
+  --ivory-dim: #B8A98A;
+  --glass: rgba(255,255,255,0.04);
+  --glass-border: rgba(201,168,76,0.2);
+  --error: #CF4444;
+  --success: #2D9E5F;
+
+  /* Fluid spacing */
+  --space-xs: clamp(4px, 1vw, 8px);
+  --space-sm: clamp(8px, 2vw, 12px);
+  --space-md: clamp(12px, 3vw, 20px);
+  --space-lg: clamp(16px, 4vw, 28px);
+
+  /* Fluid font sizes */
+  --text-xs: clamp(9px, 2vw, 11px);
+  --text-sm: clamp(11px, 2.5vw, 13px);
+  --text-md: clamp(13px, 3vw, 15px);
+  --text-lg: clamp(16px, 4vw, 20px);
+  --text-xl: clamp(22px, 6vw, 32px);
+  --text-2xl: clamp(28px, 8vw, 42px);
+}
+
+html {
+  height: 100%;
+  /* Prevent bounce scroll on iOS */
+  overscroll-behavior: none;
+}
+
+body {
+  height: 100%;
+  background: var(--midnight);
+  font-family: 'Inter', sans-serif;
+  color: var(--ivory);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  /* Prevent pull-to-refresh */
+  overscroll-behavior-y: contain;
+}
+
+#root {
+  min-height: 100%;
+  min-height: 100dvh;
+  /* Safe area padding */
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ─── Typography ─────────────────────────────────────────────────────────────── */
+.cinzel { font-family: 'Cinzel', serif; }
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 2px; }
+
+/* ─── Cards ──────────────────────────────────────────────────────────────────── */
+.card-view {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Touch feedback for cards */
+.card-view:active {
+  transform: translateY(-4px) scale(0.96) translateZ(0) !important;
+  transition: transform 0.08s ease !important;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────────── */
+button {
+  font-family: 'Cinzel', serif;
+  cursor: pointer;
+  min-height: 44px; /* Apple HIG minimum */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+button:active {
+  opacity: 0.72 !important;
+  transform: scale(0.96);
+  transition: transform 0.08s, opacity 0.08s;
+}
+
+/* ─── Inputs ─────────────────────────────────────────────────────────────────── */
+input, select, textarea {
+  /* Prevent zoom on focus in iOS (needs font-size >= 16px) */
+  font-size: 16px !important;
+  font-family: 'Inter', sans-serif;
+}
+
+/* ─── Selection ──────────────────────────────────────────────────────────────── */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ─── Safe areas ─────────────────────────────────────────────────────────────── */
+.safe-bottom {
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+.safe-top {
+  padding-top: max(12px, env(safe-area-inset-top));
+}
+
+/* ─── Scrolling ──────────────────────────────────────────────────────────────── */
+.scroll-x {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.scroll-x::-webkit-scrollbar { display: none; }
+
+.scroll-y {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── Animations ─────────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+@keyframes cardGlow {
+  0%, 100% { box-shadow: 0 0 10px rgba(201,168,76,0.3); }
+  50%       { box-shadow: 0 0 22px rgba(201,168,76,0.7); }
+}
+
+.fade-in { animation: fadeIn 0.25s ease forwards; }
+
+/* ─── Game layout ────────────────────────────────────────────────────────────── */
+.hand-scroll {
+  display: flex;
+  gap: clamp(3px, 1vw, 6px);
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 4px 4px 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  /* Allow cards to lift upward on hover */
+  padding-top: 12px;
+}
+.hand-scroll::-webkit-scrollbar { display: none; }
+
+/* ─── Responsive overlays ────────────────────────────────────────────────────── */
+.overlay-backdrop {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ─── Log panel ──────────────────────────────────────────────────────────────── */
+.log-panel {
+  position: fixed;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  right: 8px;
+  width: min(190px, 40vw);
+  max-height: 120px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.log-panel::-webkit-scrollbar { display: none; }
+
+/* ─── Scoresheet table ───────────────────────────────────────────────────────── */
+.scoresheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: clamp(10px, 2.5vw, 13px);
+}
+
+/* ─── Media queries ──────────────────────────────────────────────────────────── */
+@media (max-width: 380px) {
+  /* Very small phones (SE etc.) */
+  :root {
+    --space-md: 8px;
+    --space-lg: 12px;
+  }
+}
+
+@media (min-width: 768px) {
+  /* Tablet / desktop */
+  .hand-scroll {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
+/* ─── PWA standalone mode ────────────────────────────────────────────────────── */
+@media (display-mode: standalone) {
+  /* Extra bottom padding for home indicator */
+  #root {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

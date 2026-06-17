@@ -1,0 +1,14 @@
+{
+  "name": "Wizard Kartenspiel",
+  "short_name": "Wizard",
+  "description": "Das klassische Stichkartenspiel – Online Multiplayer für 2–6 Spieler",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D1B2A",
+  "theme_color": "#3D1C6E",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "categories": ["games", "entertainment"]
+}

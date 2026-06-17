@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#0D1B2A"/>
+  <rect x="4" y="4" width="504" height="504" rx="76" fill="none" stroke="#C9A84C" stroke-width="6"/>
+  <text x="256" y="340" font-size="280" text-anchor="middle" dominant-baseline="middle">🧙</text>
+  <text x="256" y="460" font-family="serif" font-size="52" font-weight="bold" fill="#C9A84C" text-anchor="middle" letter-spacing="6">WIZARD</text>
+</svg>
