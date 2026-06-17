@@ -188,7 +188,9 @@ async function tickAIBids(supabase, roomId, room, players) {
   await supabase.from("rooms").update({ phase: newPhase, current_player: newCurrent, log: room.log }).eq("id", roomId);
 
   // If playing phase starts and first player is AI, trigger play immediately
+  console.log("[tickAIBids] allBid:", allBid, "newCurrent:", newCurrent, "is_ai:", players[newCurrent]?.is_ai);
   if (allBid && players[newCurrent]?.is_ai) {
+    console.log("[tickAIBids] triggering aiPlayNext");
     const updRoom = { ...room, phase: "playing", current_player: newCurrent, current_trick: [], log: room.log };
     return await aiPlayNext(supabase, roomId, updRoom, players);
   }
@@ -198,21 +200,30 @@ async function tickAIBids(supabase, roomId, room, players) {
 
 async function aiPlayNext(supabase, roomId, room, players) {
   const current = room.current_player;
+  console.log("[aiPlayNext] called, current_player:", current, "phase:", room.phase);
 
   // Always load fresh players from DB to get correct hands
-  const { data: freshPlayers } = await supabase
+  const { data: freshPlayers, error: fpErr } = await supabase
     .from("room_players").select("*").eq("room_id", roomId).order("player_index");
+
+  console.log("[aiPlayNext] freshPlayers loaded:", freshPlayers?.length, "error:", fpErr?.message);
   const allPlayers = freshPlayers ?? players;
 
-  if (!allPlayers[current]?.is_ai) return json({ ok: true });
-
   const currentPlayer = allPlayers[current];
+  console.log("[aiPlayNext] currentPlayer:", currentPlayer?.ai_name, "is_ai:", currentPlayer?.is_ai, "hand length:", currentPlayer?.hand?.length);
+
+  if (!currentPlayer?.is_ai) {
+    console.log("[aiPlayNext] not AI, returning");
+    return json({ ok: true });
+  }
+
   if (!currentPlayer.hand || currentPlayer.hand.length === 0) {
-    // No cards to play - round might be over
+    console.log("[aiPlayNext] empty hand!");
     return json({ ok: true });
   }
 
   const card = aiChooseCard(currentPlayer.hand, room.current_trick ?? [], room.trump_suit, room.werewolf_suit);
+  console.log("[aiPlayNext] AI plays:", cardLabel(card));
   const newHand = currentPlayer.hand.filter(c => c.id !== card.id);
   await supabase.from("room_players").update({ hand: newHand }).eq("id", currentPlayer.id);
   const newTrick = [...(room.current_trick ?? []), { card, playerIndex: current }];

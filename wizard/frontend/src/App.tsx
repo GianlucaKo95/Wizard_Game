@@ -405,6 +405,25 @@ function LobbyScreen({ session }: { session: Session }) {
             ))}
           </div>
         </div>
+        {/* Edition */}
+        <div>
+          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>EDITION</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setEdition("classic")}
+              style={{ ...goldBtn(edition === "classic"), flex: 1, padding: "10px 0", fontSize: 12, flexDirection: "column", display: "flex", alignItems: "center", gap: 2 }}>
+              <span style={{ fontSize: 16 }}>🧙</span>
+              <span>Classic</span>
+              <span style={{ fontSize: 9, opacity: 0.7 }}>60 Karten</span>
+            </button>
+            <button onClick={() => setEdition("anniversary")}
+              style={{ ...goldBtn(edition === "anniversary"), flex: 1, padding: "10px 0", fontSize: 12, flexDirection: "column", display: "flex", alignItems: "center", gap: 2 }}>
+              <span style={{ fontSize: 16 }}>⚡</span>
+              <span>30 Jahre</span>
+              <span style={{ fontSize: 9, opacity: 0.7 }}>69 Karten</span>
+            </button>
+          </div>
+        </div>
+
         <div style={{ ...glass({ padding: "10px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
           <span style={{ color: C.gold, ...cinzel }}>{humanCount + aiCount}</span> Spieler gesamt ·{" "}
           {humanCount} 👤 + {aiCount} 🤖 · <span style={{ color: C.gold }}>{Math.floor(60/(humanCount+aiCount))} Runden</span>{humanCount+aiCount < 3 ? <span style={{color:"#FF8080"}}> · min. 3 Spieler</span> : ""}
