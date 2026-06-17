@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Card } from "./types";
 import { HOUSES, CHAR_NAMES, WIZARD_CHARS, FOOL_CHARS } from "./cards";
 import { NumberArt, WizardArt, FoolArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";

@@ -1,9 +1,5 @@
-const CACHE_NAME = 'wizard-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-];
+const CACHE_NAME = 'wizard-v2';
+const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -22,17 +18,25 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first for API calls
-  if (event.request.url.includes('supabase.co')) {
-    return;
-  }
+  const url = new URL(event.request.url);
+
+  // Only cache http/https requests - ignore chrome-extension, data, etc.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+
+  // Network first for Supabase API calls
+  if (url.hostname.includes('supabase.co') || url.hostname.includes('supabase.in')) return;
+
   // Cache first for static assets
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((response) => {
-        if (response.ok && event.request.method === 'GET') {
+      if (cached) return cached;
+      return fetch(event.request).then((response) => {
+        if (response.ok && event.request.method === 'GET' &&
+            (url.protocol === 'http:' || url.protocol === 'https:')) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then((cache) => {
+            try { cache.put(event.request, clone); } catch (e) {}
+          });
         }
         return response;
       }).catch(() => caches.match('/index.html'));
