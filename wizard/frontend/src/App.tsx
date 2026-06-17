@@ -24,9 +24,9 @@ const C = {
 const cinzel: React.CSSProperties = { fontFamily: "'Cinzel', serif" };
 
 const glass = (extra: React.CSSProperties = {}): React.CSSProperties => ({
-  background: "rgba(22,32,50,0.85)",
+  background: "rgba(10,16,28,0.92)",
   backdropFilter: "blur(12px)",
-  border: `1px solid ${C.glassBorder}`,
+  border: `1px solid rgba(201,168,76,0.35)`,
   borderRadius: 12,
   ...extra,
 });
@@ -1016,24 +1016,23 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
         })}
       </div>
 
-      {/* Trump + Dealer */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
-        <div style={{ ...glass({ padding: "6px 12px" }), display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ ...cinzel, fontSize: 10, color: C.ivoryDim }}>TRUMPF</span>
-          {room.trump_card ? <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} /> : <span style={{ color: C.ivoryDim }}>–</span>}
-          {room.trump_suit && <span style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 16 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</span>}
-          {room.werewolf_suit && <span style={{ fontSize: 10, color: "#F7DC6F" }}>🐺 {SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</span>}
+      {/* Trump info bar - compact */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+        <div style={{ ...glass({ padding: "5px 10px" }), display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ ...cinzel, fontSize: 9, color: C.gold, letterSpacing: 1 }}>TRUMPF</span>
+          {room.trump_suit && <span style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 14, fontWeight: "bold" }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</span>}
+          {room.werewolf_suit && <span style={{ fontSize: 11, color: "#F7DC6F" }}>🐺 {SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</span>}
+          {!room.trump_suit && !room.werewolf_suit && <span style={{ color: C.ivoryDim, fontSize: 11 }}>–</span>}
+        </div>
+        <div style={{ ...glass({ padding: "5px 10px" }), ...cinzel, fontSize: 9, color: C.ivoryDim }}>
+          🎴 <span style={{ color: C.ivory }}>{players[room.dealer]?.ai_name}</span>
         </div>
         {room.vampire_revealed && (
-          <div style={{ ...glass({ padding: "6px 10px" }), display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 10, color: "#9B59B6" }}>🧛 Aufgedeckt:</span>
+          <div style={{ ...glass({ padding: "5px 10px" }), display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ fontSize: 9, color: "#9B59B6" }}>🧛</span>
             <CardView card={room.vampire_revealed} small />
-            {room.vampire_revealed.suit && <span style={{ color: SUIT_COLORS[room.vampire_revealed.suit as keyof typeof SUIT_COLORS], fontSize: 14 }}>{SUIT_SYMBOLS[room.vampire_revealed.suit as keyof typeof SUIT_SYMBOLS]}</span>}
           </div>
         )}
-        <div style={{ ...glass({ padding: "6px 12px" }), ...cinzel, fontSize: 10, color: C.ivoryDim }}>
-          DEALER: <span style={{ color: C.ivory }}>{players[room.dealer]?.ai_name}</span>
-        </div>
       </div>
 
       {/* Choose Werewolf Suit */}
@@ -1100,24 +1099,61 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
         </div>
       )}
 
-      {/* Trick Area */}
-      <div style={{ ...glass({ padding: "clamp(8px,2vw,14px)" }), width: "min(500px, 96vw)", minHeight: "clamp(90px,20vw,120px)", display: "flex", gap: 12, alignItems: "center", justifyContent: "center", position: "relative", flexWrap: "wrap" }}>
-        {trick.length === 0 && room.phase === "playing" && (
-          <div style={{ color: C.ivoryDim, fontSize: 12 }}>{players[room.current_player]?.ai_name} beginnt…</div>
-        )}
-        {trick.map((t: any, i: number) => (
-          <div key={i} style={{ textAlign: "center" }}>
-            <div style={{ ...cinzel, fontSize: 9, color: C.ivoryDim, marginBottom: 3 }}>{players[t.playerIndex]?.ai_name}</div>
-            <CardView card={t.card} />
-          </div>
-        ))}
-        {room.phase === "trickEnd" && room.last_trick_winner !== null && (
-          <div style={{ position: "absolute", inset: 0, background: "rgba(13,27,42,0.85)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ ...cinzel, fontSize: 15, color: C.gold, textAlign: "center" }}>
-              {players[room.last_trick_winner]?.ai_name} gewinnt den Stich! 🎉
+      {/* Table - Trump card left, Trick center, info right */}
+      <div style={{
+        width: "min(660px, 96vw)",
+        background: "radial-gradient(ellipse at center, #1b4332 0%, #0d2218 60%, #081810 100%)",
+        border: "2px solid rgba(201,168,76,0.2)",
+        borderRadius: 16,
+        padding: "16px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        minHeight: "clamp(130px,22vw,160px)",
+        position: "relative",
+        boxShadow: "inset 0 2px 20px rgba(0,0,0,0.5), 0 4px 20px rgba(0,0,0,0.5)",
+      }}>
+        {/* Left: Trump card */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 60 }}>
+          {room.trump_card ? (
+            <>
+              <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
+              <div style={{ ...cinzel, fontSize: 8, color: C.gold, letterSpacing: 1 }}>TRUMPF</div>
+            </>
+          ) : (
+            <div style={{ ...cinzel, fontSize: 8, color: C.ivoryDim }}>–</div>
+          )}
+        </div>
+
+        {/* Center: Trick cards */}
+        <div style={{ flex: 1, display: "flex", gap: 10, alignItems: "center", justifyContent: "center", flexWrap: "wrap", minHeight: 110, position: "relative" }}>
+          {trick.length === 0 && room.phase === "playing" && (
+            <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, textAlign: "center" }}>
+              <div style={{ fontSize: 28, marginBottom: 4, opacity: 0.2 }}>🂠</div>
+              <div>{players[room.current_player]?.ai_name} beginnt…</div>
             </div>
-          </div>
-        )}
+          )}
+          {trick.map((t: any, i: number) => (
+            <div key={i} style={{ textAlign: "center" }}>
+              <div style={{ ...cinzel, fontSize: 9, color: "rgba(255,255,255,0.6)", marginBottom: 3, textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>{players[t.playerIndex]?.ai_name}</div>
+              <CardView card={t.card} />
+            </div>
+          ))}
+          {room.phase === "trickEnd" && room.last_trick_winner !== null && (
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.75)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ ...cinzel, fontSize: 15, color: C.gold, textAlign: "center", textShadow: "0 0 20px rgba(201,168,76,0.8)" }}>
+                {players[room.last_trick_winner]?.ai_name} gewinnt! 🎉
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Round info */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 60 }}>
+          <div style={{ ...cinzel, fontSize: 9, color: C.gold, textAlign: "center" }}>R {room.round}<br/><span style={{ color: C.ivoryDim }}>/{room.max_rounds}</span></div>
+          <div style={{ ...cinzel, fontSize: 8, color: C.ivoryDim, textAlign: "center" }}>🎴<br/>{players[room.dealer]?.ai_name}</div>
+        </div>
       </div>
 
       {/* Opponents */}
@@ -1144,15 +1180,16 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
       <div style={{ marginTop: "auto", paddingTop: 10, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: 720 }}>
         <div style={{
           ...cinzel,
-          fontSize: isPlaying ? "clamp(12px,3vw,15px)" : "var(--text-xs)",
-          color: isPlaying ? C.gold : C.ivoryDim,
+          fontSize: isPlaying ? "clamp(13px,3vw,16px)" : "var(--text-xs)",
+          color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.5)",
           textAlign: "center",
           marginBottom: 8,
           letterSpacing: 2,
-          padding: isPlaying ? "6px 16px" : "0",
-          background: isPlaying ? `linear-gradient(135deg, rgba(61,28,110,0.6), rgba(90,45,153,0.4))` : "transparent",
+          padding: isPlaying ? "8px 20px" : "2px 0",
+          background: isPlaying ? `linear-gradient(135deg, rgba(61,28,110,0.95), rgba(90,45,153,0.85))` : "transparent",
           borderRadius: isPlaying ? 20 : 0,
-          border: isPlaying ? `1px solid ${C.gold}55` : "none",
+          border: isPlaying ? `2px solid ${C.gold}` : "none",
+          boxShadow: isPlaying ? `0 0 16px rgba(201,168,76,0.4)` : "none",
           animation: isPlaying ? "pulse 2s infinite" : "none",
         }}>
           {isPlaying ? "✦ DU BIST DRAN ✦" : room.phase === "playing" ? `⏳ ${players[room.current_player]?.ai_name} ist dran` : "DEINE KARTEN"}
