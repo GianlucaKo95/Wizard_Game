@@ -3,87 +3,29 @@ name: Build & Push Add-on
 on:
   push:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      bump:
-        description: 'Version bump type'
-        required: true
-        default: 'patch'
-        type: choice
-        options: [patch, minor, major]
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/gianlucako95/wizard-addon
 
 jobs:
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.bump.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Read current version
-        id: current
-        run: |
-          VERSION=$(grep '^version:' wizard/config.yaml | sed 's/version: *"//' | sed 's/"//')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Current version: $VERSION"
-
-      - name: Bump version
-        id: bump
-        run: |
-          CURRENT="${{ steps.current.outputs.version }}"
-          BUMP="${{ github.event.inputs.bump || 'patch' }}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          if [ "$BUMP" = "major" ]; then
-            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
-          elif [ "$BUMP" = "minor" ]; then
-            MINOR=$((MINOR + 1)); PATCH=0
-          else
-            PATCH=$((PATCH + 1))
-          fi
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "New version: $NEW_VERSION"
-
-      - name: Update config.yaml
-        run: |
-          VERSION="${{ steps.bump.outputs.version }}"
-          sed -i "s/^version: .*/version: \"$VERSION\"/" wizard/config.yaml
-          cat wizard/config.yaml | grep version
-
-      - name: Commit version bump
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add wizard/config.yaml
-          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.bump.outputs.version }} [skip ci]"
-          git push
-
   build:
-    needs: version
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-            platform: linux/amd64
-          - arch: aarch64
-            platform: linux/arm64
-
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main  # Get latest with version bump commit
+
+      - name: Get version from config.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' wizard/config.yaml | sed 's/version: *"//' | sed 's/"//')
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION, SHA: $SHORT_SHA"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -117,15 +59,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push multi-arch
         uses: docker/build-push-action@v5
         with:
           context: wizard
           file: wizard/Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}-${{ matrix.arch }}:latest
-            ${{ env.IMAGE_NAME }}-${{ matrix.arch }}:${{ needs.version.outputs.version }}
-          cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -141,7 +141,7 @@ function aiChooseCard(hand, trick, trumpSuit, werewolfSuit = null) {
     c.value;
 
   const sorted = [...playable].sort((a, b) => str(b) - str(a));
-  return sorted[sorted.length - 1];
+  return sorted[sorted.length - 1] ?? playable[0] ?? hand[0];
 }
 
 function addLog(room, msg) {
@@ -149,10 +149,11 @@ function addLog(room, msg) {
 }
 
 function cardLabel(card) {
+  if (!card) return "?";
   if (card.type === "wizard") return "🧙";
   if (card.type === "fool") return "🃏";
   if (card.specialType) return card.specialType;
-  const sym = {red:"♥",blue:"♠",green:"♣",yellow:"♦"}[card.suit];
+  const sym = {red:"♥",blue:"♠",green:"♣",yellow:"♦"}[card.suit] ?? "?";
   return `${card.value}${sym}`;
 }
 
@@ -223,6 +224,10 @@ async function aiPlayNext(supabase, roomId, room, players) {
   }
 
   const card = aiChooseCard(currentPlayer.hand, room.current_trick ?? [], room.trump_suit, room.werewolf_suit);
+  if (!card) {
+    console.log("[aiPlayNext] aiChooseCard returned undefined! hand:", JSON.stringify(currentPlayer.hand));
+    return json({ ok: true });
+  }
   console.log("[aiPlayNext] AI plays:", cardLabel(card));
   const newHand = currentPlayer.hand.filter(c => c.id !== card.id);
   await supabase.from("room_players").update({ hand: newHand }).eq("id", currentPlayer.id);
@@ -299,6 +304,9 @@ async function advanceTrick(supabase, roomId, room, players) {
     return json({ ok: true });
   }
 
+  // Explicitly save current trick state so realtime fires
+  await supabase.from("rooms").update({ current_trick: trick, current_player: room.current_player }).eq("id", roomId);
+
   // Trick complete
   const winnerIdx = trickWinner(trick, room.trump_suit, room.werewolf_suit);
 
@@ -339,12 +347,12 @@ async function advanceTrick(supabase, roomId, room, players) {
     await endRound(supabase, roomId, room, players);
   } else if (!hasPending) {
     await supabase.from("rooms").update({ phase: "playing" }).eq("id", roomId);
-    if (players[winnerIdx]?.is_ai) {
+    if (updatedPlayers[winnerIdx]?.is_ai) {
       await aiPlayNext(supabase, roomId, {
         ...room, current_trick: [],
         current_player: winnerIdx, phase: "playing", log: room.log,
         pending_rainbow9: null, pending_rainbow7: null, pending_witch: null
-      }, players);
+      }, updatedPlayers);
     }
   } else {
     await supabase.from("rooms").update({ phase: "playing" }).eq("id", roomId);

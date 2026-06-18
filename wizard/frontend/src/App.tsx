@@ -459,6 +459,28 @@ function LobbyScreen({ session }: { session: Session }) {
 
 
 
+
+// ─── Seat Layout ──────────────────────────────────────────────────────────────
+// Returns players ordered by seat position relative to myIdx
+// Positions: bottom (me), left, top-left, top, top-right, right
+function getSeatPositions(players: any[], myIdx: number) {
+  const n = players.length;
+  const effectiveMyIdx = myIdx >= 0 ? myIdx : 0; // fallback to 0 if not yet known
+  const seats: { player: any; position: string }[] = [];
+  for (let i = 0; i < n; i++) {
+    const offset = (i - effectiveMyIdx + n) % n;
+    let position = "top";
+    if (offset === 0) position = "bottom";
+    else if (n === 2) position = "top";
+    else if (n === 3) { position = offset === 1 ? "top-left" : "top-right"; }
+    else if (n === 4) { position = offset === 1 ? "left" : offset === 2 ? "top" : "right"; }
+    else if (n === 5) { position = offset === 1 ? "left" : offset === 2 ? "top-left" : offset === 3 ? "top-right" : "right"; }
+    else if (n === 6) { position = offset === 1 ? "left" : offset === 2 ? "top-left" : offset === 3 ? "top" : offset === 4 ? "top-right" : "right"; }
+    seats.push({ player: players[i], position });
+  }
+  return seats;
+}
+
 // ─── Playability Check (client-side hint) ────────────────────────────────────
 function isCardPlayable(card: any, hand: any[], trick: any[], werewolfSuit?: string|null): boolean {
   const alwaysOk = (c: any) =>
@@ -506,7 +528,17 @@ function sortHand(hand: any[]): any[] {
 function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; session: Session; aiCount: number; edition?: string }) {
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
-  const [myIdx, setMyIdx] = useState(-1);
+  const [myIdx, setMyIdx] = useState(() => {
+    // Try to get from session cache
+    try {
+      const saved = sessionStorage.getItem("wizard_room");
+      if (saved) {
+        const { myPlayerIndex } = JSON.parse(saved);
+        if (typeof myPlayerIndex === "number") return myPlayerIndex;
+      }
+    } catch(e) {}
+    return -1;
+  });
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -541,13 +573,36 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
   useEffect(() => {
     supabase.from("rooms").select("*").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
     supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => {
-      if (data) { setPlayers(data); const mine = data.find((p: any) => p.user_id === session.user.id); if (mine) setMyIdx(mine.player_index); }
+      if (data) {
+        setPlayers(data);
+        const mine = data.find((p: any) => p.user_id === session.user.id);
+        if (mine) {
+          setMyIdx(mine.player_index);
+          // Cache for reconnect
+          try {
+            const saved = sessionStorage.getItem("wizard_room");
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              sessionStorage.setItem("wizard_room", JSON.stringify({ ...parsed, myPlayerIndex: mine.player_index }));
+            }
+          } catch(e) {}
+        }
+      }
     });
   }, [roomId]);
 
   useEffect(() => {
+    const refreshState = () => {
+      supabase.from("rooms").select("*").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
+      supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => { if (data) setPlayers(data); });
+    };
+
     const ch = supabase.channel(`room:${roomId}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => setRoom(payload.new))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => {
+        setRoom(payload.new);
+        // Also refresh players when room changes (trick updates etc.)
+        supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => { if (data) setPlayers(data); });
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "room_players", filter: `room_id=eq.${roomId}` }, (payload) => {
         if (payload.eventType === "UPDATE" && payload.new) {
           setPlayers(prev => {
@@ -558,11 +613,15 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
         } else if (payload.eventType === "INSERT") {
           setPlayers(prev => [...prev, payload.new].sort((a,b) => a.player_index - b.player_index));
         } else {
-          supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => { if (data) setPlayers(data); });
+          refreshState();
         }
       })
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+
+    // Poll every 3 seconds as fallback for missed realtime events
+    const poll = setInterval(refreshState, 3000);
+
+    return () => { supabase.removeChannel(ch); clearInterval(poll); };
   }, [roomId]);
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = 0; }, [room?.log]);
@@ -1015,185 +1074,131 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
         </div>
       </div>
 
-      {/* Player pills */}
-      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "center" }}>
-        {players.map((p: any) => {
+      {/* Round table layout */}
+      {(() => {
+        const seats = getSeatPositions(players, myIdx);
+        const topPlayers = seats.filter((s:any) => ["top","top-left","top-right"].includes(s.position));
+        const leftPlayer = seats.find((s:any) => s.position === "left");
+        const rightPlayer = seats.find((s:any) => s.position === "right");
+
+        const PlayerPill = ({ p, arrow = "" }: { p: any; arrow?: string }) => {
           const isActive = room.current_player === p.player_index;
-          return (
-            <div key={p.id} style={{
-              ...glass({ padding: "5px 10px" }),
-              border: `1px solid ${isActive ? C.gold : C.glassBorder}`,
-              boxShadow: isActive ? `0 0 10px ${C.gold}44` : "none",
-              display: "flex", alignItems: "center", gap: 6,
-            }}>
-              <span style={{ fontSize: 10 }}>{p.is_ai ? "🤖" : p.connected ? "👤" : "❌"}</span>
-              <span style={{ ...cinzel, fontSize: 10, color: isActive ? C.gold : C.ivory }}>{p.ai_name}</span>
-              <span style={{ ...cinzel, fontSize: 11, color: C.goldLight, fontWeight: 700 }}>{p.score}</span>
-              <span style={{ fontSize: 9, color: C.ivoryDim }}>{p.bid !== null ? `${p.tricks_won}/${p.bid}` : "?"}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Trump info bar - compact */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
-        <div style={{ ...glass({ padding: "5px 10px" }), display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ ...cinzel, fontSize: 9, color: C.gold, letterSpacing: 1 }}>TRUMPF</span>
-          {room.trump_suit && <span style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 14, fontWeight: "bold" }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</span>}
-          {room.werewolf_suit && <span style={{ fontSize: 11, color: "#F7DC6F" }}>🐺 {SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</span>}
-          {!room.trump_suit && !room.werewolf_suit && <span style={{ color: C.ivoryDim, fontSize: 11 }}>–</span>}
-        </div>
-        <div style={{ ...glass({ padding: "5px 10px" }), ...cinzel, fontSize: 9, color: C.ivoryDim }}>
-          🎴 <span style={{ color: C.ivory }}>{players[room.dealer]?.ai_name}</span>
-        </div>
-        {room.vampire_revealed && (
-          <div style={{ ...glass({ padding: "5px 10px" }), display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ fontSize: 9, color: "#9B59B6" }}>🧛</span>
-            <CardView card={room.vampire_revealed} small />
-          </div>
-        )}
-      </div>
-
-      {/* Choose Werewolf Suit */}
-      {isChoosingWerewolf && (
-        <div style={{ ...glass({ padding: 16 }), textAlign: "center" }}>
-          <div style={{ fontSize: 28, marginBottom: 6 }}>🐺</div>
-          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 4 }}>STICHFARBE FÜR DIESE RUNDE WÄHLEN</div>
-          <div style={{ fontSize: 11, color: C.ivoryDim, marginBottom: 12 }}>Der Werwolf bestimmt die Anspielfarbe für alle Stiche</div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            {SUITS.map(s => (
-              <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{
-                background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`,
-                borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer",
-              }}>{SUIT_SYMBOLS[s]}</button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {room.phase === "choosingWerewolf" && !isMyTurn && (
-        <div style={{ ...glass({ padding: "8px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
-          🐺 <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> hat den Werwolf und wählt die Stichfarbe…
-        </div>
-      )}
-
-      {/* Choose Trump */}
-      {isChoosingTrump && (
-        <div style={{ ...glass({ padding: 16 }), textAlign: "center" }}>
-          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>TRUMPFFARBE WÄHLEN</div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            {SUITS.map(s => (
-              <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{
-                background: `${SUIT_COLORS[s]}22`, border: `1px solid ${SUIT_COLORS[s]}`,
-                borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 16px", cursor: "pointer",
-              }}>{SUIT_SYMBOLS[s]}</button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Bidding */}
-      {isBidding && (
-        <div style={{ ...glass({ padding: 14 }), textAlign: "center", width: "min(380px, 92vw)" }}>
-          <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 8 }}>WIE VIELE STICHE? (0–{room.round})</div>
-          {dealerForbidden !== null && (
-            <div style={{ fontSize: 11, color: "#E4C97A", marginBottom: 8, background: "rgba(201,168,76,0.1)", borderRadius: 6, padding: "5px 10px" }}>
-              ⚠ Stichzwang: {dealerForbidden} ist verboten
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-            {Array.from({ length: room.round + 1 }, (_, i) => (
-              <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
-                style={{ ...goldBtn(i !== dealerForbidden), padding: "8px 14px", opacity: i === dealerForbidden ? 0.25 : 1 }}>
-                {i}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {room.phase === "bidding" && !isMyTurn && (
-        <div style={{ ...glass({ padding: "6px 14px" }), fontSize: "var(--text-xs)", color: C.ivoryDim, textAlign: "center" }}>
-          ⏳ <span style={{ color: C.gold, ...cinzel }}>{players[room.current_player]?.ai_name}</span> bietet…
-        </div>
-      )}
-
-      {/* Table - Trump card left, Trick center, info right */}
-      <div style={{
-        width: "min(660px, 96vw)",
-        background: "radial-gradient(ellipse at center, #1b4332 0%, #0d2218 60%, #081810 100%)",
-        border: "2px solid rgba(201,168,76,0.2)",
-        borderRadius: 16,
-        padding: "16px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        minHeight: "clamp(130px,22vw,160px)",
-        position: "relative",
-        boxShadow: "inset 0 2px 20px rgba(0,0,0,0.5), 0 4px 20px rgba(0,0,0,0.5)",
-      }}>
-        {/* Left: Trump card */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 60 }}>
-          {room.trump_card ? (
-            <>
-              <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
-              <div style={{ ...cinzel, fontSize: 8, color: C.gold, letterSpacing: 1 }}>TRUMPF</div>
-            </>
-          ) : (
-            <div style={{ ...cinzel, fontSize: 8, color: C.ivoryDim }}>–</div>
-          )}
-        </div>
-
-        {/* Center: Trick cards */}
-        <div style={{ flex: 1, display: "flex", gap: 10, alignItems: "center", justifyContent: "center", flexWrap: "wrap", minHeight: 110, position: "relative" }}>
-          {trick.length === 0 && room.phase === "playing" && (
-            <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, textAlign: "center" }}>
-              <div style={{ fontSize: 28, marginBottom: 4, opacity: 0.2 }}>🂠</div>
-              <div>{players[room.current_player]?.ai_name} beginnt…</div>
-            </div>
-          )}
-          {trick.map((t: any, i: number) => (
-            <div key={i} style={{ textAlign: "center" }}>
-              <div style={{ ...cinzel, fontSize: 9, color: "rgba(255,255,255,0.6)", marginBottom: 3, textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>{players[t.playerIndex]?.ai_name}</div>
-              <CardView card={t.card} />
-            </div>
-          ))}
-          {room.phase === "trickEnd" && room.last_trick_winner !== null && (
-            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.75)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ ...cinzel, fontSize: 15, color: C.gold, textAlign: "center", textShadow: "0 0 20px rgba(201,168,76,0.8)" }}>
-                {players[room.last_trick_winner]?.ai_name} gewinnt! 🎉
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right: Round info */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 60 }}>
-          <div style={{ ...cinzel, fontSize: 9, color: C.gold, textAlign: "center" }}>R {room.round}<br/><span style={{ color: C.ivoryDim }}>/{room.max_rounds}</span></div>
-          <div style={{ ...cinzel, fontSize: 8, color: C.ivoryDim, textAlign: "center" }}>🎴<br/>{players[room.dealer]?.ai_name}</div>
-        </div>
-      </div>
-
-      {/* Opponents */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-        {players.map((p: any) => {
-          if (p.player_index === myIdx) return null;
+          const hasBid = p.bid !== null;
           const count = Array.isArray(p.hand) ? p.hand.length : 0;
           return (
-            <div key={p.id} style={{ textAlign: "center", opacity: room.current_player === p.player_index ? 1 : 0.55, transition: "opacity 0.3s" }}>
-              <div style={{ ...cinzel, fontSize: 9, color: room.current_player === p.player_index ? C.gold : C.ivoryDim, marginBottom: 3 }}>
-                {p.is_ai ? "🤖" : "👤"} {p.ai_name} {room.current_player === p.player_index ? "▼" : ""}
+            <div style={{
+              background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.97), rgba(90,45,153,0.9))` : "rgba(5,10,20,0.94)",
+              border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.25)"}`,
+              boxShadow: isActive ? `0 0 24px ${C.gold}99` : "0 2px 6px rgba(0,0,0,0.6)",
+              borderRadius: 10, padding: "6px 10px",
+              display: "flex", flexDirection: "column" as const, gap: 2,
+              minWidth: 80, maxWidth: 140, position: "relative" as const,
+              transition: "all 0.3s ease",
+            }}>
+              {isActive && arrow && (
+                <div style={{ position: "absolute", [arrow]: -14, left: "50%", transform: "translateX(-50%)", color: C.gold, fontSize: 14, lineHeight: 1 }}>
+                  {arrow === "top" ? "▼" : "▲"}
+                </div>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 9 }}>{p.is_ai ? "🤖" : "👤"}</span>
+                <span style={{ ...cinzel, fontSize: 10, color: isActive ? C.gold : C.ivory, fontWeight: isActive ? 700 : 400 }}>
+                  {p.ai_name}{p.player_index === myIdx ? " ★" : ""}
+                </span>
               </div>
-              <div style={{ display: "flex", gap: 2 }}>
-                {Array.from({ length: count }).map((_, ci) => (
-                  <CardView key={ci} card={{ id: "h", type: "fool", suit: null, value: 0 }} faceDown small />
-                ))}
+              <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" as const }}>
+                <span style={{ fontSize: 9, color: C.ivoryDim }}>Pkt <span style={{ ...cinzel, color: C.goldLight, fontWeight: 700 }}>{p.score}</span></span>
+                {hasBid
+                  ? <span style={{ fontSize: 9, color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : C.ivory }}>{p.tricks_won}/{p.bid} 🎯</span>
+                  : room.phase === "bidding" ? <span style={{ fontSize: 9, color: C.ivoryDim }}>bietet…</span> : null
+                }
+                {p.player_index !== myIdx && <span style={{ fontSize: 9, color: C.ivoryDim }}>🂠{count}</span>}
+                {trick.some((t:any) => t.playerIndex === p.player_index) && (
+                  <span style={{ fontSize: 9, color: C.gold }}>✓</span>
+                )}
               </div>
             </div>
           );
-        })}
-      </div>
+        };
+
+        return (
+          <div style={{ width: "min(680px,98vw)", display: "flex", flexDirection: "column" as const, gap: 6, alignItems: "center" }}>
+
+            {/* Top players */}
+            <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" as const }}>
+              {topPlayers.map((s:any) => <PlayerPill key={s.player.id} p={s.player} arrow="top" />)}
+            </div>
+
+            {/* Middle: left + table + right */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
+
+              {/* Left */}
+              <div style={{ width: 140, flexShrink: 0 }}>
+                {leftPlayer && <PlayerPill p={leftPlayer.player} arrow="top" />}
+              </div>
+
+              {/* Green table */}
+              <div style={{
+                flex: 1, minHeight: "clamp(120px,18vw,150px)",
+                background: "radial-gradient(ellipse at center, #1b4332 0%, #0d2218 60%, #081810 100%)",
+                border: "2px solid rgba(201,168,76,0.2)", borderRadius: 16, padding: "10px 12px",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                boxShadow: "inset 0 2px 20px rgba(0,0,0,0.5)",
+                position: "relative" as const,
+              }}>
+                {/* Trump */}
+                <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 2, minWidth: 50 }}>
+                  {room.trump_card && <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />}
+                  <div style={{ ...cinzel, fontSize: 7, color: C.gold }}>TRUMPF</div>
+                  {room.trump_suit && <span style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 12 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</span>}
+                  {room.werewolf_suit && <span style={{ fontSize: 8, color: "#F7DC6F" }}>🐺{SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</span>}
+                </div>
+
+                {/* Trick cards */}
+                <div style={{ flex: 1, display: "flex", gap: 8, alignItems: "center", justifyContent: "center", flexWrap: "wrap" as const }}>
+                  {trick.length === 0 && room.phase === "playing" && (
+                    <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 11 }}>{players[room.current_player]?.ai_name} beginnt…</div>
+                  )}
+                  {[...trick].sort((a:any,b:any) => {
+                      // Sort by seat position (clockwise from current player)
+                      const seatA = (a.playerIndex - myIdx + players.length) % players.length;
+                      const seatB = (b.playerIndex - myIdx + players.length) % players.length;
+                      return seatA - seatB;
+                    }).map((t: any, i: number) => {
+                      const isMe = t.playerIndex === myIdx;
+                      return (
+                        <div key={i} style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 8, color: isMe ? C.gold : "rgba(255,255,255,0.5)", marginBottom: 2, ...cinzel }}>
+                            {isMe ? "Du" : players[t.playerIndex]?.ai_name}
+                          </div>
+                          <CardView card={t.card} />
+                        </div>
+                      );
+                    })}
+                  {room.phase === "trickEnd" && room.last_trick_winner !== null && (
+                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.82)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <div style={{ ...cinzel, fontSize: 14, color: C.gold, textAlign: "center", textShadow: `0 0 20px ${C.gold}` }}>
+                        {players[room.last_trick_winner]?.ai_name} gewinnt! 🎉
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Round info */}
+                <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 3, minWidth: 50 }}>
+                  <div style={{ ...cinzel, fontSize: 9, color: C.gold }}>R{room.round}<span style={{ color: C.ivoryDim }}>/{room.max_rounds}</span></div>
+                  <div style={{ fontSize: 8, color: C.ivoryDim, textAlign: "center" }}>🎴 {players[room.dealer]?.ai_name}</div>
+                </div>
+              </div>
+
+              {/* Right */}
+              <div style={{ width: 140, flexShrink: 0 }}>
+                {rightPlayer && <PlayerPill p={rightPlayer.player} arrow="top" />}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* My Hand */}
       <div style={{ marginTop: "auto", paddingTop: 10, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: 720 }}>
