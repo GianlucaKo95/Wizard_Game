@@ -578,9 +578,19 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
 
     const ch = supabase.channel(`room:${roomId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => {
-        setRoom(payload.new);
-        // Also refresh players when room changes (trick updates etc.)
-        supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => { if (data) setPlayers(data); });
+        const newRoom = payload.new;
+        setRoom(newRoom);
+        supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => {
+          if (data) {
+            setPlayers(data);
+            // If current player is AI and phase is playing, trigger AI
+            if (newRoom.phase === "playing" && data[newRoom.current_player]?.is_ai) {
+              setTimeout(() => {
+                callGameAction(roomId, "triggerAI", {});
+              }, 500);
+            }
+          }
+        });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "room_players", filter: `room_id=eq.${roomId}` }, (payload) => {
         if (payload.eventType === "UPDATE" && payload.new) {

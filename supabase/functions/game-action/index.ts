@@ -188,14 +188,7 @@ async function tickAIBids(supabase, roomId, room, players) {
   const newCurrent = allBid ? startBidder : current;
   await supabase.from("rooms").update({ phase: newPhase, current_player: newCurrent, log: room.log }).eq("id", roomId);
 
-  // If playing phase starts and first player is AI, trigger play immediately
   console.log("[tickAIBids] allBid:", allBid, "newCurrent:", newCurrent, "is_ai:", players[newCurrent]?.is_ai);
-  if (allBid && players[newCurrent]?.is_ai) {
-    console.log("[tickAIBids] triggering aiPlayNext");
-    const updRoom = { ...room, phase: "playing", current_player: newCurrent, current_trick: [], log: room.log };
-    return await aiPlayNext(supabase, roomId, updRoom, players);
-  }
-
   return json({ ok: true });
 }
 
@@ -498,6 +491,16 @@ serve(async (req) => {
   const callerIdx = callerPlayer?.player_index ?? -1;
 
   switch (action) {
+
+
+    case "triggerAI": {
+      if (room.phase !== "playing") return json({ ok: true });
+      const { data: freshP } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+      const fp = freshP ?? players;
+      console.log("[triggerAI] current_player:", room.current_player, "is_ai:", fp[room.current_player]?.is_ai, "hand:", fp[room.current_player]?.hand?.length);
+      if (!fp[room.current_player]?.is_ai) return json({ ok: true });
+      return await aiPlayNext(supabase, roomId, { ...room, current_trick: room.current_trick ?? [] }, fp);
+    }
 
     case "startGame": {
       if (callerIdx !== 0) return json({ error: "Nur der Host kann starten" }, 403);
