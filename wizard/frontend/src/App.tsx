@@ -525,6 +525,8 @@ function sortHand(hand: any[]): any[] {
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
 function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; session: Session; aiCount: number; edition?: string }) {
+  const aiTriggerPending = React.useRef(false);
+  const clearTrickPending = React.useRef(false);
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [myIdx, setMyIdx] = useState(-1);
@@ -584,16 +586,22 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
           if (data) {
             setPlayers(data);
             if (newRoom.phase === "playing" && data[newRoom.current_player]?.is_ai) {
-              // Delay before AI plays
-              setTimeout(() => {
-                callGameAction(roomId, "triggerAI", {});
-              }, 2000);
+              if (!aiTriggerPending.current) {
+                aiTriggerPending.current = true;
+                setTimeout(() => {
+                  aiTriggerPending.current = false;
+                  callGameAction(roomId, "triggerAI", {});
+                }, 2000);
+              }
             }
             if (newRoom.phase === "trickEnd") {
-              // Show trick for 5 seconds before clearing
-              setTimeout(() => {
-                callGameAction(roomId, "clearTrick", {});
-              }, 5000);
+              if (!clearTrickPending.current) {
+                clearTrickPending.current = true;
+                setTimeout(() => {
+                  clearTrickPending.current = false;
+                  callGameAction(roomId, "clearTrick", {});
+                }, 5000);
+              }
             }
           }
         });
@@ -613,8 +621,8 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
       })
       .subscribe();
 
-    // Poll every 3 seconds as fallback for missed realtime events
-    const poll = setInterval(refreshState, 3000);
+    // Poll every 5 seconds as fallback for missed realtime events (read-only, no AI trigger)
+    const poll = setInterval(refreshState, 5000);
 
     return () => { supabase.removeChannel(ch); clearInterval(poll); };
   }, [roomId]);

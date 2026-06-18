@@ -244,8 +244,6 @@ async function aiPlayNext(supabase, roomId, room, players) {
   addLog(room, `${currentPlayer.ai_name}: ${cardLabel(card)}`);
   // Pass updated players with correct hand sizes to advanceTrick
   const updPlayers = allPlayers.map((p, i) => i === current ? { ...p, hand: newHand } : p);
-  // Small wait to ensure DB write is committed before advanceTrick reads
-  await new Promise(r => setTimeout(r, 100));
   return await advanceTrick(supabase, roomId, { ...room, current_trick: newTrick, current_player: current, log: room.log }, updPlayers);
 }
 
@@ -337,8 +335,11 @@ async function advanceTrick(supabase, roomId, room, players) {
     return json({ ok: true });
   }
 
-  players[winnerIdx].tricks_won++;
-  await supabase.from("room_players").update({ tricks_won: players[winnerIdx].tricks_won }).eq("id", players[winnerIdx].id);
+  // Load fresh tricks_won from DB to avoid stale local value from previous round
+  const { data: freshWinner } = await supabase.from("room_players").select("tricks_won").eq("id", players[winnerIdx].id).single();
+  const newTricksWon = (freshWinner?.tricks_won ?? 0) + 1;
+  await supabase.from("room_players").update({ tricks_won: newTricksWon }).eq("id", players[winnerIdx].id);
+  players[winnerIdx].tricks_won = newTricksWon;
   addLog(room, `✓ ${players[winnerIdx].ai_name} gewinnt den Stich!`);
 
   const has9 = trick.some(t => t.card.specialType === "rainbow9");
@@ -525,34 +526,37 @@ serve(async (req) => {
 
     case "clearTrick": {
       if (room.phase !== "trickEnd") return json({ ok: true });
-      const hasPendingItems = room.pending_rainbow9 !== null ||
-        Array.isArray(room.pending_rainbow7) ||
-        room.pending_witch !== null;
+
+      // Load fresh state
+      const { data: freshCR2 } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+      const { data: freshCP2 } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+      const fr = freshCR2 ?? room;
+      const fp2 = freshCP2 ?? players;
+
+      const hasPendingItems = fr.pending_rainbow9 !== null ||
+        Array.isArray(fr.pending_rainbow7) ||
+        fr.pending_witch !== null;
 
       if (hasPendingItems) {
         await supabase.from("rooms").update({ phase: "playing" }).eq("id", roomId);
         return json({ ok: true });
       }
 
-      // Check if round is over
-      const { data: freshCP } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
-      const { data: freshCR } = await supabase.from("rooms").select("*").eq("id", roomId).single();
-      const currentRoundN = freshCR?.round ?? room.round;
-      const totalTricks = (freshCP ?? players).reduce((sum, p) => sum + (p.tricks_won ?? 0), 0);
-      const allEmpty = (freshCP ?? players).every(p => (p.hand ?? []).length === 0);
+      // Check round over
+      const totalTricks2 = fp2.reduce((sum, p) => sum + (p.tricks_won ?? 0), 0);
+      const allEmpty2 = fp2.every(p => (p.hand ?? []).length === 0);
+      const roundOver2 = allEmpty2 || totalTricks2 >= fr.round;
 
-      if (allEmpty || totalTricks >= currentRoundN) {
-        await endRound(supabase, roomId, freshCR ?? room, freshCP ?? players);
+      console.log("[clearTrick] totalTricks:", totalTricks2, "round:", fr.round, "allEmpty:", allEmpty2, "roundOver:", roundOver2, "players tricks_won:", fp2.map(p => p.tricks_won));
+
+      if (roundOver2) {
+        await endRound(supabase, roomId, fr, fp2);
       } else {
-        await supabase.from("rooms").update({ phase: "playing" }).eq("id", roomId);
-        // If winner is AI, trigger play
-        if ((freshCP ?? players)[room.last_trick_winner ?? 0]?.is_ai) {
-          return await aiPlayNext(supabase, roomId, {
-            ...room, ...freshCR,
-            current_trick: [], current_player: room.last_trick_winner ?? 0,
-            phase: "playing", log: room.log
-          }, freshCP ?? players);
-        }
+        // Just set phase to playing - client will trigger AI via triggerAI
+        await supabase.from("rooms").update({
+          phase: "playing",
+          current_player: fr.last_trick_winner ?? fr.current_player
+        }).eq("id", roomId);
       }
       return json({ ok: true });
     }
