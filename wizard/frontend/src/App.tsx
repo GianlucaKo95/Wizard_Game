@@ -570,6 +570,9 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
     setLoading(false);
   }, [roomId]);
 
+  // Calculate effectiveMyIdx early (before room loads) from players cache
+  const _derivedMyIdx = players.findIndex((p: any) => p.user_id === session.user.id);
+
   useEffect(() => {
     supabase.from("rooms").select("*").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
     supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => {
@@ -632,15 +635,20 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
       .then(({ data }) => { if (data) setRoundHistory(data); });
   }, [room?.phase, room?.round]);
 
-  if (!room) return (
+  if (!room || _derivedMyIdx < 0) return (
     <div style={{ ...tableStyle, justifyContent: "center" }}>
-      <div style={{ ...cinzel, fontSize: 18, color: C.gold }}>Lade…</div>
+      <div style={{ ...cinzel, fontSize: 18, color: C.gold }}>Verbinde…</div>
     </div>
   );
 
-  // Always derive myIdx from players (handles cases where useState init missed it)
-  const derivedMyIdx = players.findIndex((p: any) => p.user_id === session.user.id);
+  // Use pre-calculated index
+  const derivedMyIdx = _derivedMyIdx;
   const effectiveMyIdx = derivedMyIdx >= 0 ? derivedMyIdx : myIdx;
+
+  // Sync state if needed
+  if (derivedMyIdx >= 0 && derivedMyIdx !== myIdx) {
+    setMyIdx(derivedMyIdx);
+  }
 
   const me = players[effectiveMyIdx];
   const myHand: any[] = sortHand(me?.hand ?? []);
