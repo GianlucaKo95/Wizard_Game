@@ -164,8 +164,13 @@ function json(data, status = 200) {
 }
 
 async function tickAIBids(supabase, roomId, room, players) {
+  // Always reload fresh players to get correct bid state
+  const { data: freshBidPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+  const freshPlayers = freshBidPlayers ?? players;
   let current = room.current_player;
-  const bids = players.map(p => p.bid);
+  const bids = freshPlayers.map(p => p.bid);
+  // Use fresh players for AI bidding
+  players = freshPlayers;
   const startBidder = (room.dealer + 1) % players.length;
   let iterations = 0;
 
@@ -195,6 +200,8 @@ async function tickAIBids(supabase, roomId, room, players) {
 async function aiPlayNext(supabase, roomId, room, players) {
   const current = room.current_player;
   console.log("[aiPlayNext] called, current_player:", current, "phase:", room.phase);
+  // Note: no blocking delay here - would cause timeout
+  // Delay is handled client-side via triggerAI polling
 
   // Always load fresh players from DB to get correct hands
   const { data: freshPlayers, error: fpErr } = await supabase
@@ -235,7 +242,10 @@ async function aiPlayNext(supabase, roomId, room, players) {
   await supabase.from("room_players").update({ hand: newHand }).eq("id", currentPlayer.id);
   const newTrick = [...(room.current_trick ?? []), { card, playerIndex: current }];
   addLog(room, `${currentPlayer.ai_name}: ${cardLabel(card)}`);
+  // Pass updated players with correct hand sizes to advanceTrick
   const updPlayers = allPlayers.map((p, i) => i === current ? { ...p, hand: newHand } : p);
+  // Small wait to ensure DB write is committed before advanceTrick reads
+  await new Promise(r => setTimeout(r, 100));
   return await advanceTrick(supabase, roomId, { ...room, current_trick: newTrick, current_player: current, log: room.log }, updPlayers);
 }
 
@@ -301,7 +311,13 @@ async function advanceTrick(supabase, roomId, room, players) {
     const next = (room.current_player + 1) % players.length;
     await supabase.from("rooms").update({ current_trick: trick, current_player: next, log: room.log }).eq("id", roomId);
     if (players[next]?.is_ai) {
-      return await aiPlayNext(supabase, roomId, { ...room, current_trick: trick, current_player: next, log: room.log }, players);
+      // Break chain - save state, client triggers next AI move with delay
+      await supabase.from("rooms").update({
+        current_trick: trick,
+        current_player: next,
+        log: room.log
+      }).eq("id", roomId);
+      return json({ ok: true });
     }
     return json({ ok: true });
   }
@@ -329,42 +345,48 @@ async function advanceTrick(supabase, roomId, room, players) {
   const has7 = trick.some(t => t.card.specialType === "rainbow7");
   const hasWitch = trick.some(t => t.card.id === "witch" || t.card.specialType === "witch");
   const rainbow7Players = has7 ? players.map((_, i) => i) : null;
+  const pendingWitch = hasWitch ? (trick.find(t => t.card.id === "witch" || t.card.specialType === "witch")?.playerIndex ?? null) : null;
+  const hasPending = has9 || has7 || hasWitch;
 
   await supabase.from("rooms").update({
     current_trick: [], current_player: winnerIdx,
     last_trick_winner: winnerIdx, last_trick_cards: trick,
-    phase: hasPending ? "trickEnd" : "trickEnd",
+    phase: "trickEnd",
     pending_rainbow9: has9 ? winnerIdx : null,
     pending_rainbow7: rainbow7Players,
-    pending_witch: hasWitch ? (trick.find(t => t.card.id === "witch" || t.card.specialType === "witch")?.playerIndex ?? null) : null,
+    pending_witch: pendingWitch,
     log: room.log
   }).eq("id", roomId);
 
-  // Execute directly - no setTimeout in Edge Functions
-  const hasPending = (room.pending_rainbow9 ?? null) !== null ||
-    Array.isArray(room.pending_rainbow7) ||
-    (room.pending_witch ?? null) !== null;
+  // Reload fresh room AND players to get correct state
+  const { data: freshRoom2 } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+  const currentRound = freshRoom2?.round ?? room.round;
+  const maxRounds = freshRoom2?.max_rounds ?? room.max_rounds;
 
-  if (players.every(p => p.hand.length === 0)) {
-    await endRound(supabase, roomId, room, players);
+  const { data: freshAfterTrick } = await supabase
+    .from("room_players").select("*").eq("room_id", roomId).order("player_index");
+  const updatedPlayers2 = freshAfterTrick ?? players;
+
+  // Round ends when all hands are empty OR total tricks >= round number
+  const totalTricksPlayed = updatedPlayers2.reduce((sum, p) => sum + (p.tricks_won ?? 0), 0);
+  const allHandsEmpty = updatedPlayers2.every(p => (p.hand ?? []).length === 0);
+  const roundOver = allHandsEmpty || totalTricksPlayed >= currentRound;
+  console.log("[advanceTrick] totalTricksPlayed:", totalTricksPlayed, "currentRound:", currentRound, "allHandsEmpty:", allHandsEmpty, "roundOver:", roundOver);
+
+  if (roundOver) {
+    await endRound(supabase, roomId, freshRoom2 ?? room, updatedPlayers2);
   } else if (!hasPending) {
-    await supabase.from("rooms").update({ phase: "playing" }).eq("id", roomId);
-    if (updatedPlayers[winnerIdx]?.is_ai) {
-      await aiPlayNext(supabase, roomId, {
-        ...room, current_trick: [],
-        current_player: winnerIdx, phase: "playing", log: room.log,
-        pending_rainbow9: null, pending_rainbow7: null, pending_witch: null
-      }, updatedPlayers);
-    }
+    // Stay in trickEnd - client will call clearTrick after 5s delay
+    // (phase is already trickEnd from the rooms update above)
   } else {
-    await supabase.from("rooms").update({ phase: "playing" }).eq("id", roomId);
+    // Has pending actions - stay in trickEnd, client handles
   }
 
   return json({ ok: true });
 }
 
 async function dealRound(supabase, roomId, room, players) {
-  const deck = shuffle(buildDeck(room.edition ?? body?.edition ?? "classic"));
+  const deck = shuffle(buildDeck(room.edition ?? "classic"));
   const hands = players.map(() => []);
   for (let i = 0; i < room.round; i++)
     for (let p = 0; p < players.length; p++)
@@ -373,8 +395,11 @@ async function dealRound(supabase, roomId, room, players) {
   const trumpCard = deck.pop() ?? null;
   const remainingDeck = [...deck];
 
+  console.log("[dealRound] dealing", room.round, "cards to", players.length, "players, deck size:", deck.length + players.length * room.round + 1);
   for (let i = 0; i < players.length; i++) {
-    await supabase.from("room_players").update({ hand: hands[i], bid: null, tricks_won: 0 }).eq("id", players[i].id);
+    console.log("[dealRound] player", i, "hand size:", hands[i].length, "id:", players[i].id);
+    const { error: dealErr } = await supabase.from("room_players").update({ hand: hands[i], bid: null, tricks_won: 0 }).eq("id", players[i].id);
+    if (dealErr) console.log("[dealRound] ERROR saving hand:", dealErr.message);
   }
 
   // Check if any player got werewolf in hand
@@ -468,7 +493,7 @@ serve(async (req) => {
   );
 
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return new Response("Unauthorized", { status: 401 });
+  if (!authHeader) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
 
   const anonClient = createClient(
     Deno.env.get("SUPABASE_URL"),
@@ -476,9 +501,14 @@ serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } }
   );
   const { data: { user }, error: authErr } = await anonClient.auth.getUser();
-  if (authErr || !user) return new Response("Unauthorized", { status: 401 });
+  if (authErr || !user) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
 
-  const body = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch(e) {
+    return new Response("Invalid JSON", { status: 400, headers: corsHeaders });
+  }
   const { action, roomId } = body;
 
   const { data: roomRow } = await supabase.from("rooms").select("*").eq("id", roomId).single();
@@ -492,6 +522,40 @@ serve(async (req) => {
 
   switch (action) {
 
+
+    case "clearTrick": {
+      if (room.phase !== "trickEnd") return json({ ok: true });
+      const hasPendingItems = room.pending_rainbow9 !== null ||
+        Array.isArray(room.pending_rainbow7) ||
+        room.pending_witch !== null;
+
+      if (hasPendingItems) {
+        await supabase.from("rooms").update({ phase: "playing" }).eq("id", roomId);
+        return json({ ok: true });
+      }
+
+      // Check if round is over
+      const { data: freshCP } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+      const { data: freshCR } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+      const currentRoundN = freshCR?.round ?? room.round;
+      const totalTricks = (freshCP ?? players).reduce((sum, p) => sum + (p.tricks_won ?? 0), 0);
+      const allEmpty = (freshCP ?? players).every(p => (p.hand ?? []).length === 0);
+
+      if (allEmpty || totalTricks >= currentRoundN) {
+        await endRound(supabase, roomId, freshCR ?? room, freshCP ?? players);
+      } else {
+        await supabase.from("rooms").update({ phase: "playing" }).eq("id", roomId);
+        // If winner is AI, trigger play
+        if ((freshCP ?? players)[room.last_trick_winner ?? 0]?.is_ai) {
+          return await aiPlayNext(supabase, roomId, {
+            ...room, ...freshCR,
+            current_trick: [], current_player: room.last_trick_winner ?? 0,
+            phase: "playing", log: room.log
+          }, freshCP ?? players);
+        }
+      }
+      return json({ ok: true });
+    }
 
     case "triggerAI": {
       if (room.phase !== "playing") return json({ ok: true });
@@ -509,8 +573,16 @@ serve(async (req) => {
       for (let i = players.length; i < Math.min(6, players.length + aiCount); i++) {
         aiInserts.push({ room_id: roomId, player_index: i, is_ai: true, ai_name: `KI ${i - players.length + 1}`, hand: [], score: 0, tricks_won: 0, connected: true });
       }
-      if (aiInserts.length > 0) await supabase.from("room_players").insert(aiInserts);
-      const allPlayers = [...players, ...aiInserts.map((ai, i) => ({ ...ai, player_index: players.length + i }))];
+      let insertedAI = [];
+      if (aiInserts.length > 0) {
+        const { data: aiData } = await supabase.from("room_players").insert(aiInserts).select();
+        insertedAI = aiData ?? [];
+        console.log("[startGame] inserted AI players:", insertedAI.length, insertedAI.map(p => p.id));
+      }
+      // Reload ALL players from DB to get correct IDs
+      const { data: freshAllPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+      const allPlayers = freshAllPlayers ?? [...players, ...insertedAI];
+      console.log("[startGame] allPlayers:", allPlayers.length, allPlayers.map(p => ({ id: p.id, name: p.ai_name })));
       const maxRounds = Math.floor(60 / allPlayers.length);
       const edition = body.edition ?? room.edition ?? "classic";
       addLog(room, `Spiel gestartet mit ${allPlayers.length} Spielern (${edition === "anniversary" ? "30 Jahre Edition" : "Classic"})`);
@@ -556,6 +628,10 @@ serve(async (req) => {
       const hand = callerPlayer.hand;
       const card = hand.find(c => c.id === body.cardId);
       if (!card) return json({ error: "Karte nicht gefunden" }, 400);
+      // Ensure player has bid before playing
+      if (callerPlayer.bid === null || callerPlayer.bid === undefined) {
+        return json({ error: "Du musst erst bieten!" }, 400);
+      }
 
       // Validate follow suit
       const ledEntry = room.current_trick.find(t =>
@@ -658,9 +734,16 @@ serve(async (req) => {
 
     case "nextRound": {
       if (room.phase !== "roundEnd") return json({ error: "Falscher Status" }, 400);
-      if (callerIdx !== 0) return json({ error: "Nur der Host" }, 403);
-      addLog(room, `Runde ${room.round + 1} beginnt`);
-      return await dealRound(supabase, roomId, { ...room, round: room.round + 1, dealer: (room.dealer + 1) % players.length, log: room.log }, players);
+      if (room.host_id !== user.id) return json({ error: "Nur der Host" }, 403);
+      // Reload fresh room AND players from DB for accurate state
+      const { data: freshNextRoom } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+      const { data: freshNextPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+      const nextPlayers = freshNextPlayers ?? players;
+      const currentDealer = freshNextRoom?.dealer ?? room.dealer;
+      const nextDealer = (currentDealer + 1) % nextPlayers.length;
+      const nextRound = (freshNextRoom?.round ?? room.round) + 1;
+      addLog(room, `Runde ${nextRound} beginnt`);
+      return await dealRound(supabase, roomId, { ...room, ...freshNextRoom, round: nextRound, dealer: nextDealer, log: room.log }, nextPlayers);
     }
 
     case "newGame": {

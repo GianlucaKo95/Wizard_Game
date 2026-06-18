@@ -583,11 +583,17 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
         supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => {
           if (data) {
             setPlayers(data);
-            // If current player is AI and phase is playing, trigger AI
             if (newRoom.phase === "playing" && data[newRoom.current_player]?.is_ai) {
+              // Delay before AI plays
               setTimeout(() => {
                 callGameAction(roomId, "triggerAI", {});
-              }, 500);
+              }, 2000);
+            }
+            if (newRoom.phase === "trickEnd") {
+              // Show trick for 5 seconds before clearing
+              setTimeout(() => {
+                callGameAction(roomId, "clearTrick", {});
+              }, 5000);
             }
           }
         });
