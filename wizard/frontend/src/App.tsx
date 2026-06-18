@@ -115,22 +115,32 @@ function AuthScreen() {
     if (!name) { setError("Bitte gib deinen Namen ein"); return; }
     setError(""); setLoading(true);
     try {
-      // Generate stable credentials from name - same name = same account
       const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "");
       const email = `${slug}@wizard.local`;
-      // Stable password derived from name (not secure but ok for a game)
       const pw = `wiz${slug}2024!`;
-      // Try login first
+
+      // Always try login first
       const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: pw });
-      if (loginErr) {
-        // Account doesn't exist yet - register
-        const { error: regErr } = await supabase.auth.signUp({ email, password: pw, options: { data: { username: name } } });
-        if (regErr) throw regErr;
-        // Auto-login after register
-        await supabase.auth.signInWithPassword({ email, password: pw });
+
+      if (!loginErr) return; // Login successful
+
+      // Login failed - try register
+      const { error: regErr } = await supabase.auth.signUp({
+        email, password: pw,
+        options: { data: { username: name } }
+      });
+
+      if (!regErr) {
+        // Registration successful - now login
+        const { error: loginErr2 } = await supabase.auth.signInWithPassword({ email, password: pw });
+        if (loginErr2) throw loginErr2;
+        return;
       }
+
+      // Both failed - show original login error
+      throw new Error(loginErr.message);
     } catch (e: any) {
-      setError("Fehler: " + (e.message ?? "Unbekannt"));
+      setError(e.message ?? "Fehler beim Anmelden");
     } finally {
       setLoading(false);
     }
