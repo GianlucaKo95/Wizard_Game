@@ -525,8 +525,8 @@ function sortHand(hand: any[]): any[] {
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
 function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; session: Session; aiCount: number; edition?: string }) {
-  const aiTriggerPending = React.useRef(false);
-  const clearTrickPending = React.useRef(false);
+  const aiTriggerPending = useRef(false);
+  const clearTrickPending = useRef(false);
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [myIdx, setMyIdx] = useState(-1);
