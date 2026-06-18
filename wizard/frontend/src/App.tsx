@@ -1416,14 +1416,34 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
-    return () => subscription.unsubscribe();
+    const isPWA = window.matchMedia("(display-mode: standalone)").matches
+      || (window.navigator as any).standalone === true;
+
+    if (!isPWA) {
+      // Browser: always start fresh, sign out any existing session
+      supabase.auth.signOut().finally(() => setLoading(false));
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
+      return () => subscription.unsubscribe();
+    } else {
+      // PWA: restore session if available
+      const timeout = setTimeout(() => setLoading(false), 3000);
+      supabase.auth.getSession().then(({ data }) => {
+        setSession(data.session);
+        setLoading(false);
+        clearTimeout(timeout);
+      }).catch(() => { setLoading(false); clearTimeout(timeout); });
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
+        setSession(s);
+        setLoading(false);
+      });
+      return () => { subscription.unsubscribe(); clearTimeout(timeout); };
+    }
   }, []);
 
   if (loading) return (
-    <div style={{ minHeight: "100vh", background: C.midnight, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ ...cinzel, fontSize: 32, color: C.gold }}>🧙</div>
+    <div style={{ minHeight: "100vh", background: C.midnight, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+      <div style={{ ...cinzel, fontSize: 48, color: C.gold }}>🧙</div>
+      <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, letterSpacing: 3 }}>WIZARD</div>
     </div>
   );
 
