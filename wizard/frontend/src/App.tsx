@@ -1214,57 +1214,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 {/* Trick cards + Bidding overlay */}
                 <div style={{ flex: 1, display: "flex", gap: 8, alignItems: "center", justifyContent: "center", flexWrap: "wrap" as const, position: "relative" as const }}>
 
-                  {/* Bidding UI overlay inside table */}
-                  {(isBidding || isChoosingTrump || isChoosingWerewolf || (room.phase === "bidding" && !isMyTurn)) && (
-                    <div style={{ position: "absolute" as const, inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, borderRadius: 16, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}>
-                      <div style={{ textAlign: "center", padding: "clamp(8px,2vw,16px) clamp(10px,3vw,24px)", width: "100%" }}>
-                        {isBidding && <>
-                          <div style={{ ...cinzel, fontSize: "clamp(10px,2.5vw,13px)", color: C.gold, letterSpacing: "clamp(1px,0.5vw,2px)", marginBottom: 8 }}>WIE VIELE STICHE MACHST DU? (0–{room.round})</div>
-                          {dealerForbidden !== null && (
-                            <div style={{ fontSize: 11, color: "#F7DC6F", marginBottom: 10, background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "6px 12px" }}>
-                              ⚠ Stichzwang: <strong>{dealerForbidden}</strong> ist verboten
-                            </div>
-                          )}
-                          <div style={{ display: "flex", gap: "clamp(4px,1.5vw,8px)", flexWrap: "wrap" as const, justifyContent: "center", maxWidth: "90%" }}>
-                            {Array.from({ length: room.round + 1 }, (_, i) => (
-                              <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
-                                style={{ ...goldBtn(i !== dealerForbidden), padding: "clamp(8px,2vw,14px) clamp(12px,2.5vw,22px)", fontSize: "clamp(16px,3vw,20px)", opacity: i === dealerForbidden ? 0.2 : 1, minWidth: "clamp(40px,8vw,56px)" }}>
-                                {i}
-                              </button>
-                            ))}
-                          </div>
-                        </>}
-                        {isChoosingTrump && <>
-                          <div style={{ ...cinzel, fontSize: 13, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>TRUMPFFARBE WÄHLEN</div>
-                          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-                            {SUITS.map(s => (
-                              <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>
-                            ))}
-                          </div>
-                        </>}
-                        {isChoosingWerewolf && <>
-                          <div style={{ fontSize: 24, marginBottom: 6 }}>🐺</div>
-                          <div style={{ ...cinzel, fontSize: 13, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>STICHFARBE WÄHLEN</div>
-                          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-                            {SUITS.map(s => (
-                              <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>
-                            ))}
-                          </div>
-                        </>}
-                        {room.phase === "bidding" && !isMyTurn && !isBidding && (
-                          <div style={{ ...cinzel, fontSize: "clamp(11px,2vw,13px)", color: C.ivoryDim }}>
-                            ⏳ <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> bietet…
-                          </div>
-                        )}
-                        {room.phase === "choosingWerewolf" && !isMyTurn && !isChoosingWerewolf && (
-                          <div style={{ ...cinzel, fontSize: "clamp(11px,2vw,13px)", color: C.ivoryDim }}>
-                            🐺 <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> wählt Stichfarbe…
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
                   {trick.length === 0 && room.phase === "playing" && (
                     <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 11 }}>{players[room.current_player]?.ai_name} beginnt…</div>
                   )}
@@ -1305,6 +1254,46 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 {rightPlayer && <PlayerPill p={rightPlayer.player} arrow="top" />}
               </div>
             </div>
+
+            {/* Bidding / action UI - between table and my pill */}
+            {(isBidding || isChoosingTrump || isChoosingWerewolf ||
+              (room.phase === "bidding" && !isMyTurn) ||
+              (room.phase === "choosingWerewolf" && !isMyTurn)) && (
+              <div style={{ background: "rgba(5,8,15,0.95)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: "12px 16px", textAlign: "center", width: "100%" }}>
+                {isBidding && <>
+                  <div style={{ ...cinzel, fontSize: "clamp(10px,2.5vw,12px)", color: C.gold, letterSpacing: 1, marginBottom: 8 }}>
+                    WIE VIELE STICHE? (0–{room.round})
+                    {dealerForbidden !== null && <span style={{ color: "#F7DC6F", fontSize: "clamp(9px,2vw,11px)", display: "block", marginTop: 4 }}>⚠ {dealerForbidden} verboten</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, justifyContent: "center" }}>
+                    {Array.from({ length: room.round + 1 }, (_, i) => (
+                      <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
+                        style={{ ...goldBtn(i !== dealerForbidden), padding: "10px 16px", fontSize: "clamp(16px,4vw,22px)", opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 48 }}>
+                        {i}
+                      </button>
+                    ))}
+                  </div>
+                </>}
+                {isChoosingTrump && <>
+                  <div style={{ ...cinzel, fontSize: 12, color: C.gold, marginBottom: 10 }}>TRUMPFFARBE WÄHLEN</div>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                    {SUITS.map(s => <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 14px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>)}
+                  </div>
+                </>}
+                {isChoosingWerewolf && <>
+                  <div style={{ ...cinzel, fontSize: 12, color: C.gold, marginBottom: 10 }}>🐺 STICHFARBE WÄHLEN</div>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                    {SUITS.map(s => <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 14px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>)}
+                  </div>
+                </>}
+                {room.phase === "bidding" && !isMyTurn && (
+                  <div style={{ ...cinzel, fontSize: 12, color: C.ivoryDim }}>⏳ <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> bietet…</div>
+                )}
+                {room.phase === "choosingWerewolf" && !isMyTurn && !isChoosingWerewolf && (
+                  <div style={{ ...cinzel, fontSize: 12, color: C.ivoryDim }}>🐺 <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> wählt…</div>
+                )}
+              </div>
+            )}
 
             {/* My pill at bottom */}
             {mySeat && (
@@ -1440,25 +1429,33 @@ export default function App() {
     const isPWA = window.matchMedia("(display-mode: standalone)").matches
       || (window.navigator as any).standalone === true;
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
+      setSession(s);
+      setLoading(false);
+    });
+
     if (!isPWA) {
-      // Browser: always start fresh, sign out any existing session
-      supabase.auth.signOut().finally(() => setLoading(false));
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
-      return () => subscription.unsubscribe();
+      // Browser: always start fresh
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          // Sign out silently, onAuthStateChange will set session to null
+          supabase.auth.signOut().catch(() => {});
+        } else {
+          setLoading(false);
+        }
+      }).catch(() => setLoading(false));
     } else {
-      // PWA: restore session if available
+      // PWA: restore session
       const timeout = setTimeout(() => setLoading(false), 3000);
       supabase.auth.getSession().then(({ data }) => {
         setSession(data.session);
         setLoading(false);
         clearTimeout(timeout);
       }).catch(() => { setLoading(false); clearTimeout(timeout); });
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
-        setSession(s);
-        setLoading(false);
-      });
       return () => { subscription.unsubscribe(); clearTimeout(timeout); };
     }
+
+    return () => subscription.unsubscribe();
   }, []);
 
   if (loading) return (
