@@ -115,20 +115,22 @@ function AuthScreen() {
     if (!name) { setError("Bitte gib deinen Namen ein"); return; }
     setError(""); setLoading(true);
     try {
-      const { error: e } = await supabase.auth.signInAnonymously();
-      if (e) throw e;
-      // Save username in user metadata
-      await supabase.auth.updateUser({ data: { username: name } });
-    } catch (e: any) {
-      // Fallback: try email/password with generated credentials
-      try {
-        const email = `${name.toLowerCase().replace(/[^a-z0-9]/g, "")}${Math.random().toString(36).slice(2,6)}@wizard.local`;
-        const password = Math.random().toString(36).slice(2, 12);
-        const { error: e2 } = await supabase.auth.signUp({ email, password, options: { data: { username: name } } });
-        if (e2) throw e2;
-      } catch (e2: any) {
-        setError("Fehler beim Anmelden. Bitte versuche es erneut.");
+      // Generate stable credentials from name - same name = same account
+      const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const email = `${slug}@wizard.local`;
+      // Stable password derived from name (not secure but ok for a game)
+      const pw = `wiz${slug}2024!`;
+      // Try login first
+      const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: pw });
+      if (loginErr) {
+        // Account doesn't exist yet - register
+        const { error: regErr } = await supabase.auth.signUp({ email, password: pw, options: { data: { username: name } } });
+        if (regErr) throw regErr;
+        // Auto-login after register
+        await supabase.auth.signInWithPassword({ email, password: pw });
       }
+    } catch (e: any) {
+      setError("Fehler: " + (e.message ?? "Unbekannt"));
     } finally {
       setLoading(false);
     }
@@ -1194,18 +1196,18 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                   {/* Bidding UI overlay inside table */}
                   {(isBidding || isChoosingTrump || isChoosingWerewolf || (room.phase === "bidding" && !isMyTurn)) && (
                     <div style={{ position: "absolute" as const, inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, borderRadius: 16, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}>
-                      <div style={{ textAlign: "center", padding: "16px 24px" }}>
+                      <div style={{ textAlign: "center", padding: "clamp(8px,2vw,16px) clamp(10px,3vw,24px)", width: "100%" }}>
                         {isBidding && <>
-                          <div style={{ ...cinzel, fontSize: 13, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>WIE VIELE STICHE MACHST DU? (0–{room.round})</div>
+                          <div style={{ ...cinzel, fontSize: "clamp(10px,2.5vw,13px)", color: C.gold, letterSpacing: "clamp(1px,0.5vw,2px)", marginBottom: 8 }}>WIE VIELE STICHE MACHST DU? (0–{room.round})</div>
                           {dealerForbidden !== null && (
                             <div style={{ fontSize: 11, color: "#F7DC6F", marginBottom: 10, background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "6px 12px" }}>
                               ⚠ Stichzwang: <strong>{dealerForbidden}</strong> ist verboten
                             </div>
                           )}
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, justifyContent: "center" }}>
+                          <div style={{ display: "flex", gap: "clamp(4px,1.5vw,8px)", flexWrap: "wrap" as const, justifyContent: "center", maxWidth: "90%" }}>
                             {Array.from({ length: room.round + 1 }, (_, i) => (
                               <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
-                                style={{ ...goldBtn(i !== dealerForbidden), padding: "14px 22px", fontSize: 20, opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 56 }}>
+                                style={{ ...goldBtn(i !== dealerForbidden), padding: "clamp(8px,2vw,14px) clamp(12px,2.5vw,22px)", fontSize: "clamp(16px,3vw,20px)", opacity: i === dealerForbidden ? 0.2 : 1, minWidth: "clamp(40px,8vw,56px)" }}>
                                 {i}
                               </button>
                             ))}
