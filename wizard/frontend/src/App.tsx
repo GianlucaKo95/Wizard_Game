@@ -106,7 +106,9 @@ function InstallBanner() {
 
 // ─── Auth Screen ──────────────────────────────────────────────────────────────
 function AuthScreen() {
+  const [mode, setMode] = useState<"login"|"register">("login");
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -117,28 +119,21 @@ function AuthScreen() {
     try {
       const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "");
       const email = `${slug}@wizard.local`;
-      const pw = `wiz${slug}2024!`;
+      const pw = password.trim() || `wiz${slug}2024!`;
 
-      // Always try login first
-      const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: pw });
-
-      if (!loginErr) return; // Login successful
-
-      // Login failed - try register
-      const { error: regErr } = await supabase.auth.signUp({
-        email, password: pw,
-        options: { data: { username: name } }
-      });
-
-      if (!regErr) {
-        // Registration successful - now login
-        const { error: loginErr2 } = await supabase.auth.signInWithPassword({ email, password: pw });
-        if (loginErr2) throw loginErr2;
-        return;
+      if (mode === "login") {
+        const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: pw });
+        if (loginErr) throw new Error("Falscher Name oder Passwort");
+      } else {
+        if (!password.trim()) throw new Error("Bitte ein Passwort wählen");
+        const { error: regErr } = await supabase.auth.signUp({
+          email, password: pw,
+          options: { data: { username: name } }
+        });
+        if (regErr) throw new Error(regErr.message === "User already registered" ? "Name bereits vergeben – bitte anmelden" : regErr.message);
+        const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: pw });
+        if (loginErr) throw loginErr;
       }
-
-      // Both failed - show original login error
-      throw new Error(loginErr.message);
     } catch (e: any) {
       setError(e.message ?? "Fehler beim Anmelden");
     } finally {
@@ -159,17 +154,33 @@ function AuthScreen() {
 
       {/* Name Card */}
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ ...cinzel, fontSize: 12, color: C.ivoryDim, textAlign: "center", letterSpacing: 2 }}>WIE HEISST DU?</div>
+        {/* Mode toggle */}
+        <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 4 }}>
+          {(["login","register"] as const).map(m => (
+            <button key={m} onClick={() => { setMode(m); setError(""); }} style={{
+              flex: 1, padding: "8px 0", borderRadius: 6, border: "none", cursor: "pointer",
+              ...cinzel, fontSize: 12, letterSpacing: 1,
+              background: mode === m ? `linear-gradient(135deg, ${C.violet}, ${C.violetLight})` : "transparent",
+              color: mode === m ? C.goldLight : C.ivoryDim,
+            }}>
+              {m === "login" ? "Anmelden" : "Registrieren"}
+            </button>
+          ))}
+        </div>
 
         <input value={username} onChange={e => setUsername(e.target.value)}
           placeholder="Dein Name" style={inputStyle} autoFocus
+          onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+
+        <input value={password} onChange={e => setPassword(e.target.value)}
+          placeholder="Passwort" type="password" style={inputStyle}
           onKeyDown={e => e.key === "Enter" && handleSubmit()} />
 
         <button onClick={handleSubmit} disabled={loading} style={{
           ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14,
           opacity: loading ? 0.6 : 1,
         }}>
-          {loading ? "…" : "✦ Spielen"}
+          {loading ? "…" : mode === "login" ? "✦ Anmelden" : "✦ Registrieren"}
         </button>
 
         {error && (
