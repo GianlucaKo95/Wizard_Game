@@ -1091,36 +1091,61 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           const isActive = room.current_player === p.player_index;
           const hasBid = p.bid !== null;
           const count = Array.isArray(p.hand) ? p.hand.length : 0;
+          const hasPlayed = trick.some((t:any) => t.playerIndex === p.player_index);
+          const isMe = p.player_index === effectiveMyIdx;
           return (
             <div style={{
-              background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.97), rgba(90,45,153,0.9))` : "rgba(5,10,20,0.94)",
-              border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.25)"}`,
-              boxShadow: isActive ? `0 0 24px ${C.gold}99` : "0 2px 6px rgba(0,0,0,0.6)",
-              borderRadius: 10, padding: "6px 10px",
-              display: "flex", flexDirection: "column" as const, gap: 2,
-              minWidth: 100, maxWidth: 180, position: "relative" as const,
+              background: isActive
+                ? `linear-gradient(135deg, rgba(61,28,110,0.97), rgba(90,45,153,0.9))`
+                : isMe ? "rgba(10,20,40,0.95)" : "rgba(5,10,20,0.94)",
+              border: `${isActive ? "2.5px" : "1.5px"} solid ${isActive ? C.gold : isMe ? "rgba(201,168,76,0.4)" : "rgba(201,168,76,0.2)"}`,
+              boxShadow: isActive ? `0 0 28px ${C.gold}88, 0 4px 12px rgba(0,0,0,0.5)` : "0 2px 8px rgba(0,0,0,0.5)",
+              borderRadius: 12, padding: "10px 14px",
+              display: "flex", flexDirection: "column" as const, gap: 5,
+              minWidth: 130, maxWidth: 200, position: "relative" as const,
               transition: "all 0.3s ease",
             }}>
               {isActive && arrow && (
-                <div style={{ position: "absolute", [arrow]: -14, left: "50%", transform: "translateX(-50%)", color: C.gold, fontSize: 14, lineHeight: 1 }}>
+                <div style={{ position: "absolute", [arrow]: -18, left: "50%", transform: "translateX(-50%)", color: C.gold, fontSize: 16, lineHeight: 1 }}>
                   {arrow === "top" ? "▼" : "▲"}
                 </div>
               )}
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ fontSize: 9 }}>{p.is_ai ? "🤖" : "👤"}</span>
-                <span style={{ ...cinzel, fontSize: 10, color: isActive ? C.gold : C.ivory, fontWeight: isActive ? 700 : 400 }}>
-                  {p.ai_name}{p.player_index === effectiveMyIdx ? " ★" : ""}
+              {/* Name row */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 12 }}>{p.is_ai ? "🤖" : "👤"}</span>
+                <span style={{ ...cinzel, fontSize: 13, color: isActive ? C.gold : isMe ? C.goldLight : C.ivory, fontWeight: 700, whiteSpace: "nowrap" as const }}>
+                  {p.ai_name}{isMe ? " ★" : ""}
                 </span>
+                {hasPlayed && <span style={{ fontSize: 12, color: C.gold, marginLeft: "auto" }}>✓</span>}
               </div>
-              <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" as const }}>
-                <span style={{ fontSize: 9, color: C.ivoryDim }}>Pkt <span style={{ ...cinzel, color: C.goldLight, fontWeight: 700 }}>{p.score}</span></span>
-                {hasBid
-                  ? <span style={{ fontSize: 9, color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : C.ivory }}>{p.tricks_won}/{p.bid} 🎯</span>
-                  : room.phase === "bidding" ? <span style={{ fontSize: 9, color: C.ivoryDim }}>bietet…</span> : null
-                }
-                {p.player_index !== effectiveMyIdx && <span style={{ fontSize: 9, color: C.ivoryDim }}>🂠{count}</span>}
-                {trick.some((t:any) => t.playerIndex === p.player_index) && (
-                  <span style={{ fontSize: 9, color: C.gold }}>✓</span>
+              {/* Stats row */}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
+                  <span style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>PKT</span>
+                  <span style={{ ...cinzel, fontSize: 16, color: C.goldLight, fontWeight: 700, lineHeight: 1 }}>{p.score}</span>
+                </div>
+                <div style={{ width: 1, height: 28, background: "rgba(201,168,76,0.2)" }} />
+                {hasBid ? (
+                  <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>STICHE</span>
+                    <span style={{ ...cinzel, fontSize: 16, fontWeight: 700, lineHeight: 1,
+                      color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : C.ivory }}>
+                      {p.tricks_won}<span style={{ fontSize: 11, color: C.ivoryDim }}>/{p.bid}</span>
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>TIPP</span>
+                    <span style={{ ...cinzel, fontSize: 13, color: C.ivoryDim, lineHeight: 1 }}>
+                      {room.phase === "bidding" ? "…" : "–"}
+                    </span>
+                  </div>
+                )}
+                {p.player_index !== effectiveMyIdx && (
+                  <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: C.ivoryDim }}>🂠</span>
+                    <span style={{ ...cinzel, fontSize: 13, color: C.ivoryDim }}>{count}</span>
+                  </div>
                 )}
               </div>
             </div>
@@ -1163,8 +1188,60 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                   {room.werewolf_suit && <span style={{ fontSize: 8, color: "#F7DC6F" }}>🐺{SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</span>}
                 </div>
 
-                {/* Trick cards */}
-                <div style={{ flex: 1, display: "flex", gap: 8, alignItems: "center", justifyContent: "center", flexWrap: "wrap" as const }}>
+                {/* Trick cards + Bidding overlay */}
+                <div style={{ flex: 1, display: "flex", gap: 8, alignItems: "center", justifyContent: "center", flexWrap: "wrap" as const, position: "relative" as const }}>
+
+                  {/* Bidding UI overlay inside table */}
+                  {(isBidding || isChoosingTrump || isChoosingWerewolf || (room.phase === "bidding" && !isMyTurn)) && (
+                    <div style={{ position: "absolute" as const, inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, borderRadius: 16, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}>
+                      <div style={{ textAlign: "center", padding: "16px 24px" }}>
+                        {isBidding && <>
+                          <div style={{ ...cinzel, fontSize: 13, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>WIE VIELE STICHE MACHST DU? (0–{room.round})</div>
+                          {dealerForbidden !== null && (
+                            <div style={{ fontSize: 11, color: "#F7DC6F", marginBottom: 10, background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "6px 12px" }}>
+                              ⚠ Stichzwang: <strong>{dealerForbidden}</strong> ist verboten
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, justifyContent: "center" }}>
+                            {Array.from({ length: room.round + 1 }, (_, i) => (
+                              <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
+                                style={{ ...goldBtn(i !== dealerForbidden), padding: "14px 22px", fontSize: 20, opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 56 }}>
+                                {i}
+                              </button>
+                            ))}
+                          </div>
+                        </>}
+                        {isChoosingTrump && <>
+                          <div style={{ ...cinzel, fontSize: 13, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>TRUMPFFARBE WÄHLEN</div>
+                          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                            {SUITS.map(s => (
+                              <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>
+                            ))}
+                          </div>
+                        </>}
+                        {isChoosingWerewolf && <>
+                          <div style={{ fontSize: 24, marginBottom: 6 }}>🐺</div>
+                          <div style={{ ...cinzel, fontSize: 13, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>STICHFARBE WÄHLEN</div>
+                          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                            {SUITS.map(s => (
+                              <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>
+                            ))}
+                          </div>
+                        </>}
+                        {room.phase === "bidding" && !isMyTurn && !isBidding && (
+                          <div style={{ ...cinzel, fontSize: 13, color: C.ivoryDim }}>
+                            ⏳ <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> bietet…
+                          </div>
+                        )}
+                        {room.phase === "choosingWerewolf" && !isMyTurn && !isChoosingWerewolf && (
+                          <div style={{ ...cinzel, fontSize: 13, color: C.ivoryDim }}>
+                            🐺 <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> wählt Stichfarbe…
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {trick.length === 0 && room.phase === "playing" && (
                     <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 11 }}>{players[room.current_player]?.ai_name} beginnt…</div>
                   )}
