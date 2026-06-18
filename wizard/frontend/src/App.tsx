@@ -1159,7 +1159,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           <div style={{ width: "min(1200px,99vw)", display: "flex", flexDirection: "column" as const, gap: 8, alignItems: "center" }}>
 
             {/* Top players */}
-            <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" as const }}>
+            <div style={{ display: "flex", justifyContent: "center", gap: "clamp(4px,1vw,8px)", flexWrap: "wrap" as const }}>
               {topPlayers.map((s:any) => <PlayerPill key={s.player.id} p={s.player} arrow="top" />)}
             </div>
 
@@ -1167,15 +1167,15 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
 
               {/* Left */}
-              <div style={{ width: 160, flexShrink: 0 }}>
+              <div style={{ width: "clamp(90px,15vw,160px)", flexShrink: 0 }}>
                 {leftPlayer && <PlayerPill p={leftPlayer.player} arrow="top" />}
               </div>
 
               {/* Green table */}
               <div style={{
-                flex: 1, minHeight: "clamp(350px,45vw,520px)",
+                flex: 1, minHeight: "clamp(180px,45vw,520px)",
                 background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
-                border: "3px solid rgba(201,168,76,0.25)", borderRadius: 24, padding: "24px 28px",
+                border: "3px solid rgba(201,168,76,0.25)", borderRadius: 24, padding: "clamp(10px,2vw,24px) clamp(12px,2.5vw,28px)",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 boxShadow: "inset 0 4px 40px rgba(0,0,0,0.6), 0 8px 32px rgba(0,0,0,0.5)",
                 position: "relative" as const,
@@ -1285,7 +1285,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
             {/* My pill at bottom */}
             {mySeat && (
-              <div style={{ display: "flex", justifyContent: "center" }}>
+              <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
                 <PlayerPill p={mySeat.player} arrow="" />
               </div>
             )}
@@ -1333,10 +1333,10 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
 
       {/* My Hand */}
-      <div style={{ marginTop: "auto", paddingTop: 10, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: 720 }}>
+      <div style={{ marginTop: "auto", paddingTop: 10, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: "100%" }}>
         <div style={{
           ...cinzel,
-          fontSize: isPlaying ? "clamp(13px,3vw,16px)" : "var(--text-xs)",
+          fontSize: isPlaying ? "clamp(12px,2.5vw,15px)" : "clamp(9px,1.5vw,11px)",
           color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.5)",
           textAlign: "center",
           marginBottom: 8,
