@@ -1201,6 +1201,70 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
         );
       })()}
 
+
+      {/* Choose Werewolf Suit */}
+      {isChoosingWerewolf && (
+        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(380px,92vw)" }}>
+          <div style={{ fontSize: 28, marginBottom: 6 }}>🐺</div>
+          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>STICHFARBE FÜR DIESE RUNDE WÄHLEN</div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            {SUITS.map(s => (
+              <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{
+                background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`,
+                borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer",
+              }}>{SUIT_SYMBOLS[s]}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {room.phase === "choosingWerewolf" && !isMyTurn && (
+        <div style={{ ...glass({ padding: "8px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
+          🐺 <span style={{ color: C.gold, ...cinzel }}>{players[room.current_player]?.ai_name}</span> wählt die Stichfarbe…
+        </div>
+      )}
+
+      {/* Choose Trump */}
+      {isChoosingTrump && (
+        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(380px,92vw)" }}>
+          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>TRUMPFFARBE WÄHLEN</div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            {SUITS.map(s => (
+              <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{
+                background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`,
+                borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer",
+              }}>{SUIT_SYMBOLS[s]}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Bidding */}
+      {isBidding && (
+        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(380px,92vw)", boxShadow: `0 0 24px rgba(201,168,76,0.3)` }}>
+          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 10 }}>WIE VIELE STICHE MACHST DU? (0–{room.round})</div>
+          {dealerForbidden !== null && (
+            <div style={{ fontSize: 11, color: "#F7DC6F", marginBottom: 10, background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "6px 12px" }}>
+              ⚠ Stichzwang: <strong>{dealerForbidden}</strong> ist verboten
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+            {Array.from({ length: room.round + 1 }, (_, i) => (
+              <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
+                style={{ ...goldBtn(i !== dealerForbidden), padding: "10px 18px", fontSize: 16, opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 44 }}>
+                {i}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {room.phase === "bidding" && !isMyTurn && (
+        <div style={{ ...glass({ padding: "6px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
+          ⏳ <span style={{ color: C.gold, ...cinzel }}>{players[room.current_player]?.ai_name}</span> bietet…
+        </div>
+      )}
+
       {/* My Hand */}
       <div style={{ marginTop: "auto", paddingTop: 10, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: 720 }}>
         <div style={{
