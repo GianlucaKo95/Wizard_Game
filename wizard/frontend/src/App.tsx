@@ -1100,9 +1100,9 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 : isMe ? "rgba(10,20,40,0.95)" : "rgba(5,10,20,0.94)",
               border: `${isActive ? "2.5px" : "1.5px"} solid ${isActive ? C.gold : isMe ? "rgba(201,168,76,0.4)" : "rgba(201,168,76,0.2)"}`,
               boxShadow: isActive ? `0 0 28px ${C.gold}88, 0 4px 12px rgba(0,0,0,0.5)` : "0 2px 8px rgba(0,0,0,0.5)",
-              borderRadius: 12, padding: "10px 14px",
+              borderRadius: 12, padding: "clamp(6px,1.5vw,10px) clamp(8px,2vw,14px)",
               display: "flex", flexDirection: "column" as const, gap: 5,
-              minWidth: 130, maxWidth: 200, position: "relative" as const,
+              minWidth: "clamp(100px,18vw,160px)", maxWidth: "clamp(140px,22vw,220px)", position: "relative" as const,
               transition: "all 0.3s ease",
             }}>
               {isActive && arrow && (
@@ -1113,7 +1113,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               {/* Name row */}
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 12 }}>{p.is_ai ? "🤖" : "👤"}</span>
-                <span style={{ ...cinzel, fontSize: 13, color: isActive ? C.gold : isMe ? C.goldLight : C.ivory, fontWeight: 700, whiteSpace: "nowrap" as const }}>
+                <span style={{ ...cinzel, fontSize: "clamp(10px,1.8vw,13px)", color: isActive ? C.gold : isMe ? C.goldLight : C.ivory, fontWeight: 700, whiteSpace: "nowrap" as const }}>
                   {p.ai_name}{isMe ? " ★" : ""}
                 </span>
                 {hasPlayed && <span style={{ fontSize: 12, color: C.gold, marginLeft: "auto" }}>✓</span>}
@@ -1122,21 +1122,21 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
                   <span style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>PKT</span>
-                  <span style={{ ...cinzel, fontSize: 16, color: C.goldLight, fontWeight: 700, lineHeight: 1 }}>{p.score}</span>
+                  <span style={{ ...cinzel, fontSize: "clamp(14px,2.5vw,22px)", color: C.goldLight, fontWeight: 700, lineHeight: 1 }}>{p.score}</span>
                 </div>
                 <div style={{ width: 1, height: 28, background: "rgba(201,168,76,0.2)" }} />
                 {hasBid ? (
                   <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
                     <span style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>STICHE</span>
-                    <span style={{ ...cinzel, fontSize: 16, fontWeight: 700, lineHeight: 1,
+                    <span style={{ ...cinzel, fontSize: "clamp(14px,2.5vw,22px)", fontWeight: 700, lineHeight: 1,
                       color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : C.ivory }}>
-                      {p.tricks_won}<span style={{ fontSize: 11, color: C.ivoryDim }}>/{p.bid}</span>
+                      {p.tricks_won}<span style={{ fontSize: "clamp(9px,1.5vw,14px)", color: C.ivoryDim }}>/{p.bid}</span>
                     </span>
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
                     <span style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>TIPP</span>
-                    <span style={{ ...cinzel, fontSize: 13, color: C.ivoryDim, lineHeight: 1 }}>
+                    <span style={{ ...cinzel, fontSize: "clamp(14px,2.5vw,20px)", color: C.ivoryDim, lineHeight: 1 }}>
                       {room.phase === "bidding" ? "…" : "–"}
                     </span>
                   </div>
