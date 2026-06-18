@@ -629,7 +629,8 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
   const me = myPlayer;
   const myHand: any[] = sortHand(me?.hand ?? []);
   const isHost = effectiveMyIdx === 0;
-  const isMyTurn = myPlayer !== undefined && room.current_player === effectiveMyIdx;
+  // Compare as numbers explicitly
+  const isMyTurn = myPlayer !== undefined && Number(room.current_player) === Number(effectiveMyIdx);
   const log: string[] = room.log ?? [];
   const trick: any[] = room.current_trick ?? [];
   const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
@@ -1046,6 +1047,8 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
 
   // ── Main Game ──
   const isBidding = room.phase === "bidding" && isMyTurn;
+  // Debug - remove later
+  console.log("Debug:", { phase: room.phase, current_player: room.current_player, effectiveMyIdx, isMyTurn, isBidding, myPlayerId: myPlayer?.id });
   const isChoosingTrump = room.phase === "choosingTrump" && isMyTurn;
   const isChoosingWerewolf = room.phase === "choosingWerewolf" && isMyTurn;
   const isPlaying = room.phase === "playing" && isMyTurn && !loading;
@@ -1113,7 +1116,7 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
         const mySeat = seats.find((s:any) => s.position === "bottom");
 
         return (
-          <div style={{ width: "min(680px,98vw)", display: "flex", flexDirection: "column" as const, gap: 6, alignItems: "center" }}>
+          <div style={{ width: "min(900px,98vw)", display: "flex", flexDirection: "column" as const, gap: 8, alignItems: "center" }}>
 
             {/* Top players */}
             <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" as const }}>
@@ -1124,17 +1127,17 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
             <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
 
               {/* Left */}
-              <div style={{ width: 140, flexShrink: 0 }}>
+              <div style={{ width: 160, flexShrink: 0 }}>
                 {leftPlayer && <PlayerPill p={leftPlayer.player} arrow="top" />}
               </div>
 
               {/* Green table */}
               <div style={{
-                flex: 1, minHeight: "clamp(180px,30vw,260px)",
-                background: "radial-gradient(ellipse at center, #1b4332 0%, #0d2218 60%, #081810 100%)",
-                border: "2px solid rgba(201,168,76,0.2)", borderRadius: 20, padding: "16px 20px",
+                flex: 1, minHeight: "clamp(250px,40vw,380px)",
+                background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
+                border: "3px solid rgba(201,168,76,0.25)", borderRadius: 24, padding: "20px 24px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                boxShadow: "inset 0 2px 30px rgba(0,0,0,0.5), 0 4px 20px rgba(0,0,0,0.4)",
+                boxShadow: "inset 0 4px 40px rgba(0,0,0,0.6), 0 8px 32px rgba(0,0,0,0.5)",
                 position: "relative" as const,
               }}>
                 {/* Trump */}
@@ -1183,7 +1186,7 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
               </div>
 
               {/* Right */}
-              <div style={{ width: 140, flexShrink: 0 }}>
+              <div style={{ width: 160, flexShrink: 0 }}>
                 {rightPlayer && <PlayerPill p={rightPlayer.player} arrow="top" />}
               </div>
             </div>
