@@ -1331,31 +1331,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         </div>
       )}
 
-      {/* Bidding */}
-      {isBidding && (
-        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(460px,92vw)", boxShadow: `0 0 24px rgba(201,168,76,0.3)` }}>
-          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 10 }}>WIE VIELE STICHE MACHST DU? (0–{room.round})</div>
-          {dealerForbidden !== null && (
-            <div style={{ fontSize: 11, color: "#F7DC6F", marginBottom: 10, background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "6px 12px" }}>
-              ⚠ Stichzwang: <strong>{dealerForbidden}</strong> ist verboten
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-            {Array.from({ length: room.round + 1 }, (_, i) => (
-              <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
-                style={{ ...goldBtn(i !== dealerForbidden), padding: "14px 22px", fontSize: 20, opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 56 }}>
-                {i}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {room.phase === "bidding" && !isMyTurn && (
-        <div style={{ ...glass({ padding: "6px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
-          ⏳ <span style={{ color: C.gold, ...cinzel }}>{players[room.current_player]?.ai_name}</span> bietet…
-        </div>
-      )}
 
       {/* My Hand */}
       <div style={{ marginTop: "auto", paddingTop: 10, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: 720 }}>
