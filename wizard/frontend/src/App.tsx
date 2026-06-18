@@ -623,11 +623,13 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
     </div>
   );
 
-  const effectiveMyIdx = myIdx;
-  const me = players[myIdx];
+  // Always compute from players directly - never rely on myIdx state alone
+  const myPlayer = players.find((p: any) => p.user_id === session.user.id);
+  const effectiveMyIdx = myPlayer?.player_index ?? myIdx;
+  const me = myPlayer;
   const myHand: any[] = sortHand(me?.hand ?? []);
-  const isHost = myIdx === 0;
-  const isMyTurn = room.current_player === myIdx;
+  const isHost = effectiveMyIdx === 0;
+  const isMyTurn = myPlayer !== undefined && room.current_player === effectiveMyIdx;
   const log: string[] = room.log ?? [];
   const trick: any[] = room.current_trick ?? [];
   const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
@@ -1128,11 +1130,11 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
 
               {/* Green table */}
               <div style={{
-                flex: 1, minHeight: "clamp(120px,18vw,150px)",
+                flex: 1, minHeight: "clamp(180px,30vw,260px)",
                 background: "radial-gradient(ellipse at center, #1b4332 0%, #0d2218 60%, #081810 100%)",
-                border: "2px solid rgba(201,168,76,0.2)", borderRadius: 16, padding: "10px 12px",
+                border: "2px solid rgba(201,168,76,0.2)", borderRadius: 20, padding: "16px 20px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                boxShadow: "inset 0 2px 20px rgba(0,0,0,0.5)",
+                boxShadow: "inset 0 2px 30px rgba(0,0,0,0.5), 0 4px 20px rgba(0,0,0,0.4)",
                 position: "relative" as const,
               }}>
                 {/* Trump */}
