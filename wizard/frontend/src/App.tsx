@@ -465,14 +465,13 @@ function LobbyScreen({ session }: { session: Session }) {
 // Positions: bottom (me), left, top-left, top, top-right, right
 function getSeatPositions(players: any[], myIdx: number) {
   const n = players.length;
-  const effectiveMyIdx = myIdx >= 0 ? myIdx : 0; // fallback to 0 if not yet known
+  const effectiveMyIdx = myIdx >= 0 ? myIdx : 0;
   const seats: { player: any; position: string }[] = [];
   for (let i = 0; i < n; i++) {
     const offset = (i - effectiveMyIdx + n) % n;
     let position = "top";
     if (offset === 0) position = "bottom";
-    else if (n === 2) position = "top";
-    else if (n === 3) { position = offset === 1 ? "top-left" : "top-right"; }
+    else if (n <= 3) position = "top"; // 2-3 players: all opponents on top
     else if (n === 4) { position = offset === 1 ? "left" : offset === 2 ? "top" : "right"; }
     else if (n === 5) { position = offset === 1 ? "left" : offset === 2 ? "top-left" : offset === 3 ? "top-right" : "right"; }
     else if (n === 6) { position = offset === 1 ? "left" : offset === 2 ? "top-left" : offset === 3 ? "top" : offset === 4 ? "top-right" : "right"; }
@@ -528,17 +527,7 @@ function sortHand(hand: any[]): any[] {
 function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; session: Session; aiCount: number; edition?: string }) {
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
-  const [myIdx, setMyIdx] = useState(() => {
-    // Try to get from session cache
-    try {
-      const saved = sessionStorage.getItem("wizard_room");
-      if (saved) {
-        const { myPlayerIndex } = JSON.parse(saved);
-        if (typeof myPlayerIndex === "number") return myPlayerIndex;
-      }
-    } catch(e) {}
-    return -1;
-  });
+  const [myIdx, setMyIdx] = useState(-1);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -570,26 +559,13 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
     setLoading(false);
   }, [roomId]);
 
-  // Calculate effectiveMyIdx early (before room loads) from players cache
-  const _derivedMyIdx = players.findIndex((p: any) => p.user_id === session.user.id);
-
   useEffect(() => {
     supabase.from("rooms").select("*").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
     supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => {
       if (data) {
         setPlayers(data);
         const mine = data.find((p: any) => p.user_id === session.user.id);
-        if (mine) {
-          setMyIdx(mine.player_index);
-          // Cache for reconnect
-          try {
-            const saved = sessionStorage.getItem("wizard_room");
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              sessionStorage.setItem("wizard_room", JSON.stringify({ ...parsed, myPlayerIndex: mine.player_index }));
-            }
-          } catch(e) {}
-        }
+        if (mine) setMyIdx(mine.player_index);
       }
     });
   }, [roomId]);
@@ -629,31 +605,29 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = 0; }, [room?.log]);
 
+  // Sync myIdx whenever players changes
+  useEffect(() => {
+    const mine = players.find((p: any) => p.user_id === session.user.id);
+    if (mine && mine.player_index !== myIdx) setMyIdx(mine.player_index);
+  }, [players]);
+
   // Load round history
   useEffect(() => {
     supabase.from("round_history").select("*").eq("room_id", roomId).order("round")
       .then(({ data }) => { if (data) setRoundHistory(data); });
   }, [room?.phase, room?.round]);
 
-  if (!room || _derivedMyIdx < 0) return (
+  if (!room) return (
     <div style={{ ...tableStyle, justifyContent: "center" }}>
-      <div style={{ ...cinzel, fontSize: 18, color: C.gold }}>Verbinde…</div>
+      <div style={{ ...cinzel, fontSize: 18, color: C.gold }}>Lade…</div>
     </div>
   );
 
-  // Use pre-calculated index
-  const derivedMyIdx = _derivedMyIdx;
-  const effectiveMyIdx = derivedMyIdx >= 0 ? derivedMyIdx : myIdx;
-
-  // Sync state if needed
-  if (derivedMyIdx >= 0 && derivedMyIdx !== myIdx) {
-    setMyIdx(derivedMyIdx);
-  }
-
-  const me = players[effectiveMyIdx];
+  const effectiveMyIdx = myIdx;
+  const me = players[myIdx];
   const myHand: any[] = sortHand(me?.hand ?? []);
-  const isHost = effectiveMyIdx === 0;
-  const isMyTurn = room.current_player === effectiveMyIdx;
+  const isHost = myIdx === 0;
+  const isMyTurn = room.current_player === myIdx;
   const log: string[] = room.log ?? [];
   const trick: any[] = room.current_trick ?? [];
   const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
@@ -1133,6 +1107,9 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
           );
         };
 
+        // My seat pill
+        const mySeat = seats.find((s:any) => s.position === "bottom");
+
         return (
           <div style={{ width: "min(680px,98vw)", display: "flex", flexDirection: "column" as const, gap: 6, alignItems: "center" }}>
 
@@ -1208,6 +1185,13 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
                 {rightPlayer && <PlayerPill p={rightPlayer.player} arrow="top" />}
               </div>
             </div>
+
+            {/* My pill at bottom */}
+            {mySeat && (
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <PlayerPill p={mySeat.player} arrow="" />
+              </div>
+            )}
           </div>
         );
       })()}
