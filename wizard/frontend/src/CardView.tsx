@@ -136,9 +136,23 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
           card.id === "wizardfool" ? <WizardFoolArt /> :
           <NumberArt value={7} house="red" />
         ) : isWizard
-          ? <WizardArt index={getIndex()} />
+          ? (() => {
+            const idx = (getIndex() % 4) + 1;
+            return (
+              <img src={`/cards/Wizard_${idx}.png`} alt={`Wizard ${idx}`}
+                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            );
+          })()
           : isFool
-          ? <FoolArt index={getIndex()} />
+          ? (() => {
+            const idx = (getIndex() % 4) + 1;
+            return (
+              <img src={`/cards/Fool_${idx}.png`} alt={`Fool ${idx}`}
+                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            );
+          })()
           : (() => {
             const folderMap: Record<string, string> = {
               red: "Gryffindor",

@@ -173,13 +173,14 @@ input, select, textarea {
 /* ─── Log panel ──────────────────────────────────────────────────────────────── */
 .log-panel {
   position: fixed;
-  bottom: max(8px, env(safe-area-inset-bottom));
+  top: max(70px, env(safe-area-inset-top));
   right: 8px;
-  width: min(190px, 40vw);
-  max-height: 120px;
+  width: min(200px, 42vw);
+  max-height: min(160px, 25vh);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  z-index: 20;
 }
 .log-panel::-webkit-scrollbar { display: none; }
 

@@ -40,6 +40,13 @@ function shuffle(arr) {
   return a;
 }
 
+function trickWinnerWithoutBomb(trick, trumpSuit, werewolfSuit = null) {
+  // Calculate winner ignoring bomb - used to determine who leads next
+  const trickWithoutBomb = trick.filter(t => t.card.specialType !== "bomb");
+  if (trickWithoutBomb.length === 0) return trick[0]?.playerIndex ?? 0;
+  return trickWinner(trickWithoutBomb, trumpSuit, werewolfSuit);
+}
+
 function trickWinner(trick, trumpSuit, werewolfSuit = null) {
   if (trick.some(t => t.card.specialType === "bomb")) return -1;
 
@@ -294,17 +301,6 @@ async function endRound(supabase, roomId, room, players) {
 async function advanceTrick(supabase, roomId, room, players) {
   const trick = room.current_trick;
 
-  // Bomb
-  if (trick.some(t => t.card.specialType === "bomb")) {
-    addLog(room, "💥 Elderstab! Stich annulliert.");
-    await supabase.from("rooms").update({
-      current_trick: [], current_player: (room.current_player + 1) % players.length,
-      last_trick_winner: null, last_trick_cards: trick,
-      pending_rainbow9: null, phase: "playing", log: room.log
-    }).eq("id", roomId);
-    return json({ ok: true });
-  }
-
   if (trick.length < players.length) {
     const next = (room.current_player + 1) % players.length;
     await supabase.from("rooms").update({ current_trick: trick, current_player: next, log: room.log }).eq("id", roomId);
@@ -327,10 +323,13 @@ async function advanceTrick(supabase, roomId, room, players) {
   const winnerIdx = trickWinner(trick, room.trump_suit, room.werewolf_suit);
 
   if (winnerIdx === -1) {
-    addLog(room, "💥 Stich annulliert!");
+    addLog(room, "💥 Elderstab! Stich annulliert.");
+    // The player who would have won leads next
+    const nextLeader = trickWinnerWithoutBomb(trick, room.trump_suit, room.werewolf_suit);
     await supabase.from("rooms").update({
-      current_trick: [], current_player: (room.current_player + 1) % players.length,
-      last_trick_winner: null, last_trick_cards: trick, phase: "playing", log: room.log
+      current_trick: [], current_player: nextLeader,
+      last_trick_winner: null, last_trick_cards: trick,
+      phase: "trickEnd", log: room.log
     }).eq("id", roomId);
     return json({ ok: true });
   }
@@ -561,6 +560,11 @@ serve(async (req) => {
       return json({ ok: true });
     }
 
+    case "witchRevealDone": {
+      await supabase.from("rooms").update({ phase: "playing", witch_swap: null }).eq("id", roomId);
+      return json({ ok: true });
+    }
+
     case "triggerAI": {
       if (room.phase !== "playing") return json({ ok: true });
       const { data: freshP } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
@@ -666,11 +670,18 @@ serve(async (req) => {
         const lastTrick = room.last_trick_cards ?? [];
         const takenCard = lastTrick.find(t => t.card.id === takeCardId)?.card;
         if (!takenCard) return json({ error: "Karte nicht gefunden" }, 400);
+        const givenCard = callerPlayer.hand.find(c => c.id === giveCardId);
         const newHand = callerPlayer.hand.filter(c => c.id !== giveCardId);
         newHand.push(takenCard);
         await supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id);
-        addLog(room, `🧹 ${callerPlayer.ai_name} tauscht Karte`);
-        await supabase.from("rooms").update({ pending_witch: null, phase: "playing", log: room.log }).eq("id", roomId);
+        addLog(room, `🧹 ${callerPlayer.ai_name} tauscht: gibt ${cardLabel(givenCard)} · nimmt ${cardLabel(takenCard)}`);
+        // Store swap info for 4 seconds display
+        await supabase.from("rooms").update({
+          pending_witch: null,
+          phase: "witchReveal",
+          witch_swap: { playerName: callerPlayer.ai_name, gave: givenCard, took: takenCard },
+          log: room.log
+        }).eq("id", roomId);
         return json({ ok: true });
       }
 
