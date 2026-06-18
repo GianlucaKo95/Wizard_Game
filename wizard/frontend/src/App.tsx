@@ -106,26 +106,29 @@ function InstallBanner() {
 
 // ─── Auth Screen ──────────────────────────────────────────────────────────────
 function AuthScreen() {
-  const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
-    if (!username.trim() || !password.trim()) { setError("Benutzername und Passwort eingeben"); return; }
+    const name = username.trim();
+    if (!name) { setError("Bitte gib deinen Namen ein"); return; }
     setError(""); setLoading(true);
     try {
-      const email = `${username.toLowerCase().replace(/\s+/g, "")}@wizard.local`;
-      if (mode === "register") {
-        const { error: e } = await supabase.auth.signUp({ email, password, options: { data: { username } } });
-        if (e) throw e;
-      } else {
-        const { error: e } = await supabase.auth.signInWithPassword({ email, password });
-        if (e) throw e;
-      }
+      const { error: e } = await supabase.auth.signInAnonymously();
+      if (e) throw e;
+      // Save username in user metadata
+      await supabase.auth.updateUser({ data: { username: name } });
     } catch (e: any) {
-      setError(e.message ?? "Fehler");
+      // Fallback: try email/password with generated credentials
+      try {
+        const email = `${name.toLowerCase().replace(/[^a-z0-9]/g, "")}${Math.random().toString(36).slice(2,6)}@wizard.local`;
+        const password = Math.random().toString(36).slice(2, 12);
+        const { error: e2 } = await supabase.auth.signUp({ email, password, options: { data: { username: name } } });
+        if (e2) throw e2;
+      } catch (e2: any) {
+        setError("Fehler beim Anmelden. Bitte versuche es erneut.");
+      }
     } finally {
       setLoading(false);
     }
@@ -142,35 +145,19 @@ function AuthScreen() {
 
       <GoldDivider />
 
-      {/* Auth Card */}
+      {/* Name Card */}
       <div style={{ ...glass({ padding: 24 }), width: "min(340px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 4 }}>
-          {(["login", "register"] as const).map(m => (
-            <button key={m} onClick={() => setMode(m)} style={{
-              flex: 1, padding: "9px 0", borderRadius: 6, fontSize: 13,
-              ...cinzel, fontWeight: 600, letterSpacing: "0.05em", border: "none", cursor: "pointer",
-              background: mode === m ? `linear-gradient(135deg, ${C.violet}, ${C.violetLight})` : "transparent",
-              color: mode === m ? C.goldLight : C.ivoryDim,
-              transition: "all 0.2s",
-            }}>
-              {m === "login" ? "Anmelden" : "Registrieren"}
-            </button>
-          ))}
-        </div>
+        <div style={{ ...cinzel, fontSize: 12, color: C.ivoryDim, textAlign: "center", letterSpacing: 2 }}>WIE HEISST DU?</div>
 
         <input value={username} onChange={e => setUsername(e.target.value)}
-          placeholder="Benutzername" style={inputStyle}
-          onKeyDown={e => e.key === "Enter" && handleSubmit()} />
-        <input value={password} onChange={e => setPassword(e.target.value)}
-          placeholder="Passwort" type="password" style={inputStyle}
+          placeholder="Dein Name" style={inputStyle} autoFocus
           onKeyDown={e => e.key === "Enter" && handleSubmit()} />
 
         <button onClick={handleSubmit} disabled={loading} style={{
           ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14,
           opacity: loading ? 0.6 : 1,
         }}>
-          {loading ? "…" : mode === "login" ? "Anmelden" : "Account erstellen"}
+          {loading ? "…" : "✦ Spielen"}
         </button>
 
         {error && (
@@ -331,7 +318,7 @@ function LobbyScreen({ session }: { session: Session }) {
     </div>
   );
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} aiCount={Math.min(aiCount, maxAI)} edition={edition} />;
+  if (roomId) return <GameRoom roomId={roomId} session={session} aiCount={Math.min(aiCount, maxAI)} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   const HeaderBlock = () => (
     <>
@@ -342,7 +329,7 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ ...glass({ padding: "6px 14px" }), ...cinzel, fontSize: 13, color: C.ivory }}>👤 {username}</div>
         <button onClick={() => setShowStats(s => !s)} style={{ ...goldBtn(false), padding: "6px 12px" }}>📊</button>
-        <button onClick={() => supabase.auth.signOut()} style={{ ...goldBtn(false), padding: "6px 12px" }}>Abmelden</button>
+        <button onClick={() => { sessionStorage.removeItem("wizard_room"); supabase.auth.signOut(); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12 }}>⬚ Name ändern</button>
       </div>
       {showStats && <StatsScreen userId={session.user.id} onBack={() => setShowStats(false)} />}
       <GoldDivider />
@@ -524,7 +511,7 @@ function sortHand(hand: any[]): any[] {
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
-function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; session: Session; aiCount: number; edition?: string }) {
+function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: string; session: Session; aiCount: number; edition?: string; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
   const clearTrickPending = useRef(false);
   const [room, setRoom] = useState<any>(null);
@@ -759,6 +746,7 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
           {isHost && room.phase === "roundEnd" && (
             <button onClick={() => act("nextRound")} style={{ ...goldBtn(), padding: "12px 28px" }}>Weiter → Runde {room.round + 1}</button>
           )}
+          <button onClick={onLeave} style={{ ...goldBtn(false), padding: "8px 20px", fontSize: 13 }}>🏠 Zurück zur Startseite</button>
           {isHost && room.phase === "gameEnd" && (
             <button onClick={() => act("newGame")} style={{ ...goldBtn(), padding: "12px 28px" }}>Nochmal spielen</button>
           )}
