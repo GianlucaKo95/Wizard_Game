@@ -656,7 +656,10 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
   // Compare as numbers explicitly
   const isMyTurn = myPlayer !== undefined && Number(room.current_player) === Number(effectiveMyIdx);
   const log: string[] = room.log ?? [];
-  const trick: any[] = room.current_trick ?? [];
+  // During trickEnd, show the cards that were just played
+  const trick: any[] = room.phase === "trickEnd" 
+    ? (room.last_trick_cards ?? room.current_trick ?? [])
+    : (room.current_trick ?? []);
   const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
   const dealerForbidden = room.dealer === effectiveMyIdx ? forbidden : null;
 
@@ -1194,9 +1197,9 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
                       );
                     })}
                   {room.phase === "trickEnd" && room.last_trick_winner !== null && (
-                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.82)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <div style={{ ...cinzel, fontSize: 14, color: C.gold, textAlign: "center", textShadow: `0 0 20px ${C.gold}` }}>
-                        {players[room.last_trick_winner]?.ai_name} gewinnt! 🎉
+                    <div style={{ position: "absolute", bottom: 8, left: 0, right: 0, display: "flex", justifyContent: "center" }}>
+                      <div style={{ ...cinzel, fontSize: 12, color: C.gold, textAlign: "center", textShadow: `0 0 12px ${C.gold}`, background: "rgba(0,0,0,0.7)", padding: "4px 12px", borderRadius: 8 }}>
+                        ✓ {players[room.last_trick_winner]?.ai_name} gewinnt den Stich!
                       </div>
                     </div>
                   )}
