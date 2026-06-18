@@ -38,7 +38,7 @@ const goldBtn = (active = true): React.CSSProperties => ({
   border: `1px solid ${active ? C.gold : "rgba(255,255,255,0.1)"}`,
   borderRadius: 8,
   padding: "clamp(8px,2vw,12px) clamp(12px,3vw,20px)",
-  fontSize: "clamp(12px, 3vw, 14px)",
+  fontSize: "clamp(13px, 2vw, 15px)",
   cursor: "pointer",
   letterSpacing: "0.05em",
   transition: "all 0.2s",
@@ -55,7 +55,7 @@ const inputStyle: React.CSSProperties = {
   border: `1px solid ${C.glassBorder}`,
   borderRadius: 8,
   color: C.ivory,
-  padding: "clamp(9px,2vw,12px) clamp(10px,3vw,14px)",
+  padding: "clamp(10px,2vw,14px) clamp(12px,3vw,18px)",
   fontSize: 16, // must be 16px+ to prevent iOS zoom
   width: "100%",
   outline: "none",
@@ -70,12 +70,12 @@ const tableStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
-  padding: `max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))`,
-  gap: "clamp(6px, 1.5vw, 10px)",
+  padding: `max(16px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left))`,
+  gap: "clamp(8px, 1.5vw, 16px)",
 };
 
 function GoldDivider() {
-  return <div style={{ width: "100%", maxWidth: 500, height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />;
+  return <div style={{ width: "100%", maxWidth: 680, height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />;
 }
 
 // ─── Install Banner ───────────────────────────────────────────────────────────
@@ -139,14 +139,14 @@ function AuthScreen() {
       {/* Logo */}
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "clamp(44px,12vw,64px)", marginBottom: 8 }}>🧙</div>
-        <div style={{ ...cinzel, fontSize: "clamp(26px,8vw,38px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,2vw,8px)", textShadow: `0 0 40px ${C.violet}` }}>WIZARD</div>
+        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.violet}` }}>WIZARD</div>
         <div style={{ fontSize: 12, color: C.ivoryDim, letterSpacing: 3, marginTop: 4 }}>DAS KARTENSPIEL</div>
       </div>
 
       <GoldDivider />
 
       {/* Name Card */}
-      <div style={{ ...glass({ padding: 24 }), width: "min(340px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ ...cinzel, fontSize: 12, color: C.ivoryDim, textAlign: "center", letterSpacing: 2 }}>WIE HEISST DU?</div>
 
         <input value={username} onChange={e => setUsername(e.target.value)}
@@ -271,13 +271,13 @@ function LobbyScreen({ session }: { session: Session }) {
   // ── Rules ──
   if (view === "rules") return (
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(500px,96vw)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(680px,96vw)" }}>
         <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
         <button onClick={() => setView("home")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>← Zurück</button>
       </div>
 
       {/* Basic rules */}
-      <div style={{ ...glass({ padding: 16 }), width: "min(500px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>GRUNDREGELN</div>
         {[
           ["Ziel", "Genau so viele Stiche machen wie angesagt"],
@@ -296,7 +296,7 @@ function LobbyScreen({ session }: { session: Session }) {
       </div>
 
       {/* Special cards */}
-      <div style={{ ...glass({ padding: 16 }), width: "min(500px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>⚡ 30 JAHRE EDITION – SPEZIALKARTEN</div>
         {[
           ["🐉 Seidenschnabel", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
@@ -324,7 +324,7 @@ function LobbyScreen({ session }: { session: Session }) {
     <>
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "clamp(36px,10vw,52px)" }}>🧙</div>
-        <div style={{ ...cinzel, fontSize: "clamp(22px,7vw,32px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(3px,1.5vw,6px)" }}>WIZARD</div>
+        <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ ...glass({ padding: "6px 14px" }), ...cinzel, fontSize: 13, color: C.ivory }}>👤 {username}</div>
@@ -366,7 +366,7 @@ function LobbyScreen({ session }: { session: Session }) {
   if (view === "create") return (
     <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
       <HeaderBlock />
-      <div style={{ ...glass({ padding: 24 }), width: "min(340px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
         <div>
@@ -374,7 +374,7 @@ function LobbyScreen({ session }: { session: Session }) {
           <div style={{ display: "flex", gap: 6 }}>
             {[1,2,3,4,5,6].map(n => (
               <button key={n} onClick={() => { setHumanCount(n); const newMax = Math.max(0, 6-n); const newMin = Math.max(0, 3-n); setAiCount(Math.min(Math.max(aiCount, newMin), newMax)); }}
-                style={{ ...goldBtn(humanCount===n), flex: 1, padding: "8px 0", fontSize: 13 }}>{n}</button>
+                style={{ ...goldBtn(humanCount===n), flex: 1, padding: "14px 0", fontSize: 15 }}>{n}</button>
             ))}
           </div>
         </div>
@@ -386,7 +386,7 @@ function LobbyScreen({ session }: { session: Session }) {
             {Array.from({ length: maxAI + 1 }, (_, n) => (
               <button key={n} onClick={() => setAiCount(Math.max(n, minAI))}
                 disabled={n < minAI}
-                style={{ ...goldBtn(aiCount===Math.max(n,minAI) && n>=minAI), flex: 1, padding: "8px 0", fontSize: 13, opacity: n < minAI ? 0.25 : 1 }}>
+                style={{ ...goldBtn(aiCount===Math.max(n,minAI) && n>=minAI), flex: 1, padding: "14px 0", fontSize: 15, opacity: n < minAI ? 0.25 : 1 }}>
                 {n===0?"–":n}
               </button>
             ))}
@@ -427,7 +427,7 @@ function LobbyScreen({ session }: { session: Session }) {
   return (
     <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
       <HeaderBlock />
-      <div style={{ ...glass({ padding: 24 }), width: "min(340px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Spiel beitreten</div>
         <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
@@ -1071,7 +1071,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   return (
     <div style={tableStyle}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", maxWidth: 720, alignItems: "center" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", maxWidth: 1100, alignItems: "center" }}>
         <div style={{ ...cinzel, fontSize: 11, color: C.ivoryDim }}>RUNDE {room.round}/{room.max_rounds}</div>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold, letterSpacing: 4 }}>🧙 WIZARD</div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -1098,7 +1098,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               boxShadow: isActive ? `0 0 24px ${C.gold}99` : "0 2px 6px rgba(0,0,0,0.6)",
               borderRadius: 10, padding: "6px 10px",
               display: "flex", flexDirection: "column" as const, gap: 2,
-              minWidth: 80, maxWidth: 140, position: "relative" as const,
+              minWidth: 100, maxWidth: 180, position: "relative" as const,
               transition: "all 0.3s ease",
             }}>
               {isActive && arrow && (
@@ -1131,7 +1131,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         const mySeat = seats.find((s:any) => s.position === "bottom");
 
         return (
-          <div style={{ width: "min(980px,99vw)", display: "flex", flexDirection: "column" as const, gap: 8, alignItems: "center" }}>
+          <div style={{ width: "min(1200px,99vw)", display: "flex", flexDirection: "column" as const, gap: 8, alignItems: "center" }}>
 
             {/* Top players */}
             <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" as const }}>
@@ -1148,7 +1148,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
               {/* Green table */}
               <div style={{
-                flex: 1, minHeight: "clamp(320px,50vw,480px)",
+                flex: 1, minHeight: "clamp(350px,45vw,520px)",
                 background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
                 border: "3px solid rgba(201,168,76,0.25)", borderRadius: 24, padding: "24px 28px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -1219,7 +1219,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
       {/* Choose Werewolf Suit */}
       {isChoosingWerewolf && (
-        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(380px,92vw)" }}>
+        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(460px,92vw)" }}>
           <div style={{ fontSize: 28, marginBottom: 6 }}>🐺</div>
           <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>STICHFARBE FÜR DIESE RUNDE WÄHLEN</div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
@@ -1241,7 +1241,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
       {/* Choose Trump */}
       {isChoosingTrump && (
-        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(380px,92vw)" }}>
+        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(460px,92vw)" }}>
           <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>TRUMPFFARBE WÄHLEN</div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             {SUITS.map(s => (
@@ -1256,7 +1256,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
       {/* Bidding */}
       {isBidding && (
-        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(380px,92vw)", boxShadow: `0 0 24px rgba(201,168,76,0.3)` }}>
+        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(460px,92vw)", boxShadow: `0 0 24px rgba(201,168,76,0.3)` }}>
           <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 10 }}>WIE VIELE STICHE MACHST DU? (0–{room.round})</div>
           {dealerForbidden !== null && (
             <div style={{ fontSize: 11, color: "#F7DC6F", marginBottom: 10, background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "6px 12px" }}>
@@ -1266,7 +1266,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
             {Array.from({ length: room.round + 1 }, (_, i) => (
               <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
-                style={{ ...goldBtn(i !== dealerForbidden), padding: "10px 18px", fontSize: 16, opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 44 }}>
+                style={{ ...goldBtn(i !== dealerForbidden), padding: "14px 22px", fontSize: 20, opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 56 }}>
                 {i}
               </button>
             ))}
