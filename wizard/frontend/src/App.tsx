@@ -1116,7 +1116,7 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
         const mySeat = seats.find((s:any) => s.position === "bottom");
 
         return (
-          <div style={{ width: "min(900px,98vw)", display: "flex", flexDirection: "column" as const, gap: 8, alignItems: "center" }}>
+          <div style={{ width: "min(980px,99vw)", display: "flex", flexDirection: "column" as const, gap: 8, alignItems: "center" }}>
 
             {/* Top players */}
             <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" as const }}>
@@ -1133,9 +1133,9 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
 
               {/* Green table */}
               <div style={{
-                flex: 1, minHeight: "clamp(250px,40vw,380px)",
+                flex: 1, minHeight: "clamp(320px,50vw,480px)",
                 background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
-                border: "3px solid rgba(201,168,76,0.25)", borderRadius: 24, padding: "20px 24px",
+                border: "3px solid rgba(201,168,76,0.25)", borderRadius: 24, padding: "24px 28px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 boxShadow: "inset 0 4px 40px rgba(0,0,0,0.6), 0 8px 32px rgba(0,0,0,0.5)",
                 position: "relative" as const,
