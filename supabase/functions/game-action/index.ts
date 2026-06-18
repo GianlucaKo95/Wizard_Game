@@ -210,7 +210,7 @@ async function aiPlayNext(supabase, roomId, room, players) {
   console.log("[aiPlayNext] freshPlayers loaded:", freshPlayers?.length, "error:", fpErr?.message);
   const allPlayers = freshPlayers ?? players;
 
-  const currentPlayer = allPlayers[current];
+  let currentPlayer = allPlayers[current];
   console.log("[aiPlayNext] currentPlayer:", currentPlayer?.ai_name, "is_ai:", currentPlayer?.is_ai, "hand length:", currentPlayer?.hand?.length);
 
   if (!currentPlayer?.is_ai) {
@@ -218,9 +218,18 @@ async function aiPlayNext(supabase, roomId, room, players) {
     return json({ ok: true });
   }
 
+  // If hand is empty, wait and retry - DB write may not be committed yet
   if (!currentPlayer.hand || currentPlayer.hand.length === 0) {
-    console.log("[aiPlayNext] empty hand!");
-    return json({ ok: true });
+    console.log("[aiPlayNext] empty hand, waiting 800ms and retrying...");
+    await new Promise(r => setTimeout(r, 800));
+    const { data: retryPlayers } = await supabase
+      .from("room_players").select("*").eq("room_id", roomId).order("player_index");
+    currentPlayer = (retryPlayers ?? allPlayers)[current];
+    console.log("[aiPlayNext] after retry, hand length:", currentPlayer?.hand?.length);
+    if (!currentPlayer?.hand || currentPlayer.hand.length === 0) {
+      console.log("[aiPlayNext] still empty after retry!");
+      return json({ ok: true });
+    }
   }
 
   const card = aiChooseCard(currentPlayer.hand, room.current_trick ?? [], room.trump_suit, room.werewolf_suit);
