@@ -139,7 +139,26 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
           ? <WizardArt index={getIndex()} />
           : isFool
           ? <FoolArt index={getIndex()} />
-          : <NumberArt value={card.value} house={house} />
+          : (() => {
+            const folderMap: Record<string, string> = {
+              red: "Gryffindor",
+              blue: "Ravenclaw",
+              green: "Slytherin",
+              yellow: "Hufflepuff",
+            };
+            const folder = folderMap[house];
+            const imgPath = `/cards/${folder}_${card.value}.png`;
+            return (
+              <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                <img
+                  src={imgPath}
+                  alt={`${folder} ${card.value}`}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              </div>
+            );
+          })()
         }
       </div>
 
