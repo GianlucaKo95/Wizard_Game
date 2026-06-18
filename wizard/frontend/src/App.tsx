@@ -1426,36 +1426,38 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const isPWA = window.matchMedia("(display-mode: standalone)").matches
-      || (window.navigator as any).standalone === true;
+    // Always show loading max 2 seconds
+    const timeout = setTimeout(() => setLoading(false), 2000);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
-      setSession(s);
-      setLoading(false);
-    });
+    try {
+      const isPWA = window.matchMedia("(display-mode: standalone)").matches
+        || (window.navigator as any).standalone === true;
 
-    if (!isPWA) {
-      // Browser: always start fresh
-      supabase.auth.getSession().then(({ data }) => {
-        if (data.session) {
-          // Sign out silently, onAuthStateChange will set session to null
-          supabase.auth.signOut().catch(() => {});
-        } else {
+      if (isPWA) {
+        // PWA: restore existing session
+        supabase.auth.getSession().then(({ data }) => {
+          setSession(data.session);
           setLoading(false);
-        }
-      }).catch(() => setLoading(false));
-    } else {
-      // PWA: restore session
-      const timeout = setTimeout(() => setLoading(false), 3000);
-      supabase.auth.getSession().then(({ data }) => {
-        setSession(data.session);
+          clearTimeout(timeout);
+        }).catch(() => { setLoading(false); clearTimeout(timeout); });
+      } else {
+        // Browser: never restore session, always show login
         setLoading(false);
         clearTimeout(timeout);
-      }).catch(() => { setLoading(false); clearTimeout(timeout); });
-      return () => { subscription.unsubscribe(); clearTimeout(timeout); };
-    }
+      }
 
-    return () => subscription.unsubscribe();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
+        const pwa = window.matchMedia("(display-mode: standalone)").matches
+          || (window.navigator as any).standalone === true;
+        if (pwa) setSession(s);
+        else if (s) setSession(s); // just logged in
+      });
+
+      return () => { subscription.unsubscribe(); clearTimeout(timeout); };
+    } catch {
+      setLoading(false);
+      clearTimeout(timeout);
+    }
   }, []);
 
   if (loading) return (
