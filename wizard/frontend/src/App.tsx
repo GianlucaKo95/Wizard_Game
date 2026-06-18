@@ -1175,9 +1175,9 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
               {/* Green table */}
               <div style={{
-                flex: 1, minHeight: "clamp(180px,45vw,520px)",
+                flex: 1, minHeight: "clamp(200px,55vw,520px)",
                 background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
-                border: "3px solid rgba(201,168,76,0.25)", borderRadius: 24, padding: "clamp(10px,2vw,24px) clamp(12px,2.5vw,28px)",
+                border: "3px solid rgba(201,168,76,0.25)", borderRadius: 16, padding: "clamp(10px,2vw,20px) clamp(10px,2vw,20px)",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 boxShadow: "inset 0 4px 40px rgba(0,0,0,0.6), 0 8px 32px rgba(0,0,0,0.5)",
                 position: "relative" as const,
@@ -1231,12 +1231,12 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                           </div>
                         </>}
                         {room.phase === "bidding" && !isMyTurn && !isBidding && (
-                          <div style={{ ...cinzel, fontSize: 13, color: C.ivoryDim }}>
+                          <div style={{ ...cinzel, fontSize: "clamp(11px,2vw,13px)", color: C.ivoryDim }}>
                             ⏳ <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> bietet…
                           </div>
                         )}
                         {room.phase === "choosingWerewolf" && !isMyTurn && !isChoosingWerewolf && (
-                          <div style={{ ...cinzel, fontSize: 13, color: C.ivoryDim }}>
+                          <div style={{ ...cinzel, fontSize: "clamp(11px,2vw,13px)", color: C.ivoryDim }}>
                             🐺 <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> wählt Stichfarbe…
                           </div>
                         )}
