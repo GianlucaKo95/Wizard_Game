@@ -1,22 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Detect if running as installed PWA
-const isPWA = window.matchMedia("(display-mode: standalone)").matches
-  || (window.navigator as any).standalone === true;
+const isPWA = () => {
+  try {
+    return window.matchMedia("(display-mode: standalone)").matches
+      || (window.navigator as any).standalone === true;
+  } catch { return false; }
+};
 
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY,
   {
     auth: {
-      persistSession: isPWA,        // only persist in PWA
-      autoRefreshToken: isPWA,
-      storage: isPWA ? localStorage : {
-        // In browser: use memory only (no storage)
-        getItem: () => null,
-        setItem: () => {},
-        removeItem: () => {},
-      },
+      persistSession: isPWA(),
+      autoRefreshToken: isPWA(),
       detectSessionInUrl: false,
     }
   }
