@@ -638,14 +638,18 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
     </div>
   );
 
-  const me = players[myIdx];
+  // Always derive myIdx from players (handles cases where useState init missed it)
+  const derivedMyIdx = players.findIndex((p: any) => p.user_id === session.user.id);
+  const effectiveMyIdx = derivedMyIdx >= 0 ? derivedMyIdx : myIdx;
+
+  const me = players[effectiveMyIdx];
   const myHand: any[] = sortHand(me?.hand ?? []);
-  const isHost = myIdx === 0;
-  const isMyTurn = room.current_player === myIdx;
+  const isHost = effectiveMyIdx === 0;
+  const isMyTurn = room.current_player === effectiveMyIdx;
   const log: string[] = room.log ?? [];
   const trick: any[] = room.current_trick ?? [];
   const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
-  const dealerForbidden = room.dealer === myIdx ? forbidden : null;
+  const dealerForbidden = room.dealer === effectiveMyIdx ? forbidden : null;
 
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
@@ -909,7 +913,7 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
     );
 
     // 9¾ pending bid adjustment (triggered by room state after trick end)
-    if (room?.pending_rainbow9 === myIdx) return (
+    if (room?.pending_rainbow9 === effectiveMyIdx) return (
       <div style={overlayStyle}>
         <div style={{ ...glass({ padding: 24 }), width: "min(340px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ fontSize: 28 }}>🚂</div>
@@ -931,12 +935,12 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
     );
 
     // 7½ pending card pass – show to all players in pending list
-    if (Array.isArray(room?.pending_rainbow7) && room.pending_rainbow7.includes(myIdx) && !specialAction) {
+    if (Array.isArray(room?.pending_rainbow7) && room.pending_rainbow7.includes(effectiveMyIdx) && !specialAction) {
       setTimeout(() => setSpecialAction({ type: "rainbow7pass", cardId: "rainbow7" }), 100);
     }
 
     // Witch pending swap
-    if (room?.pending_witch === myIdx && !specialAction) {
+    if (room?.pending_witch === effectiveMyIdx && !specialAction) {
       setTimeout(() => setSpecialAction({ type: "witch", cardId: "witch" }), 100);
     }
 
@@ -969,8 +973,8 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
                 <tr style={{ background: "rgba(61,28,110,0.4)" }}>
                   <th style={{ ...cinzel, padding: "10px 12px", textAlign: "left", color: C.gold, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>RUNDE</th>
                   {players.map((p: any) => (
-                    <th key={p.id} style={{ ...cinzel, padding: "10px 12px", textAlign: "center", color: p.player_index === myIdx ? C.gold : C.ivory, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>
-                      {p.ai_name}{p.player_index === myIdx ? " ★" : ""}
+                    <th key={p.id} style={{ ...cinzel, padding: "10px 12px", textAlign: "center", color: p.player_index === effectiveMyIdx ? C.gold : C.ivory, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>
+                      {p.ai_name}{p.player_index === effectiveMyIdx ? " ★" : ""}
                     </th>
                   ))}
                 </tr>
@@ -1076,7 +1080,7 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
 
       {/* Round table layout */}
       {(() => {
-        const seats = getSeatPositions(players, myIdx);
+        const seats = getSeatPositions(players, effectiveMyIdx);
         const topPlayers = seats.filter((s:any) => ["top","top-left","top-right"].includes(s.position));
         const leftPlayer = seats.find((s:any) => s.position === "left");
         const rightPlayer = seats.find((s:any) => s.position === "right");
@@ -1103,7 +1107,7 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <span style={{ fontSize: 9 }}>{p.is_ai ? "🤖" : "👤"}</span>
                 <span style={{ ...cinzel, fontSize: 10, color: isActive ? C.gold : C.ivory, fontWeight: isActive ? 700 : 400 }}>
-                  {p.ai_name}{p.player_index === myIdx ? " ★" : ""}
+                  {p.ai_name}{p.player_index === effectiveMyIdx ? " ★" : ""}
                 </span>
               </div>
               <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" as const }}>
@@ -1112,7 +1116,7 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
                   ? <span style={{ fontSize: 9, color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : C.ivory }}>{p.tricks_won}/{p.bid} 🎯</span>
                   : room.phase === "bidding" ? <span style={{ fontSize: 9, color: C.ivoryDim }}>bietet…</span> : null
                 }
-                {p.player_index !== myIdx && <span style={{ fontSize: 9, color: C.ivoryDim }}>🂠{count}</span>}
+                {p.player_index !== effectiveMyIdx && <span style={{ fontSize: 9, color: C.ivoryDim }}>🂠{count}</span>}
                 {trick.some((t:any) => t.playerIndex === p.player_index) && (
                   <span style={{ fontSize: 9, color: C.gold }}>✓</span>
                 )}
@@ -1161,11 +1165,11 @@ function GameRoom({ roomId, session, aiCount, edition }: { roomId: string; sessi
                   )}
                   {[...trick].sort((a:any,b:any) => {
                       // Sort by seat position (clockwise from current player)
-                      const seatA = (a.playerIndex - myIdx + players.length) % players.length;
-                      const seatB = (b.playerIndex - myIdx + players.length) % players.length;
+                      const seatA = (a.playerIndex - effectiveMyIdx + players.length) % players.length;
+                      const seatB = (b.playerIndex - effectiveMyIdx + players.length) % players.length;
                       return seatA - seatB;
                     }).map((t: any, i: number) => {
-                      const isMe = t.playerIndex === myIdx;
+                      const isMe = t.playerIndex === effectiveMyIdx;
                       return (
                         <div key={i} style={{ textAlign: "center" }}>
                           <div style={{ fontSize: 8, color: isMe ? C.gold : "rgba(255,255,255,0.5)", marginBottom: 2, ...cinzel }}>
