@@ -323,9 +323,13 @@ async function advanceTrick(supabase, roomId, room, players) {
   const winnerIdx = trickWinner(trick, room.trump_suit, room.werewolf_suit);
 
   if (winnerIdx === -1) {
-    addLog(room, "💥 Elderstab! Stich annulliert.");
-    // The player who would have won leads next
-    const nextLeader = trickWinnerWithoutBomb(trick, room.trump_suit, room.werewolf_suit);
+    // Check if it was a bomb or all-fools
+    const hasBomb = trick.some(t => t.card.specialType === "bomb");
+    const nextLeader = hasBomb
+      ? trickWinnerWithoutBomb(trick, room.trump_suit, room.werewolf_suit)
+      : trick[0].playerIndex; // all fools: first player leads next
+    const msg = hasBomb ? "💥 Elderstab! Stich annulliert." : "🃏 Nur Narren – kein Stich!";
+    addLog(room, msg);
     await supabase.from("rooms").update({
       current_trick: [], current_player: nextLeader,
       last_trick_winner: null, last_trick_cards: trick,
@@ -344,9 +348,14 @@ async function advanceTrick(supabase, roomId, room, players) {
   const has9 = trick.some(t => t.card.specialType === "rainbow9");
   const has7 = trick.some(t => t.card.specialType === "rainbow7");
   const hasWitch = trick.some(t => t.card.id === "witch" || t.card.specialType === "witch");
-  const rainbow7Players = has7 ? players.map((_, i) => i) : null;
-  const pendingWitch = hasWitch ? (trick.find(t => t.card.id === "witch" || t.card.specialType === "witch")?.playerIndex ?? null) : null;
-  const hasPending = has9 || has7 || hasWitch;
+
+  // Check if this is the last trick - if so, skip all pending actions
+  const totalTricksAfter = players.reduce((s, p) => s + (p.tricks_won ?? 0), 0);
+  const isLastTrick = totalTricksAfter >= room.round;
+
+  const rainbow7Players = (has7 && !isLastTrick) ? players.map((_, i) => i) : null;
+  const pendingWitch = (hasWitch && !isLastTrick) ? (trick.find(t => t.card.id === "witch" || t.card.specialType === "witch")?.playerIndex ?? null) : null;
+  const hasPending = !isLastTrick && (has9 || has7 || hasWitch);
 
   await supabase.from("rooms").update({
     current_trick: [], current_player: winnerIdx,
@@ -561,6 +570,17 @@ serve(async (req) => {
     }
 
     case "witchRevealDone": {
+      const { data: wrPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+      const { data: wrRoom } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+      if (wrPlayers && wrRoom) {
+        const totalTWR = wrPlayers.reduce((s, p) => s + (p.tricks_won ?? 0), 0);
+        const allEWR = wrPlayers.every(p => (p.hand ?? []).length === 0);
+        if (allEWR || totalTWR >= wrRoom.round) {
+          await supabase.from("rooms").update({ witch_swap: null }).eq("id", roomId);
+          await endRound(supabase, roomId, { ...wrRoom, witch_swap: null }, wrPlayers);
+          return json({ ok: true });
+        }
+      }
       await supabase.from("rooms").update({ phase: "playing", witch_swap: null }).eq("id", roomId);
       return json({ ok: true });
     }
@@ -682,6 +702,17 @@ serve(async (req) => {
           witch_swap: { playerName: callerPlayer.ai_name, gave: givenCard, took: takenCard },
           log: room.log
         }).eq("id", roomId);
+        // Check if round is over after witch swap
+        const { data: afterWitchPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+        const { data: afterWitchRoom } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+        if (afterWitchPlayers && afterWitchRoom) {
+          const totalTW = afterWitchPlayers.reduce((s, p) => s + (p.tricks_won ?? 0), 0);
+          const allEW = afterWitchPlayers.every(p => (p.hand ?? []).length === 0);
+          if (allEW || totalTW >= afterWitchRoom.round) {
+            // Delay endRound until after witchReveal display
+            // witchRevealDone will handle it
+          }
+        }
         return json({ ok: true });
       }
 
@@ -732,6 +763,16 @@ serve(async (req) => {
         }
         addLog(room, "🎁 Alle haben eine Karte weitergegeben!");
         await supabase.from("rooms").update({ pending_rainbow7: null, pending_rainbow7_buffer: null, phase: "playing", log: room.log }).eq("id", roomId);
+        // Check if round is over after card exchange
+        const { data: afterPassPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+        const { data: afterPassRoom } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+        if (afterPassPlayers && afterPassRoom) {
+          const totalT = afterPassPlayers.reduce((s, p) => s + (p.tricks_won ?? 0), 0);
+          const allE = afterPassPlayers.every(p => (p.hand ?? []).length === 0);
+          if (allE || totalT >= afterPassRoom.round) {
+            await endRound(supabase, roomId, afterPassRoom, afterPassPlayers);
+          }
+        }
       } else {
         await supabase.from("rooms").update({ pending_rainbow7: remaining, pending_rainbow7_buffer: buffer, log: room.log }).eq("id", roomId);
       }

@@ -1066,7 +1066,9 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         <div style={{ ...cinzel, fontSize: 16, color: C.gold, letterSpacing: 4 }}>🧙 WIZARD</div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <div style={{ ...cinzel, fontSize: 11, color: C.ivoryDim, letterSpacing: 2 }}>{room.code}</div>
-          <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 8px", fontSize: 11 }}>📋</button>
+          <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 8px", fontSize: 11 }} title="Log">📜</button>
+          <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 8px", fontSize: 11 }} title="Spielblatt">📋</button>
+          <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: C.ivoryDim, cursor: "pointer", fontSize: 11, padding: "4px 8px", borderRadius: 6 }}>✕</button>
         </div>
       </div>
 
@@ -1160,7 +1162,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               {/* Green table */}
               <div style={{
                 flex: 1,
-                minHeight: 0,
+                minHeight: "clamp(160px,35vh,400px)",
                 transition: "min-height 0.4s ease",
                 background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
                 border: "3px solid rgba(201,168,76,0.25)", borderRadius: 16, padding: "clamp(10px,2vw,20px) clamp(10px,2vw,20px)",
