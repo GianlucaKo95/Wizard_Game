@@ -83,7 +83,7 @@ function trickWinner(trick, trumpSuit, werewolfSuit = null) {
   for (let i = 0; i < effectiveTrick.length; i++) {
     const c = effectiveTrick[i].card;
     const wc = effectiveTrick[w].card;
-    if (c.type === "wizard") { w = i; continue; }
+    if (c.type === "wizard") { if (wc.type !== "wizard") w = i; continue; }
     if (wc.type === "wizard") continue;
     if (isPassive(c)) continue;
     if (isPassive(wc)) { w = i; continue; }

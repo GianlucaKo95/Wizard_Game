@@ -537,6 +537,7 @@ function sortHand(hand: any[]): any[] {
 function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: string; session: Session; aiCount: number; edition?: string; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
   const clearTrickPending = useRef(false);
+  const [showLog, setShowLog] = useState(false);
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [myIdx, setMyIdx] = useState(-1);
@@ -1091,7 +1092,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               boxShadow: isActive ? `0 0 28px ${C.gold}88, 0 4px 12px rgba(0,0,0,0.5)` : "0 2px 8px rgba(0,0,0,0.5)",
               borderRadius: 12, padding: "clamp(6px,1.5vw,10px) clamp(8px,2vw,14px)",
               display: "flex", flexDirection: "column" as const, gap: 5,
-              minWidth: "clamp(100px,18vw,160px)", maxWidth: "clamp(140px,22vw,220px)", position: "relative" as const,
+              minWidth: "clamp(80px,16vw,150px)", maxWidth: "clamp(120px,20vw,200px)", position: "relative" as const,
               transition: "all 0.3s ease",
             }}>
               {isActive && arrow && (
@@ -1156,16 +1157,10 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
 
               {/* Left */}
-              <div style={{ width: "clamp(90px,15vw,160px)", flexShrink: 0 }}>
-                {leftPlayer && <PlayerPill p={leftPlayer.player} arrow="top" />}
-              </div>
-
               {/* Green table */}
               <div style={{
                 flex: 1,
-                minHeight: (isBidding || isChoosingTrump || isChoosingWerewolf || room.phase === "bidding" || room.phase === "choosingWerewolf" || room.phase === "choosingTrump")
-                  ? "clamp(160px,40vw,400px)"
-                  : "clamp(260px,65vw,520px)",
+                minHeight: 0,
                 transition: "min-height 0.4s ease",
                 background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
                 border: "3px solid rgba(201,168,76,0.25)", borderRadius: 16, padding: "clamp(10px,2vw,20px) clamp(10px,2vw,20px)",
@@ -1176,7 +1171,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 {/* Trumpf info - shown in center when no cards played */}
 
                 {/* Trick cards - positional layout */}
-                <div style={{ flex: 1, position: "relative" as const, minHeight: "clamp(140px,30vw,280px)" }}>
+                <div style={{ flex: 1, position: "relative" as const, minHeight: 0 }}>
 
                   {/* Trumpf in center */}
                   {room.trump_card && trick.length === 0 && (
@@ -1441,27 +1436,11 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         </div>
       )}
 
-      {/* Choose Trump */}
-      {isChoosingTrump && (
-        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(460px,92vw)" }}>
-          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>TRUMPFFARBE WÄHLEN</div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            {SUITS.map(s => (
-              <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{
-                background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`,
-                borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer",
-              }}>{SUIT_SYMBOLS[s]}</button>
-            ))}
-          </div>
-        </div>
-      )}
-
-
       {/* My Hand */}
-      <div style={{ marginTop: "auto", paddingTop: 10, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: "100%" }}>
+      <div style={{ paddingTop: 6, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: "100%", flexShrink: 0 }}>
         <div style={{
           ...cinzel,
-          fontSize: isPlaying ? "clamp(12px,2.5vw,15px)" : "clamp(9px,1.5vw,11px)",
+          fontSize: isPlaying ? "clamp(11px,2vw,13px)" : "clamp(8px,1.5vw,10px)",
           color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.5)",
           textAlign: "center",
           marginBottom: 8,
@@ -1521,7 +1500,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
       )}
 
       {/* Log */}
-      <div ref={logRef} className="log-panel" style={{ ...glass({ padding: 8 }), fontSize: "var(--text-xs)", color: C.ivoryDim }}>
+      <div ref={logRef} className="log-panel" style={{ ...glass({ padding: 8 }), fontSize: "var(--text-xs)", color: C.ivoryDim, display: showLog ? "block" : "none" }}>
         {log.map((l: string, i: number) => (
           <div key={i} style={{ padding: "2px 0", borderBottom: "1px solid rgba(201,168,76,0.06)" }}>{l}</div>
         ))}
