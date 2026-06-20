@@ -481,7 +481,8 @@ function getSeatPositions(players: any[], myIdx: number) {
     const offset = (i - effectiveMyIdx + n) % n;
     let position = "top";
     if (offset === 0) position = "bottom";
-    else if (n <= 3) position = "top"; // 2-3 players: all opponents on top
+    else if (n === 2) position = "top";
+    else if (n === 3) { position = offset === 1 ? "top-left" : "top-right"; }
     else if (n === 4) { position = offset === 1 ? "left" : offset === 2 ? "top" : "right"; }
     else if (n === 5) { position = offset === 1 ? "left" : offset === 2 ? "top-left" : offset === 3 ? "top-right" : "right"; }
     else if (n === 6) { position = offset === 1 ? "left" : offset === 2 ? "top-left" : offset === 3 ? "top" : offset === 4 ? "top-right" : "right"; }
@@ -538,6 +539,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   const aiTriggerPending = useRef(false);
   const clearTrickPending = useRef(false);
   const [showLog, setShowLog] = useState(false);
+  const [modalMinimized, setModalMinimized] = useState(true);
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [myIdx, setMyIdx] = useState(-1);
@@ -618,6 +620,9 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               setTimeout(() => {
                 callGameAction(roomId, "witchRevealDone", {});
               }, 4000);
+            }
+            if (newRoom.phase !== room?.phase) {
+              setModalMinimized(false);
             }
           }
         });
@@ -1087,12 +1092,12 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
         const seatPos = (position: string): React.CSSProperties => {
           switch (position) {
-            case "top":         return { top: "9%",  left: "50%", transform: "translateX(-50%)" };
-            case "top-left":    return { top: "9%",  left: "26%", transform: "translateX(-50%)" };
-            case "top-right":   return { top: "9%",  left: "74%", transform: "translateX(-50%)" };
-            case "left":        return { top: "42%", left: "6%",  transform: "translateY(-50%)" };
-            case "right":       return { top: "42%", left: "94%", transform: "translate(-100%,-50%)" };
-            default:            return { top: "9%",  left: "50%", transform: "translateX(-50%)" };
+            case "top":         return { top: "clamp(56px,11vh,72px)", left: "50%", transform: "translateX(-50%)" };
+            case "top-left":    return { top: "clamp(56px,11vh,72px)", left: "26%", transform: "translateX(-50%)" };
+            case "top-right":   return { top: "clamp(56px,11vh,72px)", left: "74%", transform: "translateX(-50%)" };
+            case "left":        return { top: "44%", left: "5%",  transform: "translateY(-50%)" };
+            case "right":       return { top: "44%", left: "95%", transform: "translate(-100%,-50%)" };
+            default:            return { top: "clamp(56px,11vh,72px)", left: "50%", transform: "translateX(-50%)" };
           }
         };
 
@@ -1144,7 +1149,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               const mySeat = seats.find((s:any) => s.position === "bottom");
               if (!mySeat) return null;
               return (
-                <div style={{ position: "absolute" as const, bottom: "clamp(150px,24vh,180px)", left: "50%", transform: "translateX(-50%)", zIndex: 5 }}>
+                <div style={{ position: "absolute" as const, bottom: "clamp(195px,30vh,230px)", left: "50%", transform: "translateX(-50%)", zIndex: 5 }}>
                   <PlayerSeat p={mySeat.player} position="bottom" />
                 </div>
               );
@@ -1282,6 +1287,22 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         room?.pending_witch === effectiveMyIdx ||
         specialAction?.type === "witchGive" ||
         room.phase === "witchReveal") && (
+        modalMinimized ? (
+          <button onClick={() => setModalMinimized(false)} style={{
+            position: "absolute" as const, top: "clamp(50px,9vh,64px)", left: "50%", transform: "translateX(-50%)", zIndex: 30,
+            ...goldBtn(true), padding: "8px 18px", fontSize: 12, display: "flex", alignItems: "center", gap: 6,
+            boxShadow: `0 0 20px rgba(201,168,76,0.5)`, animation: "pulse 2s infinite",
+          }}>
+            ⬆ {isBidding ? "Jetzt bieten"
+              : isChoosingTrump ? "Trumpf wählen"
+              : isChoosingWerewolf ? "Stichfarbe wählen"
+              : room?.pending_rainbow9 === effectiveMyIdx ? "9¾ – Vorhersage anpassen"
+              : room?.pending_witch === effectiveMyIdx ? "Hexe – Karte tauschen"
+              : specialAction?.type === "witchGive" ? "Hexe – Karte abgeben"
+              : room.phase === "witchReveal" ? "Tausch-Ergebnis ansehen"
+              : "Aktion erforderlich"}
+          </button>
+        ) : (
         <div style={{
           position: "absolute" as const, inset: 0, zIndex: 30,
           background: "rgba(0,0,0,0.6)", backdropFilter: "blur(3px)",
@@ -1291,7 +1312,15 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             background: "rgba(8,12,20,0.97)", border: `2px solid ${C.gold}`, borderRadius: 16,
             padding: "20px 24px", textAlign: "center", width: "min(360px,92vw)",
             boxShadow: `0 0 40px rgba(201,168,76,0.3)`, maxHeight: "80vh", overflowY: "auto",
+            position: "relative" as const,
           }}>
+            <button onClick={() => setModalMinimized(true)} style={{
+              position: "absolute" as const, top: 8, right: 8, background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.6)",
+              borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer",
+            }} title="Tisch & Handkarten ansehen">
+              👁 Tisch ansehen
+            </button>
             {isBidding && <>
               <div style={{ ...cinzel, fontSize: 13, color: C.gold, letterSpacing: 1, marginBottom: 10 }}>
                 WIE VIELE STICHE? (0–{room.round})
@@ -1439,6 +1468,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             )}
           </div>
         </div>
+        )
       )}
 
       {showScoresheet && <Scoresheet />}
