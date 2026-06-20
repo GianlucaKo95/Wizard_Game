@@ -124,18 +124,42 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
     >
       {/* Card Art */}
       <div style={{ position: "absolute", inset: 0 }}>
-        {isSpecial ? (
-          card.id === "dragon"     ? <DragonArt /> :
-          card.id === "fairy"      ? <FairyArt /> :
-          card.id === "witch"      ? <WitchArt /> :
-          card.id === "werewolf"   ? <WerewolfArt suit={werewolfSuit} /> :
-          card.id === "vampire"    ? <VampireArt /> :
-          card.id === "bomb"       ? <BombArt /> :
-          card.id === "rainbow7"   ? <Rainbow7Art /> :
-          card.id === "rainbow9"   ? <Rainbow9Art /> :
-          card.id === "wizardfool" ? <WizardFoolArt /> :
-          <NumberArt value={7} house="red" />
-        ) : isWizard
+        {isSpecial ? (() => {
+          const specialImgMap: Record<string, string> = {
+            dragon: "Special_Dragon",
+            fairy: "Special_Fairy",
+            witch: "Special_Witch",
+            werewolf: "Special_Werewolf",
+            vampire: "Special_Vampire",
+            bomb: "Special_Bomb",
+            rainbow7: "Special_George",
+            rainbow9: "Special_Platform9",
+            wizardfool: "Special_Ron",
+          };
+          const imgName = specialImgMap[card.id];
+          const fallback =
+            card.id === "dragon"     ? <DragonArt /> :
+            card.id === "fairy"      ? <FairyArt /> :
+            card.id === "witch"      ? <WitchArt /> :
+            card.id === "werewolf"   ? <WerewolfArt suit={werewolfSuit} /> :
+            card.id === "vampire"    ? <VampireArt /> :
+            card.id === "bomb"       ? <BombArt /> :
+            card.id === "rainbow7"   ? <Rainbow7Art /> :
+            card.id === "rainbow9"   ? <Rainbow9Art /> :
+            card.id === "wizardfool" ? <WizardFoolArt /> :
+            <NumberArt value={7} house="red" />;
+          if (!imgName) return fallback;
+          return (
+            <img src={`/cards/${imgName}.png`} alt={imgName}
+              style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }}
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = "none";
+                const parent = target.parentElement;
+                if (parent) parent.setAttribute("data-fallback", "true");
+              }} />
+          );
+        })() : isWizard
           ? (() => {
             const idx = (getIndex() % 4) + 1;
             return (

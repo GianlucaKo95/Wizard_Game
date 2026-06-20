@@ -1059,404 +1059,189 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   const isPlaying = room.phase === "playing" && isMyTurn && !loading;
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "flex-start" }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", maxWidth: 1100, alignItems: "center" }}>
-        <div style={{ ...cinzel, fontSize: 11, color: C.ivoryDim }}>RUNDE {room.round}/{room.max_rounds}</div>
-        <div style={{ ...cinzel, fontSize: 16, color: C.gold, letterSpacing: 4 }}>🧙 WIZARD</div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <div style={{ ...cinzel, fontSize: 11, color: C.ivoryDim, letterSpacing: 2 }}>{room.code}</div>
-          <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 8px", fontSize: 11 }} title="Log">📜</button>
-          <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 8px", fontSize: 11 }} title="Spielblatt">📋</button>
-          <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: C.ivoryDim, cursor: "pointer", fontSize: 11, padding: "4px 8px", borderRadius: 6 }}>✕</button>
+    <div style={{
+      height: "100dvh", width: "100%", overflow: "hidden", position: "relative" as const,
+      background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
+    }}>
+
+      {/* Header - floats over table */}
+      <div style={{
+        position: "absolute" as const, top: 0, left: 0, right: 0, zIndex: 15,
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: "max(8px, env(safe-area-inset-top)) 12px 6px 12px",
+        background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%)",
+      }}>
+        <div style={{ ...cinzel, fontSize: "clamp(10px,2vw,12px)", color: "rgba(255,255,255,0.65)" }}>RUNDE {room.round}/{room.max_rounds}</div>
+        <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vw,16px)", color: C.gold, letterSpacing: "clamp(2px,0.6vw,4px)" }}>🧙 WIZARD</div>
+        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+          <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", fontSize: 11 }} title="Log">📜</button>
+          <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 7px", fontSize: 11 }} title="Spielblatt">📋</button>
+          <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 11, padding: "4px 7px", borderRadius: 6 }}>✕</button>
         </div>
       </div>
 
-      {/* Round table layout - fills available space */}
+      {/* Full screen table with seated players */}
       {(() => {
         const seats = getSeatPositions(players, effectiveMyIdx);
-        const topPlayers = seats.filter((s:any) => ["top","top-left","top-right"].includes(s.position));
-        const leftPlayer = seats.find((s:any) => s.position === "left");
-        const rightPlayer = seats.find((s:any) => s.position === "right");
+        const n = players.length;
 
-        const PlayerPill = ({ p, arrow = "" }: { p: any; arrow?: string }) => {
+        const seatPos = (position: string): React.CSSProperties => {
+          switch (position) {
+            case "top":         return { top: "9%",  left: "50%", transform: "translateX(-50%)" };
+            case "top-left":    return { top: "9%",  left: "26%", transform: "translateX(-50%)" };
+            case "top-right":   return { top: "9%",  left: "74%", transform: "translateX(-50%)" };
+            case "left":        return { top: "42%", left: "6%",  transform: "translateY(-50%)" };
+            case "right":       return { top: "42%", left: "94%", transform: "translate(-100%,-50%)" };
+            default:            return { top: "9%",  left: "50%", transform: "translateX(-50%)" };
+          }
+        };
+
+        const PlayerSeat = ({ p, position }: { p: any; position: string }) => {
           const isActive = room.current_player === p.player_index;
           const hasBid = p.bid !== null;
           const count = Array.isArray(p.hand) ? p.hand.length : 0;
           const hasPlayed = trick.some((t:any) => t.playerIndex === p.player_index);
-          const isMe = p.player_index === effectiveMyIdx;
           return (
             <div style={{
-              background: isActive
-                ? `linear-gradient(135deg, rgba(61,28,110,0.97), rgba(90,45,153,0.9))`
-                : isMe ? "rgba(10,20,40,0.95)" : "rgba(5,10,20,0.94)",
-              border: `${isActive ? "2.5px" : "1.5px"} solid ${isActive ? C.gold : isMe ? "rgba(201,168,76,0.4)" : "rgba(201,168,76,0.2)"}`,
-              boxShadow: isActive ? `0 0 28px ${C.gold}88, 0 4px 12px rgba(0,0,0,0.5)` : "0 2px 8px rgba(0,0,0,0.5)",
-              borderRadius: 12, padding: "clamp(6px,1.5vw,10px) clamp(8px,2vw,14px)",
-              display: "flex", flexDirection: "column" as const, gap: 5,
-              minWidth: "clamp(80px,16vw,150px)", maxWidth: "clamp(120px,20vw,200px)", position: "relative" as const,
+              position: "absolute" as const, ...seatPos(position), zIndex: 5,
+              background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
+              border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
+              boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
+              borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,15vw,110px)",
               transition: "all 0.3s ease",
             }}>
-              {isActive && arrow && (
-                <div style={{ position: "absolute", [arrow]: -18, left: "50%", transform: "translateX(-50%)", color: C.gold, fontSize: 16, lineHeight: 1 }}>
-                  {arrow === "top" ? "▼" : "▲"}
-                </div>
-              )}
-              {/* Name row */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 12 }}>{p.is_ai ? "🤖" : "👤"}</span>
-                <span style={{ ...cinzel, fontSize: "clamp(10px,1.8vw,13px)", color: isActive ? C.gold : isMe ? C.goldLight : C.ivory, fontWeight: 700, whiteSpace: "nowrap" as const }}>
-                  {p.ai_name}{isMe ? " ★" : ""}
+              <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                <span style={{ fontSize: 10 }}>{p.is_ai ? "🤖" : "👤"}</span>
+                <span style={{ ...cinzel, fontSize: "clamp(9px,1.8vw,11px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis", maxWidth: 70 }}>
+                  {p.ai_name}
                 </span>
-                {hasPlayed && <span style={{ fontSize: 12, color: C.gold, marginLeft: "auto" }}>✓</span>}
+                {hasPlayed && <span style={{ fontSize: 9, color: C.gold, marginLeft: "auto" }}>✓</span>}
               </div>
-              {/* Stats row */}
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
-                  <span style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>PKT</span>
-                  <span style={{ ...cinzel, fontSize: "clamp(14px,2.5vw,22px)", color: C.goldLight, fontWeight: 700, lineHeight: 1 }}>{p.score}</span>
-                </div>
-                <div style={{ width: 1, height: 28, background: "rgba(201,168,76,0.2)" }} />
+              <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
+                <span style={{ ...cinzel, fontSize: "clamp(11px,2vw,14px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
                 {hasBid ? (
-                  <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
-                    <span style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>STICHE</span>
-                    <span style={{ ...cinzel, fontSize: "clamp(14px,2.5vw,22px)", fontWeight: 700, lineHeight: 1,
-                      color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : C.ivory }}>
-                      {p.tricks_won}<span style={{ fontSize: "clamp(9px,1.5vw,14px)", color: C.ivoryDim }}>/{p.bid}</span>
-                    </span>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
-                    <span style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>TIPP</span>
-                    <span style={{ ...cinzel, fontSize: "clamp(14px,2.5vw,20px)", color: C.ivoryDim, lineHeight: 1 }}>
-                      {room.phase === "bidding" ? "…" : "–"}
-                    </span>
-                  </div>
-                )}
-                {p.player_index !== effectiveMyIdx && (
-                  <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
-                    <span style={{ fontSize: 9, color: C.ivoryDim }}>🂠</span>
-                    <span style={{ ...cinzel, fontSize: 13, color: C.ivoryDim }}>{count}</span>
-                  </div>
-                )}
+                  <span style={{ ...cinzel, fontSize: "clamp(9px,1.6vw,11px)", color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : "rgba(255,255,255,0.7)" }}>
+                    {p.tricks_won}/{p.bid}
+                  </span>
+                ) : room.phase === "bidding" ? (
+                  <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>…</span>
+                ) : null}
+                {p.player_index !== effectiveMyIdx && <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginLeft: "auto" }}>🂠{count}</span>}
               </div>
             </div>
           );
         };
 
-        // My seat pill
-        const mySeat = seats.find((s:any) => s.position === "bottom");
-
         return (
-          <div style={{ width: "min(1200px,99vw)", display: "flex", flexDirection: "column" as const, gap: 8, alignItems: "center" }}>
+          <>
+            {/* All opponent seats positioned around the table */}
+            {seats.filter((s:any) => s.position !== "bottom").map((s:any) => (
+              <PlayerSeat key={s.player.id} p={s.player} position={s.position} />
+            ))}
 
-            {/* Top players */}
-            <div style={{ display: "flex", justifyContent: "center", gap: "clamp(4px,1vw,8px)", flexWrap: "wrap" as const }}>
-              {topPlayers.map((s:any) => <PlayerPill key={s.player.id} p={s.player} arrow="top" />)}
+            {/* My seat - bottom, above hand */}
+            {(() => {
+              const mySeat = seats.find((s:any) => s.position === "bottom");
+              if (!mySeat) return null;
+              return (
+                <div style={{ position: "absolute" as const, bottom: "clamp(150px,24vh,180px)", left: "50%", transform: "translateX(-50%)", zIndex: 5 }}>
+                  <PlayerSeat p={mySeat.player} position="bottom" />
+                </div>
+              );
+            })()}
+
+            {/* Trumpf - always visible, fixed corner */}
+            {room.trump_card && (
+              <div style={{ position: "absolute" as const, bottom: "clamp(150px,24vh,180px)", left: "5%", textAlign: "center", zIndex: 4 }}>
+                <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
+                <div style={{ ...cinzel, fontSize: 7, color: C.gold, marginTop: 2 }}>TRUMPF</div>
+                {room.trump_suit && <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 11 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</div>}
+                {room.werewolf_suit && <div style={{ fontSize: 8, color: "#F7DC6F" }}>🐺{SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</div>}
+              </div>
+            )}
+
+            {/* Trick cards - center of table, positional */}
+            <div style={{ position: "absolute" as const, top: "32%", left: "50%", transform: "translate(-50%,-50%)", width: "70%", height: "32%", zIndex: 3 }}>
+              {trick.length === 0 && room.phase === "playing" && (
+                <div style={{ position: "absolute" as const, top: "50%", left: "50%", transform: "translate(-50%,-50%)", color: "rgba(255,255,255,0.25)", fontSize: 11, textAlign: "center", whiteSpace: "nowrap" as const }}>
+                  {players[room.current_player]?.ai_name} beginnt…
+                </div>
+              )}
+
+              {trick.map((t: any) => {
+                const offset = (t.playerIndex - effectiveMyIdx + n) % n;
+                const isMe = offset === 0;
+                let pos: React.CSSProperties = {};
+                if (n <= 3) {
+                  if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
+                  else if (offset===1) pos = { top: "0%",    left: "30%", transform: "translateX(-50%)" };
+                  else                 pos = { top: "0%",    left: "70%", transform: "translateX(-50%)" };
+                } else if (n === 4) {
+                  if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
+                  else if (offset===1) pos = { top: "50%",   left: "0%",  transform: "translateY(-50%)" };
+                  else if (offset===2) pos = { top: "0%",    left: "50%", transform: "translateX(-50%)" };
+                  else                 pos = { top: "50%",   right: "0%", transform: "translateY(-50%)" };
+                } else if (n === 5) {
+                  if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
+                  else if (offset===1) pos = { top: "50%",   left: "0%",  transform: "translateY(-50%)" };
+                  else if (offset===2) pos = { top: "0%",    left: "25%", transform: "translateX(-50%)" };
+                  else if (offset===3) pos = { top: "0%",    left: "75%", transform: "translateX(-50%)" };
+                  else                 pos = { top: "50%",   right: "0%", transform: "translateY(-50%)" };
+                } else {
+                  if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
+                  else if (offset===1) pos = { top: "50%",   left: "0%",  transform: "translateY(-50%)" };
+                  else if (offset===2) pos = { top: "0%",    left: "25%", transform: "translateX(-50%)" };
+                  else if (offset===3) pos = { top: "0%",    left: "50%", transform: "translateX(-50%)" };
+                  else if (offset===4) pos = { top: "0%",    left: "75%", transform: "translateX(-50%)" };
+                  else                 pos = { top: "50%",   right: "0%", transform: "translateY(-50%)" };
+                }
+                return (
+                  <div key={t.playerIndex} style={{ position: "absolute" as const, textAlign: "center", ...pos }}>
+                    <div style={{ fontSize: 8, color: isMe ? C.gold : "rgba(255,255,255,0.6)", marginBottom: 2, ...cinzel }}>
+                      {isMe ? "Du" : players[t.playerIndex]?.ai_name}
+                    </div>
+                    <CardView card={t.card} />
+                  </div>
+                );
+              })}
+
+              {room.phase === "trickEnd" && room.last_trick_winner !== null && (
+                <div style={{ position: "absolute" as const, bottom: -28, left: 0, right: 0, display: "flex", justifyContent: "center" }}>
+                  <div style={{ ...cinzel, fontSize: 11, color: C.gold, background: "rgba(0,0,0,0.75)", padding: "3px 10px", borderRadius: 8, textShadow: `0 0 10px ${C.gold}`, whiteSpace: "nowrap" as const }}>
+                    ✓ {players[room.last_trick_winner]?.ai_name} gewinnt!
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Middle: left + table + right */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
-
-              {/* Left */}
-              {/* Green table */}
-              <div style={{
-                flex: 1,
-                minHeight: "clamp(160px,35vh,400px)",
-                transition: "min-height 0.4s ease",
-                background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
-                border: "3px solid rgba(201,168,76,0.25)", borderRadius: 16, padding: "clamp(10px,2vw,20px) clamp(10px,2vw,20px)",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                boxShadow: "inset 0 4px 40px rgba(0,0,0,0.6), 0 8px 32px rgba(0,0,0,0.5)",
-                position: "relative" as const,
+            {/* "Du bist dran" indicator above hand */}
+            <div style={{ position: "absolute" as const, bottom: "clamp(128px,20vh,150px)", left: 0, right: 0, textAlign: "center", zIndex: 4 }}>
+              <span style={{
+                ...cinzel,
+                fontSize: isPlaying ? "clamp(10px,2vw,12px)" : "clamp(8px,1.5vw,10px)",
+                color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.4)",
+                letterSpacing: 1,
+                padding: isPlaying ? "5px 16px" : "0",
+                background: isPlaying ? `linear-gradient(135deg, rgba(61,28,110,0.9), rgba(90,45,153,0.8))` : "transparent",
+                borderRadius: isPlaying ? 16 : 0,
+                border: isPlaying ? `1.5px solid ${C.gold}` : "none",
+                boxShadow: isPlaying ? `0 0 12px rgba(201,168,76,0.4)` : "none",
               }}>
-                {/* Trumpf info - shown in center when no cards played */}
-
-                {/* Trick cards - positional layout */}
-                <div style={{ flex: 1, position: "relative" as const, minHeight: 0 }}>
-
-                  {/* Trumpf in center */}
-                  {room.trump_card && trick.length === 0 && (
-                    <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center" }}>
-                      <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
-                      <div style={{ ...cinzel, fontSize: 7, color: C.gold, marginTop: 2 }}>TRUMPF</div>
-                      {room.trump_suit && <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 12 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</div>}
-                      {room.werewolf_suit && <div style={{ fontSize: 9, color: "#F7DC6F" }}>🐺{SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</div>}
-                    </div>
-                  )}
-
-                  {trick.length === 0 && room.phase === "playing" && (
-                    <div style={{ position: "absolute", bottom: 8, left: 0, right: 0, textAlign: "center", color: "rgba(255,255,255,0.2)", fontSize: 11 }}>
-                      {players[room.current_player]?.ai_name} beginnt…
-                    </div>
-                  )}
-
-                  {trick.map((t: any) => {
-                    const n = players.length;
-                    const offset = (t.playerIndex - effectiveMyIdx + n) % n;
-                    const isMe = offset === 0;
-                    // Position based on seat
-                    let pos: React.CSSProperties = {};
-                    if (n <= 3) {
-                      if (isMe)            pos = { bottom: "5%",  left: "50%", transform: "translateX(-50%)" };
-                      else if (offset===1) pos = { top: "5%",    left: "30%", transform: "translateX(-50%)" };
-                      else                 pos = { top: "5%",    left: "70%", transform: "translateX(-50%)" };
-                    } else if (n === 4) {
-                      if (isMe)            pos = { bottom: "5%",  left: "50%", transform: "translateX(-50%)" };
-                      else if (offset===1) pos = { top: "50%",   left: "5%",  transform: "translateY(-50%)" };
-                      else if (offset===2) pos = { top: "5%",    left: "50%", transform: "translateX(-50%)" };
-                      else                 pos = { top: "50%",   right: "5%", transform: "translateY(-50%)" };
-                    } else if (n === 5) {
-                      if (isMe)            pos = { bottom: "5%",  left: "50%", transform: "translateX(-50%)" };
-                      else if (offset===1) pos = { top: "50%",   left: "5%",  transform: "translateY(-50%)" };
-                      else if (offset===2) pos = { top: "5%",    left: "25%", transform: "translateX(-50%)" };
-                      else if (offset===3) pos = { top: "5%",    left: "75%", transform: "translateX(-50%)" };
-                      else                 pos = { top: "50%",   right: "5%", transform: "translateY(-50%)" };
-                    } else {
-                      if (isMe)            pos = { bottom: "5%",  left: "50%", transform: "translateX(-50%)" };
-                      else if (offset===1) pos = { top: "50%",   left: "5%",  transform: "translateY(-50%)" };
-                      else if (offset===2) pos = { top: "5%",    left: "25%", transform: "translateX(-50%)" };
-                      else if (offset===3) pos = { top: "5%",    left: "50%", transform: "translateX(-50%)" };
-                      else if (offset===4) pos = { top: "5%",    left: "75%", transform: "translateX(-50%)" };
-                      else                 pos = { top: "50%",   right: "5%", transform: "translateY(-50%)" };
-                    }
-                    return (
-                      <div key={t.playerIndex} style={{ position: "absolute", textAlign: "center", ...pos }}>
-                        <div style={{ fontSize: 8, color: isMe ? C.gold : "rgba(255,255,255,0.6)", marginBottom: 2, ...cinzel }}>
-                          {isMe ? "Du" : players[t.playerIndex]?.ai_name}
-                        </div>
-                        <CardView card={t.card} />
-                      </div>
-                    );
-                  })}
-
-                  {room.phase === "trickEnd" && room.last_trick_winner !== null && (
-                    <div style={{ position: "absolute", bottom: 4, left: 0, right: 0, display: "flex", justifyContent: "center" }}>
-                      <div style={{ ...cinzel, fontSize: 11, color: C.gold, background: "rgba(0,0,0,0.75)", padding: "3px 10px", borderRadius: 8, textShadow: `0 0 10px ${C.gold}` }}>
-                        ✓ {players[room.last_trick_winner]?.ai_name} gewinnt!
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Round info */}
-                <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 3, minWidth: 50 }}>
-                  <div style={{ ...cinzel, fontSize: 9, color: C.gold }}>R{room.round}<span style={{ color: C.ivoryDim }}>/{room.max_rounds}</span></div>
-                  <div style={{ fontSize: 8, color: C.ivoryDim, textAlign: "center" }}>🎴 {players[room.dealer]?.ai_name}</div>
-                </div>
-              </div>
-
-              {/* Right */}
-              <div style={{ width: 160, flexShrink: 0 }}>
-                {rightPlayer && <PlayerPill p={rightPlayer.player} arrow="top" />}
-              </div>
+                {isPlaying ? "✦ DU BIST DRAN ✦" : room.phase === "playing" ? `⏳ ${players[room.current_player]?.ai_name} ist dran` : ""}
+              </span>
             </div>
-
-            {/* Hexe – Karte tauschen */}
-            {room?.pending_witch === effectiveMyIdx && (() => {
-              const trickCards = (room.last_trick_cards ?? []).filter((t:any) =>
-                t.card.specialType !== "witch" && t.card.id !== "witch"
-              );
-              return (
-                <div style={{ background: "rgba(5,8,15,0.95)", border: "2px solid #C0392B", borderRadius: 12, padding: "12px 16px", textAlign: "center", width: "100%" }}>
-                  <div style={{ fontSize: 20, marginBottom: 4 }}>🧹</div>
-                  <div style={{ ...cinzel, fontSize: "clamp(10px,2.5vw,12px)", color: "#E74C3C", marginBottom: 8 }}>
-                    BELLATRIX – KARTE AUS DEM STICH NEHMEN
-                  </div>
-                  <div style={{ fontSize: 11, color: C.ivoryDim, marginBottom: 10 }}>
-                    Wähle eine Karte die du auf deine Hand nimmst (dafür gibst du eine ab)
-                  </div>
-                  <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" as const, marginBottom: 10 }}>
-                    {trickCards.map((t:any) => (
-                      <div key={t.card.id} style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 9, color: C.ivoryDim, marginBottom: 3 }}>{players[t.playerIndex]?.ai_name}</div>
-                        <CardView card={t.card} onClick={() => {
-                          // Need to choose which card to give away - show give card selection
-                          setSpecialAction({ type: "witchGive", takeCardId: t.card.id });
-                        }} />
-                      </div>
-                    ))}
-                  </div>
-
-                </div>
-              );
-            })()}
-
-            {/* Hexe – Karte abgeben (Step 2) */}
-            {specialAction?.type === "witchGive" && (() => {
-              return (
-                <div style={{ background: "rgba(5,8,15,0.95)", border: "2px solid #C0392B", borderRadius: 12, padding: "12px 16px", textAlign: "center", width: "100%" }}>
-                  <div style={{ ...cinzel, fontSize: "clamp(10px,2.5vw,12px)", color: "#E74C3C", marginBottom: 8 }}>
-                    WELCHE KARTE GIBST DU AB?
-                  </div>
-                  <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" as const }}>
-                    {myHand.map((c:any) => (
-                      <div key={c.id} style={{ textAlign: "center" }}>
-                        <CardView card={c} onClick={() => {
-                          act("playSpecial", {
-                            specialAction: "witch",
-                            takeCardId: specialAction.takeCardId,
-                            giveCardId: c.id
-                          });
-                          setSpecialAction(null);
-                        }} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Hexe Tausch Anzeige */}
-            {room.phase === "witchReveal" && room.witch_swap && (
-              <div style={{ background: "rgba(5,8,15,0.95)", border: "2px solid #C0392B", borderRadius: 12, padding: "14px 16px", textAlign: "center", width: "100%" }}>
-                <div style={{ fontSize: 18, marginBottom: 6 }}>🧹</div>
-                <div style={{ ...cinzel, fontSize: 12, color: "#E74C3C", marginBottom: 10 }}>
-                  {room.witch_swap.playerName} hat getauscht
-                </div>
-                <div style={{ display: "flex", gap: 16, justifyContent: "center", alignItems: "center" }}>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 10, color: C.ivoryDim, marginBottom: 4 }}>ABGEGEBEN</div>
-                    <CardView card={room.witch_swap.gave} small />
-                  </div>
-                  <div style={{ fontSize: 20, color: C.gold }}>⇄</div>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 10, color: C.ivoryDim, marginBottom: 4 }}>GENOMMEN</div>
-                    <CardView card={room.witch_swap.took} small />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 9¾ Adjust UI */}
-            {room?.pending_rainbow9 === effectiveMyIdx && (() => {
-              const currentBid = me?.bid ?? 0;
-              const tricksWon = me?.tricks_won ?? 0;
-              // If tricks_won === bid: must go +1 (already on target, winning more would hurt)
-              // If tricks_won < bid: can go +1 or -1
-              // If tricks_won > bid: can go -1 (already over)
-              const canDecrease = currentBid > 0 && tricksWon !== currentBid;
-              const canIncrease = true;
-              return (
-                <div style={{ background: "rgba(5,8,15,0.95)", border: `2px solid #AED6F1`, borderRadius: 12, padding: "12px 16px", textAlign: "center", width: "100%" }}>
-                  <div style={{ fontSize: 20, marginBottom: 4 }}>🚂</div>
-                  <div style={{ ...cinzel, fontSize: "clamp(10px,2.5vw,13px)", color: "#AED6F1", marginBottom: 6 }}>
-                    GLEIS 9¾ – VORHERSAGE ANPASSEN (Pflicht)
-                  </div>
-                  <div style={{ fontSize: 12, color: C.ivoryDim, marginBottom: 10 }}>
-                    Aktuell: <span style={{ color: C.gold, fontWeight: 700 }}>{currentBid}</span>
-                    {tricksWon === currentBid && <span style={{ color: "#F7DC6F", display: "block", fontSize: 11 }}>⚠ Du bist im Ziel – nur +1 möglich</span>}
-                  </div>
-                  <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-                    {canDecrease && (
-                      <button onClick={() => act("rainbow9Adjust", { adjust: -1 })}
-                        style={{ ...goldBtn(false), flex: 1, padding: "12px 0", fontSize: 18 }}>
-                        −1 → {currentBid - 1}
-                      </button>
-                    )}
-                    {canIncrease && (
-                      <button onClick={() => act("rainbow9Adjust", { adjust: 1 })}
-                        style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 18 }}>
-                        +1 → {currentBid + 1}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Bidding / action UI - between table and my pill */}
-            {(isBidding || isChoosingTrump || isChoosingWerewolf ||
-              (room.phase === "bidding" && !isMyTurn) ||
-              (room.phase === "choosingWerewolf" && !isMyTurn)) && (
-              <div style={{ background: "rgba(5,8,15,0.95)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: "12px 16px", textAlign: "center", width: "100%" }}>
-                {isBidding && <>
-                  <div style={{ ...cinzel, fontSize: "clamp(10px,2.5vw,12px)", color: C.gold, letterSpacing: 1, marginBottom: 8 }}>
-                    WIE VIELE STICHE? (0–{room.round})
-                    {dealerForbidden !== null && <span style={{ color: "#F7DC6F", fontSize: "clamp(9px,2vw,11px)", display: "block", marginTop: 4 }}>⚠ {dealerForbidden} verboten</span>}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, justifyContent: "center" }}>
-                    {Array.from({ length: room.round + 1 }, (_, i) => (
-                      <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
-                        style={{ ...goldBtn(i !== dealerForbidden), padding: "10px 16px", fontSize: "clamp(16px,4vw,22px)", opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 48 }}>
-                        {i}
-                      </button>
-                    ))}
-                  </div>
-                </>}
-                {isChoosingTrump && <>
-                  <div style={{ ...cinzel, fontSize: 12, color: C.gold, marginBottom: 10 }}>TRUMPFFARBE WÄHLEN</div>
-                  <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                    {SUITS.map(s => <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 14px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>)}
-                  </div>
-                </>}
-                {isChoosingWerewolf && <>
-                  <div style={{ ...cinzel, fontSize: 12, color: C.gold, marginBottom: 10 }}>🐺 STICHFARBE WÄHLEN</div>
-                  <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                    {SUITS.map(s => <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 14px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>)}
-                  </div>
-                </>}
-                {room.phase === "bidding" && !isMyTurn && (
-                  <div style={{ ...cinzel, fontSize: 12, color: C.ivoryDim }}>⏳ <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> bietet…</div>
-                )}
-                {room.phase === "choosingWerewolf" && !isMyTurn && !isChoosingWerewolf && (
-                  <div style={{ ...cinzel, fontSize: 12, color: C.ivoryDim }}>🐺 <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> wählt…</div>
-                )}
-              </div>
-            )}
-
-            {/* My pill at bottom */}
-            {mySeat && (
-              <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
-                <PlayerPill p={mySeat.player} arrow="" />
-              </div>
-            )}
-          </div>
+          </>
         );
       })()}
 
-
-      {/* Choose Werewolf Suit */}
-      {isChoosingWerewolf && (
-        <div style={{ background: "rgba(5,8,15,0.96)", border: `2px solid ${C.gold}`, borderRadius: 12, padding: 16, textAlign: "center", width: "min(460px,92vw)" }}>
-          <div style={{ fontSize: 28, marginBottom: 6 }}>🐺</div>
-          <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>STICHFARBE FÜR DIESE RUNDE WÄHLEN</div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            {SUITS.map(s => (
-              <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{
-                background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`,
-                borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, padding: "12px 16px", cursor: "pointer",
-              }}>{SUIT_SYMBOLS[s]}</button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {room.phase === "choosingWerewolf" && !isMyTurn && (
-        <div style={{ ...glass({ padding: "8px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
-          🐺 <span style={{ color: C.gold, ...cinzel }}>{players[room.current_player]?.ai_name}</span> wählt die Stichfarbe…
-        </div>
-      )}
-
-      {/* My Hand */}
-      <div style={{ paddingTop: 6, borderTop: `1px solid ${C.glassBorder}`, width: "100%", maxWidth: "100%", flexShrink: 0 }}>
-        <div style={{
-          ...cinzel,
-          fontSize: isPlaying ? "clamp(11px,2vw,13px)" : "clamp(8px,1.5vw,10px)",
-          color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.5)",
-          textAlign: "center",
-          marginBottom: 8,
-          letterSpacing: 2,
-          padding: isPlaying ? "8px 20px" : "2px 0",
-          background: isPlaying ? `linear-gradient(135deg, rgba(61,28,110,0.95), rgba(90,45,153,0.85))` : "transparent",
-          borderRadius: isPlaying ? 20 : 0,
-          border: isPlaying ? `2px solid ${C.gold}` : "none",
-          boxShadow: isPlaying ? `0 0 16px rgba(201,168,76,0.4)` : "none",
-          animation: isPlaying ? "pulse 2s infinite" : "none",
-        }}>
-          {isPlaying ? "✦ DU BIST DRAN ✦" : room.phase === "playing" ? `⏳ ${players[room.current_player]?.ai_name} ist dran` : "DEINE KARTEN"}
-        </div>
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center", marginBottom: 10 }}>
+      {/* Hand - fixed at bottom, always visible */}
+      <div style={{
+        position: "absolute" as const, bottom: 0, left: 0, right: 0, zIndex: 10,
+        paddingBottom: "max(10px, env(safe-area-inset-bottom))",
+        paddingTop: 30,
+        background: "linear-gradient(180deg, rgba(5,8,15,0) 0%, rgba(5,8,15,0.85) 35%, rgba(5,8,15,0.97) 100%)",
+      }}>
+        <div style={{ display: "flex", gap: "clamp(3px,1vw,6px)", flexWrap: "nowrap", justifyContent: "center", overflowX: "auto", padding: "0 8px 8px", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
           {myHand.map((card: any) => (
             <CardView key={card.id} card={card}
               selected={selected === card.id}
@@ -1466,43 +1251,208 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           ))}
         </div>
         {isPlaying && selected && (
-          <div style={{ textAlign: "center" }}>
+          <div style={{ textAlign: "center", marginTop: 6 }}>
             <button onClick={() => {
               const card = myHand.find((c:any) => c.id === selected);
               if (card?.specialType === "wizardfool") {
                 setSpecialAction({ type: "wizardfool", cardId: selected });
                 setSelected(null);
               } else if (card?.specialType === "rainbow7") {
-                // Rainbow 7½ – choose suit first
                 setSpecialAction({ type: "rainbow7suit", cardId: selected });
                 setSelected(null);
               } else if (card?.specialType === "rainbow9") {
-                // Rainbow 9¾ – choose suit first
                 setSpecialAction({ type: "rainbow9suit", cardId: selected });
                 setSelected(null);
               } else {
                 act("playCard", { cardId: selected });
                 setSelected(null);
               }
-            }} style={{ ...goldBtn(), padding: "11px 32px" }}>
+            }} style={{ ...goldBtn(), padding: "9px 28px", fontSize: 13 }}>
               Karte ausspielen
             </button>
           </div>
         )}
       </div>
 
+      {/* ── Modal overlays: Bidding, Trump, Werewolf, 9¾, Witch ── */}
+      {(isBidding || isChoosingTrump || isChoosingWerewolf ||
+        (room.phase === "bidding" && !isMyTurn) ||
+        (room.phase === "choosingWerewolf" && !isMyTurn) ||
+        room?.pending_rainbow9 === effectiveMyIdx ||
+        room?.pending_witch === effectiveMyIdx ||
+        specialAction?.type === "witchGive" ||
+        room.phase === "witchReveal") && (
+        <div style={{
+          position: "absolute" as const, inset: 0, zIndex: 30,
+          background: "rgba(0,0,0,0.6)", backdropFilter: "blur(3px)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        }}>
+          <div style={{
+            background: "rgba(8,12,20,0.97)", border: `2px solid ${C.gold}`, borderRadius: 16,
+            padding: "20px 24px", textAlign: "center", width: "min(360px,92vw)",
+            boxShadow: `0 0 40px rgba(201,168,76,0.3)`, maxHeight: "80vh", overflowY: "auto",
+          }}>
+            {isBidding && <>
+              <div style={{ ...cinzel, fontSize: 13, color: C.gold, letterSpacing: 1, marginBottom: 10 }}>
+                WIE VIELE STICHE? (0–{room.round})
+              </div>
+              {dealerForbidden !== null && (
+                <div style={{ color: "#F7DC6F", fontSize: 11, marginBottom: 10, background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "6px 10px" }}>
+                  ⚠ Stichzwang: {dealerForbidden} ist verboten
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, justifyContent: "center" }}>
+                {Array.from({ length: room.round + 1 }, (_, i) => (
+                  <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
+                    style={{ ...goldBtn(i !== dealerForbidden), padding: "12px 18px", fontSize: 19, opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 50 }}>
+                    {i}
+                  </button>
+                ))}
+              </div>
+            </>}
+
+            {isChoosingTrump && <>
+              <div style={{ ...cinzel, fontSize: 13, color: C.gold, marginBottom: 12 }}>TRUMPFFARBE WÄHLEN</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                {SUITS.map(s => <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 14px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>)}
+              </div>
+            </>}
+
+            {isChoosingWerewolf && <>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>🐺</div>
+              <div style={{ ...cinzel, fontSize: 13, color: C.gold, marginBottom: 12 }}>STICHFARBE WÄHLEN</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                {SUITS.map(s => <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 14px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>)}
+              </div>
+            </>}
+
+            {room.phase === "bidding" && !isMyTurn && !isBidding && (
+              <div style={{ ...cinzel, fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
+                ⏳ <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> bietet…
+              </div>
+            )}
+            {room.phase === "choosingWerewolf" && !isMyTurn && !isChoosingWerewolf && (
+              <div style={{ ...cinzel, fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
+                🐺 <span style={{ color: C.gold }}>{players[room.current_player]?.ai_name}</span> wählt Stichfarbe…
+              </div>
+            )}
+
+            {/* 9¾ Adjust */}
+            {room?.pending_rainbow9 === effectiveMyIdx && (() => {
+              const currentBid = me?.bid ?? 0;
+              const tricksWon = me?.tricks_won ?? 0;
+              const canDecrease = currentBid > 0 && tricksWon !== currentBid;
+              return (
+                <>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>🚂</div>
+                  <div style={{ ...cinzel, fontSize: 13, color: "#AED6F1", marginBottom: 6 }}>
+                    GLEIS 9¾ – VORHERSAGE ANPASSEN (Pflicht)
+                  </div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 12 }}>
+                    Aktuell: <span style={{ color: C.gold, fontWeight: 700 }}>{currentBid}</span>
+                    {tricksWon === currentBid && <span style={{ color: "#F7DC6F", display: "block", fontSize: 11 }}>⚠ Du bist im Ziel – nur +1 möglich</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                    {canDecrease && (
+                      <button onClick={() => act("rainbow9Adjust", { adjust: -1 })}
+                        style={{ ...goldBtn(false), flex: 1, padding: "12px 0", fontSize: 17 }}>
+                        −1 → {currentBid - 1}
+                      </button>
+                    )}
+                    <button onClick={() => act("rainbow9Adjust", { adjust: 1 })}
+                      style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 17 }}>
+                      +1 → {currentBid + 1}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* Hexe – Karte tauschen */}
+            {room?.pending_witch === effectiveMyIdx && (() => {
+              const trickCards = (room.last_trick_cards ?? []).filter((t:any) =>
+                t.card.specialType !== "witch" && t.card.id !== "witch"
+              );
+              return (
+                <>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>🧹</div>
+                  <div style={{ ...cinzel, fontSize: 12, color: "#E74C3C", marginBottom: 8 }}>
+                    BELLATRIX – KARTE AUS DEM STICH NEHMEN
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginBottom: 10 }}>
+                    Wähle eine Karte die du auf deine Hand nimmst (dafür gibst du eine ab)
+                  </div>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" as const }}>
+                    {trickCards.map((t:any) => (
+                      <div key={t.card.id} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", marginBottom: 3 }}>{players[t.playerIndex]?.ai_name}</div>
+                        <CardView card={t.card} onClick={() => {
+                          setSpecialAction({ type: "witchGive", takeCardId: t.card.id });
+                        }} />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* Hexe – Karte abgeben (Step 2) */}
+            {specialAction?.type === "witchGive" && (
+              <>
+                <div style={{ ...cinzel, fontSize: 12, color: "#E74C3C", marginBottom: 8 }}>
+                  WELCHE KARTE GIBST DU AB?
+                </div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" as const }}>
+                  {myHand.map((c:any) => (
+                    <CardView key={c.id} card={c} onClick={() => {
+                      act("playSpecial", {
+                        specialAction: "witch",
+                        takeCardId: specialAction.takeCardId,
+                        giveCardId: c.id
+                      });
+                      setSpecialAction(null);
+                    }} />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Hexe Tausch Anzeige */}
+            {room.phase === "witchReveal" && room.witch_swap && (
+              <>
+                <div style={{ fontSize: 18, marginBottom: 6 }}>🧹</div>
+                <div style={{ ...cinzel, fontSize: 12, color: "#E74C3C", marginBottom: 10 }}>
+                  {room.witch_swap.playerName} hat getauscht
+                </div>
+                <div style={{ display: "flex", gap: 16, justifyContent: "center", alignItems: "center" }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>ABGEGEBEN</div>
+                    <CardView card={room.witch_swap.gave} small />
+                  </div>
+                  <div style={{ fontSize: 20, color: C.gold }}>⇄</div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>GENOMMEN</div>
+                    <CardView card={room.witch_swap.took} small />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {showScoresheet && <Scoresheet />}
       <SpecialOverlay />
 
       {/* Error Toast */}
       {error && (
-        <div onClick={() => setError("")} style={{ position: "fixed", top: "max(16px, env(safe-area-inset-top))", left: "50%", transform: "translateX(-50%)", background: `${C.error}EE`, color: "#fff", padding: "10px 18px", borderRadius: 8, fontSize: 13, zIndex: 100, ...cinzel, cursor: "pointer", whiteSpace: "nowrap", maxWidth: "90vw", textAlign: "center" }}>
+        <div onClick={() => setError("")} style={{ position: "absolute" as const, top: "max(50px, env(safe-area-inset-top))", left: "50%", transform: "translateX(-50%)", background: `${C.error}EE`, color: "#fff", padding: "10px 18px", borderRadius: 8, fontSize: 13, zIndex: 100, ...cinzel, cursor: "pointer", whiteSpace: "nowrap" as const, maxWidth: "90vw", textAlign: "center" }}>
           {error} <span style={{ opacity: 0.7, fontSize: 11 }}>✕</span>
         </div>
       )}
 
       {/* Log */}
-      <div ref={logRef} className="log-panel" style={{ ...glass({ padding: 8 }), fontSize: "var(--text-xs)", color: C.ivoryDim, display: showLog ? "block" : "none" }}>
+      <div ref={logRef} className="log-panel" style={{ ...glass({ padding: 8 }), fontSize: "var(--text-xs)", color: C.ivoryDim, display: showLog ? "block" : "none", position: "absolute" as const, zIndex: 20 }}>
         {log.map((l: string, i: number) => (
           <div key={i} style={{ padding: "2px 0", borderBottom: "1px solid rgba(201,168,76,0.06)" }}>{l}</div>
         ))}
