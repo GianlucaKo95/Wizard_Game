@@ -621,9 +621,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 callGameAction(roomId, "witchRevealDone", {});
               }, 4000);
             }
-            if (newRoom.phase !== room?.phase) {
-              setModalMinimized(false);
-            }
           }
         });
       })
@@ -1066,14 +1063,25 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   return (
     <div style={{
       height: "100dvh", width: "100%", overflow: "hidden", position: "relative" as const,
-      background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
+      background: C.midnight,
     }}>
+      {/* Status bar safe-area strip - matches table color */}
+      <div style={{
+        position: "absolute" as const, top: 0, left: 0, right: 0, height: "env(safe-area-inset-top)",
+        background: "#0d2818", zIndex: 16,
+      }} />
+
+      {/* Green table - fills below safe area */}
+      <div style={{
+        position: "absolute" as const, top: "env(safe-area-inset-top)", left: 0, right: 0, bottom: 0,
+        background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
+      }}>
 
       {/* Header - floats over table */}
       <div style={{
         position: "absolute" as const, top: 0, left: 0, right: 0, zIndex: 15,
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        padding: "max(8px, env(safe-area-inset-top)) 12px 6px 12px",
+        padding: "8px 12px 6px 12px",
         background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%)",
       }}>
         <div style={{ ...cinzel, fontSize: "clamp(10px,2vw,12px)", color: "rgba(255,255,255,0.65)" }}>RUNDE {room.round}/{room.max_rounds}</div>
@@ -1092,12 +1100,12 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
         const seatPos = (position: string): React.CSSProperties => {
           switch (position) {
-            case "top":         return { top: "clamp(56px,11vh,72px)", left: "50%", transform: "translateX(-50%)" };
-            case "top-left":    return { top: "clamp(56px,11vh,72px)", left: "26%", transform: "translateX(-50%)" };
-            case "top-right":   return { top: "clamp(56px,11vh,72px)", left: "74%", transform: "translateX(-50%)" };
-            case "left":        return { top: "44%", left: "5%",  transform: "translateY(-50%)" };
-            case "right":       return { top: "44%", left: "95%", transform: "translate(-100%,-50%)" };
-            default:            return { top: "clamp(56px,11vh,72px)", left: "50%", transform: "translateX(-50%)" };
+            case "top":         return { top: "clamp(78px,13vh,96px)", left: "50%", transform: "translateX(-50%)" };
+            case "top-left":    return { top: "clamp(78px,13vh,96px)", left: "26%", transform: "translateX(-50%)" };
+            case "top-right":   return { top: "clamp(78px,13vh,96px)", left: "74%", transform: "translateX(-50%)" };
+            case "left":        return { top: "46%", left: "5%",  transform: "translateY(-50%)" };
+            case "right":       return { top: "46%", left: "95%", transform: "translate(-100%,-50%)" };
+            default:            return { top: "clamp(78px,13vh,96px)", left: "50%", transform: "translateX(-50%)" };
           }
         };
 
@@ -1149,7 +1157,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               const mySeat = seats.find((s:any) => s.position === "bottom");
               if (!mySeat) return null;
               return (
-                <div style={{ position: "absolute" as const, bottom: "clamp(195px,30vh,230px)", left: "50%", transform: "translateX(-50%)", zIndex: 5 }}>
+                <div style={{ position: "absolute" as const, bottom: "33%", left: "50%", transform: "translateX(-50%)", zIndex: 5 }}>
                   <PlayerSeat p={mySeat.player} position="bottom" />
                 </div>
               );
@@ -1157,7 +1165,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
             {/* Trumpf - always visible, fixed corner */}
             {room.trump_card && (
-              <div style={{ position: "absolute" as const, bottom: "clamp(150px,24vh,180px)", left: "5%", textAlign: "center", zIndex: 4 }}>
+              <div style={{ position: "absolute" as const, bottom: "26%", left: "5%", textAlign: "center", zIndex: 4 }}>
                 <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
                 <div style={{ ...cinzel, fontSize: 7, color: C.gold, marginTop: 2 }}>TRUMPF</div>
                 {room.trump_suit && <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 11 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</div>}
@@ -1166,7 +1174,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             )}
 
             {/* Trick cards - center of table, positional */}
-            <div style={{ position: "absolute" as const, top: "32%", left: "50%", transform: "translate(-50%,-50%)", width: "70%", height: "32%", zIndex: 3 }}>
+            <div style={{ position: "absolute" as const, top: "45%", left: "50%", transform: "translate(-50%,-50%)", width: "72%", height: "24%", zIndex: 3 }}>
               {trick.length === 0 && room.phase === "playing" && (
                 <div style={{ position: "absolute" as const, top: "50%", left: "50%", transform: "translate(-50%,-50%)", color: "rgba(255,255,255,0.25)", fontSize: 11, textAlign: "center", whiteSpace: "nowrap" as const }}>
                   {players[room.current_player]?.ai_name} beginnt…
@@ -1220,7 +1228,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             </div>
 
             {/* "Du bist dran" indicator above hand */}
-            <div style={{ position: "absolute" as const, bottom: "clamp(128px,20vh,150px)", left: 0, right: 0, textAlign: "center", zIndex: 4 }}>
+            <div style={{ position: "absolute" as const, bottom: "21%", left: 0, right: 0, textAlign: "center", zIndex: 4 }}>
               <span style={{
                 ...cinzel,
                 fontSize: isPlaying ? "clamp(10px,2vw,12px)" : "clamp(8px,1.5vw,10px)",
@@ -1289,7 +1297,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         room.phase === "witchReveal") && (
         modalMinimized ? (
           <button onClick={() => setModalMinimized(false)} style={{
-            position: "absolute" as const, top: "clamp(50px,9vh,64px)", left: "50%", transform: "translateX(-50%)", zIndex: 30,
+            position: "absolute" as const, top: "max(40px, env(safe-area-inset-top))", left: "50%", transform: "translateX(-50%)", zIndex: 35,
             ...goldBtn(true), padding: "8px 18px", fontSize: 12, display: "flex", alignItems: "center", gap: 6,
             boxShadow: `0 0 20px rgba(201,168,76,0.5)`, animation: "pulse 2s infinite",
           }}>
@@ -1486,6 +1494,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         {log.map((l: string, i: number) => (
           <div key={i} style={{ padding: "2px 0", borderBottom: "1px solid rgba(201,168,76,0.06)" }}>{l}</div>
         ))}
+      </div>
       </div>
     </div>
   );
