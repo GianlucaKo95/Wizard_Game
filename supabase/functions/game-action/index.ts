@@ -155,6 +155,11 @@ function addLog(room, msg) {
   room.log = [msg, ...room.log].slice(0, 30);
 }
 
+function suitDot(suit) {
+  const dots = { red: "🔴", blue: "🔵", green: "🟢", yellow: "🟡" };
+  return dots[suit] ?? suit ?? "–";
+}
+
 function cardLabel(card) {
   if (!card) return "?";
   if (card.type === "wizard") return "🧙";
@@ -424,7 +429,7 @@ async function dealRound(supabase, roomId, room, players) {
     const wPhase = werewolfHolder.is_ai ? "bidding" : "choosingWerewolf";
     const wSuit = werewolfHolder.is_ai ? SUITS[Math.floor(Math.random() * 4)] : null;
     const wPlayer = werewolfHolder.is_ai ? (room.dealer + 1) % players.length : werewolfHolder.player_index;
-    if (werewolfHolder.is_ai) addLog(room, `${werewolfHolder.ai_name} wählt Stichfarbe: ${wSuit}`);
+    if (werewolfHolder.is_ai) addLog(room, `${werewolfHolder.ai_name} wählt Stichfarbe: ${suitDot(wSuit)}`);
     await supabase.from("rooms").update({
       round: room.round, max_rounds: room.max_rounds, dealer: room.dealer,
       trump_card: werewolfCard, trump_suit: null,
@@ -446,15 +451,16 @@ async function dealRound(supabase, roomId, room, players) {
   let currentPlayer = nextBidder;
   let trumpSuit = trumpCard?.suit ?? null;
 
-  if (trumpCard?.type === "wizard") {
+  if (trumpCard?.type === "wizard" || trumpCard?.specialType === "wizardfool") {
     phase = "choosingTrump";
     currentPlayer = room.dealer;
-    addLog(room, `Runde ${room.round} – Zauberer: Dealer wählt Trumpf`);
+    const label = trumpCard?.specialType === "wizardfool" ? "Zauberernarr (als Zauberer)" : "Zauberer";
+    addLog(room, `Runde ${room.round} – ${label}: Dealer wählt Trumpf`);
     if (players[room.dealer].is_ai) {
       trumpSuit = SUITS[Math.floor(Math.random() * 4)];
       phase = "bidding";
       currentPlayer = nextBidder;
-      addLog(room, `${players[room.dealer].ai_name} wählt Trumpf: ${trumpSuit}`);
+      addLog(room, `${players[room.dealer].ai_name} wählt Trumpf: ${suitDot(trumpSuit)}`);
     }
   } else if (trumpCard?.specialType === "werewolf") {
     phase = "choosingWerewolf";
@@ -474,7 +480,7 @@ async function dealRound(supabase, roomId, room, players) {
       return await tickAIBids(supabase, roomId, { ...room, phase: "bidding", current_player: nextBidder, werewolf_suit: suit }, dealtPlayers);
     }
   } else {
-    addLog(room, `Runde ${room.round} – Trumpf: ${trumpCard ? (trumpCard.type === "fool" ? "Kein Trumpf" : (trumpCard.suit ?? "–")) : "–"}`);
+    addLog(room, `Runde ${room.round} – Trumpf: ${trumpCard ? (trumpCard.type === "fool" ? "Kein Trumpf" : suitDot(trumpCard.suit)) : "–"}`);
   }
 
   await supabase.from("rooms").update({
@@ -621,7 +627,7 @@ serve(async (req) => {
     case "chooseTrump": {
       if (room.phase !== "choosingTrump") return json({ error: "Falscher Status" }, 400);
       if (room.current_player !== callerIdx) return json({ error: "Nicht dein Zug" }, 403);
-      addLog(room, `Trumpf gewählt: ${body.suit}`);
+      addLog(room, `Trumpf gewählt: ${suitDot(body.suit)}`);
       const nextBidder = (room.dealer + 1) % players.length;
       await supabase.from("rooms").update({ trump_suit: body.suit, phase: "bidding", current_player: nextBidder, log: room.log }).eq("id", roomId);
       return await tickAIBids(supabase, roomId, { ...room, trump_suit: body.suit, phase: "bidding", current_player: nextBidder, log: room.log }, players);
@@ -630,7 +636,7 @@ serve(async (req) => {
     case "chooseWerewolf": {
       if (room.phase !== "choosingWerewolf") return json({ error: "Falscher Status" }, 400);
       if (room.current_player !== callerIdx) return json({ error: "Nicht dein Zug" }, 403);
-      addLog(room, `🐺 Stichfarbe gewählt: ${body.suit}`);
+      addLog(room, `🐺 Stichfarbe gewählt: ${suitDot(body.suit)}`);
       const nextBidder = (room.dealer + 1) % players.length;
       await supabase.from("rooms").update({ werewolf_suit: body.suit, phase: "bidding", current_player: nextBidder, log: room.log }).eq("id", roomId);
       return await tickAIBids(supabase, roomId, { ...room, werewolf_suit: body.suit, phase: "bidding", current_player: nextBidder, log: room.log }, players);

@@ -613,7 +613,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 setTimeout(() => {
                   clearTrickPending.current = false;
                   callGameAction(roomId, "clearTrick", {});
-                }, 5000);
+                }, 7500);
               }
             }
             if (newRoom.phase === "witchReveal") {
