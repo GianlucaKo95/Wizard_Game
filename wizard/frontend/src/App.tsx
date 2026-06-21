@@ -1059,6 +1059,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   const isChoosingTrump = room.phase === "choosingTrump" && isMyTurn;
   const isChoosingWerewolf = room.phase === "choosingWerewolf" && isMyTurn;
   const isPlaying = room.phase === "playing" && isMyTurn && !loading;
+  const seats = getSeatPositions(players, effectiveMyIdx);
 
   return (
     <div style={{
@@ -1095,7 +1096,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
       {/* Full screen table with seated players */}
       {(() => {
-        const seats = getSeatPositions(players, effectiveMyIdx);
         const n = players.length;
 
         const seatPos = (position: string): React.CSSProperties => {
@@ -1114,9 +1114,11 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           const hasBid = p.bid !== null;
           const count = Array.isArray(p.hand) ? p.hand.length : 0;
           const hasPlayed = trick.some((t:any) => t.playerIndex === p.player_index);
+          const isStatic = position === "static";
           return (
             <div style={{
-              position: "absolute" as const, ...seatPos(position), zIndex: 5,
+              position: isStatic ? "relative" as const : "absolute" as const,
+              ...(isStatic ? {} : seatPos(position)), zIndex: 5,
               background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
               border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
               boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
@@ -1151,17 +1153,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             {seats.filter((s:any) => s.position !== "bottom").map((s:any) => (
               <PlayerSeat key={s.player.id} p={s.player} position={s.position} />
             ))}
-
-            {/* My seat - bottom, above hand */}
-            {(() => {
-              const mySeat = seats.find((s:any) => s.position === "bottom");
-              if (!mySeat) return null;
-              return (
-                <div style={{ position: "absolute" as const, bottom: "33%", left: "50%", transform: "translateX(-50%)", zIndex: 5 }}>
-                  <PlayerSeat p={mySeat.player} position="bottom" />
-                </div>
-              );
-            })()}
 
             {/* Trumpf - always visible, fixed corner */}
             {room.trump_card && (
@@ -1227,33 +1218,71 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               )}
             </div>
 
-            {/* "Du bist dran" indicator above hand */}
-            <div style={{ position: "absolute" as const, bottom: "21%", left: 0, right: 0, textAlign: "center", zIndex: 4 }}>
-              <span style={{
-                ...cinzel,
-                fontSize: isPlaying ? "clamp(10px,2vw,12px)" : "clamp(8px,1.5vw,10px)",
-                color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.4)",
-                letterSpacing: 1,
-                padding: isPlaying ? "5px 16px" : "0",
-                background: isPlaying ? `linear-gradient(135deg, rgba(61,28,110,0.9), rgba(90,45,153,0.8))` : "transparent",
-                borderRadius: isPlaying ? 16 : 0,
-                border: isPlaying ? `1.5px solid ${C.gold}` : "none",
-                boxShadow: isPlaying ? `0 0 12px rgba(201,168,76,0.4)` : "none",
-              }}>
-                {isPlaying ? "✦ DU BIST DRAN ✦" : room.phase === "playing" ? `⏳ ${players[room.current_player]?.ai_name} ist dran` : ""}
-              </span>
-            </div>
           </>
         );
       })()}
 
-      {/* Hand - fixed at bottom, always visible */}
+      {/* Bottom UI stack - my seat, turn indicator, hand - all in one flex flow, never overlapping */}
       <div style={{
         position: "absolute" as const, bottom: 0, left: 0, right: 0, zIndex: 10,
-        paddingBottom: "max(10px, env(safe-area-inset-bottom))",
-        paddingTop: 30,
-        background: "linear-gradient(180deg, rgba(5,8,15,0) 0%, rgba(5,8,15,0.85) 35%, rgba(5,8,15,0.97) 100%)",
+        display: "flex", flexDirection: "column" as const, alignItems: "center",
+        paddingBottom: "max(8px, env(safe-area-inset-bottom))",
+        background: "linear-gradient(180deg, rgba(5,8,15,0) 0%, rgba(5,8,15,0.55) 45%, rgba(5,8,15,0.82) 100%)",
       }}>
+        {/* My seat pill - standalone markup, not absolutely positioned */}
+        {(() => {
+          const mySeat = seats.find((s:any) => s.position === "bottom");
+          if (!mySeat) return null;
+          const p = mySeat.player;
+          const isActive = room.current_player === p.player_index;
+          const hasBid = p.bid !== null;
+          const hasPlayed = trick.some((t:any) => t.playerIndex === p.player_index);
+          return (
+            <div style={{
+              marginBottom: 4,
+              background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
+              border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
+              boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
+              borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,15vw,110px)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2, justifyContent: "center" }}>
+                <span style={{ fontSize: 10 }}>👤</span>
+                <span style={{ ...cinzel, fontSize: "clamp(9px,1.8vw,11px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const }}>
+                  {p.ai_name}
+                </span>
+                {hasPlayed && <span style={{ fontSize: 9, color: C.gold }}>✓</span>}
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "baseline", justifyContent: "center" }}>
+                <span style={{ ...cinzel, fontSize: "clamp(11px,2vw,14px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
+                {hasBid ? (
+                  <span style={{ ...cinzel, fontSize: "clamp(9px,1.6vw,11px)", color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : "rgba(255,255,255,0.7)" }}>
+                    {p.tricks_won}/{p.bid}
+                  </span>
+                ) : room.phase === "bidding" ? (
+                  <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>…</span>
+                ) : null}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Turn indicator */}
+        <div style={{ textAlign: "center", marginBottom: 6, minHeight: 22 }}>
+          <span style={{
+            ...cinzel,
+            fontSize: isPlaying ? "clamp(10px,2vw,12px)" : "clamp(8px,1.5vw,10px)",
+            color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.45)",
+            letterSpacing: 1,
+            padding: isPlaying ? "5px 16px" : "0",
+            background: isPlaying ? `linear-gradient(135deg, rgba(61,28,110,0.9), rgba(90,45,153,0.8))` : "transparent",
+            borderRadius: isPlaying ? 16 : 0,
+            border: isPlaying ? `1.5px solid ${C.gold}` : "none",
+            boxShadow: isPlaying ? `0 0 12px rgba(201,168,76,0.4)` : "none",
+          }}>
+            {isPlaying ? "✦ DU BIST DRAN ✦" : room.phase === "playing" ? `⏳ ${players[room.current_player]?.ai_name} ist dran` : ""}
+          </span>
+        </div>
+
         <div style={{ display: "flex", gap: "clamp(3px,1vw,6px)", flexWrap: "nowrap", justifyContent: "center", overflowX: "auto", padding: "0 8px 8px", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
           {myHand.map((card: any) => (
             <CardView key={card.id} card={card}
@@ -1318,14 +1347,14 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         }}>
           <div style={{
             background: "rgba(8,12,20,0.97)", border: `2px solid ${C.gold}`, borderRadius: 16,
-            padding: "20px 24px", textAlign: "center", width: "min(360px,92vw)",
+            padding: "36px 24px 20px 24px", textAlign: "center", width: "min(360px,92vw)",
             boxShadow: `0 0 40px rgba(201,168,76,0.3)`, maxHeight: "80vh", overflowY: "auto",
             position: "relative" as const,
           }}>
             <button onClick={() => setModalMinimized(true)} style={{
               position: "absolute" as const, top: 8, right: 8, background: "rgba(255,255,255,0.08)",
               border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.6)",
-              borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer",
+              borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer", zIndex: 2,
             }} title="Tisch & Handkarten ansehen">
               👁 Tisch ansehen
             </button>
