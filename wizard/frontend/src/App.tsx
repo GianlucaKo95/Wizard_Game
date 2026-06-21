@@ -1109,22 +1109,33 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           }
         };
 
+        const isIndianPoker = room.round === 1;
+
         const PlayerSeat = ({ p, position }: { p: any; position: string }) => {
           const isActive = room.current_player === p.player_index;
           const hasBid = p.bid !== null;
           const count = Array.isArray(p.hand) ? p.hand.length : 0;
           const hasPlayed = trick.some((t:any) => t.playerIndex === p.player_index);
           const isStatic = position === "static";
+          const isMe = p.player_index === effectiveMyIdx;
+          const visibleCard = isIndianPoker && !isMe && Array.isArray(p.hand) && p.hand.length > 0 ? p.hand[0] : null;
           return (
             <div style={{
               position: isStatic ? "relative" as const : "absolute" as const,
               ...(isStatic ? {} : seatPos(position)), zIndex: 5,
-              background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
-              border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
-              boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
-              borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,15vw,110px)",
-              transition: "all 0.3s ease",
+              display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 4,
             }}>
+              {/* Indian Poker: show this opponent's card visibly above their pill */}
+              {visibleCard && (
+                <CardView card={visibleCard} small />
+              )}
+              <div style={{
+                background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
+                border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
+                boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
+                borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,15vw,110px)",
+                transition: "all 0.3s ease",
+              }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
                 <span style={{ fontSize: 10 }}>{p.is_ai ? "🤖" : "👤"}</span>
                 <span style={{ ...cinzel, fontSize: "clamp(9px,1.8vw,11px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis", maxWidth: 70 }}>
@@ -1142,6 +1153,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                   <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>…</span>
                 ) : null}
                 {p.player_index !== effectiveMyIdx && <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginLeft: "auto" }}>🂠{count}</span>}
+              </div>
               </div>
             </div>
           );
@@ -1288,10 +1300,18 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             <CardView key={card.id} card={card}
               selected={selected === card.id}
               disabled={!isPlaying}
+              faceDown={room.round === 1}
               onClick={isPlaying ? () => setSelected(card.id === selected ? null : card.id) : undefined}
             />
           ))}
         </div>
+        {room.round === 1 && (
+          <div style={{ textAlign: "center", marginBottom: 4 }}>
+            <span style={{ ...cinzel, fontSize: "clamp(8px,1.5vw,10px)", color: "rgba(255,255,255,0.4)", letterSpacing: 1 }}>
+              🔮 Indianer-Poker: Deine Karte bleibt verdeckt
+            </span>
+          </div>
+        )}
         {isPlaying && selected && (
           <div style={{ textAlign: "center", marginTop: 6 }}>
             <button onClick={() => {

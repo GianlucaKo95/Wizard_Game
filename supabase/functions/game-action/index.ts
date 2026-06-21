@@ -10,7 +10,7 @@ const corsHeaders = {
 
 const SUITS = ["red","blue","green","yellow"];
 
-function buildDeck(edition) {
+function buildDeck(edition, excludeWerewolf = false) {
   const deck = [];
   for (const suit of SUITS)
     for (let v = 1; v <= 13; v++)
@@ -21,7 +21,9 @@ function buildDeck(edition) {
     deck.push({ id: "dragon",     type: "special", specialType: "dragon",     suit: null, value: 15 });
     deck.push({ id: "fairy",      type: "special", specialType: "fairy",      suit: null, value: -1 });
     deck.push({ id: "witch",      type: "special", specialType: "witch",      suit: null, value: 0  });
-    deck.push({ id: "werewolf",   type: "special", specialType: "werewolf",   suit: null, value: 0  });
+    if (!excludeWerewolf) {
+      deck.push({ id: "werewolf", type: "special", specialType: "werewolf",   suit: null, value: 0  });
+    }
     deck.push({ id: "vampire",    type: "special", specialType: "vampire",    suit: null, value: 0  });
     deck.push({ id: "bomb",       type: "special", specialType: "bomb",       suit: null, value: 0  });
     deck.push({ id: "rainbow7",   type: "special", specialType: "rainbow7",   suit: null, value: 7.5 });
@@ -109,14 +111,37 @@ function forbiddenDealerBid(bids, dealerIdx, round) {
   return f >= 0 && f <= round ? f : null;
 }
 
-function aiBid(hand) {
+function aiBid(hand, trumpSuit = null, werewolfSuit = null) {
+  const effectiveTrump = werewolfSuit ?? trumpSuit;
   let e = 0;
   for (const c of hand) {
-    if (c.type === "wizard" || c.specialType === "dragon") e += 1;
-    else if (c.value >= 12) e += 0.7;
-    else if (c.value >= 10) e += 0.35;
+    if (c.type === "wizard") {
+      e += 0.95; // near-guaranteed trick winner (unless beaten by an earlier wizard)
+    } else if (c.specialType === "dragon") {
+      e += 0.9; // beats everything except fairy
+    } else if (c.specialType === "fairy") {
+      e += 0.05; // almost always loses
+    } else if (c.specialType === "bomb" || c.specialType === "rainbow7" || c.specialType === "rainbow9" || c.specialType === "witch" || c.specialType === "wizardfool") {
+      e += 0.3; // situational, hard to predict
+    } else if (c.type === "fool") {
+      e += 0; // never wins (unless all fools)
+    } else if (c.type === "number") {
+      const isTrump = effectiveTrump && c.suit === effectiveTrump;
+      if (isTrump) {
+        // Trump cards are much stronger - high trump nearly guarantees a trick
+        if (c.value >= 11) e += 0.85;
+        else if (c.value >= 8) e += 0.6;
+        else if (c.value >= 5) e += 0.35;
+        else e += 0.15;
+      } else {
+        // Non-trump cards only win if high enough and no one trumps/overbids
+        if (c.value >= 13) e += 0.45;
+        else if (c.value >= 11) e += 0.25;
+        else if (c.value >= 9) e += 0.1;
+      }
+    }
   }
-  return Math.round(e);
+  return Math.max(0, Math.round(e));
 }
 
 function isAlwaysPlayable(c) {
@@ -175,6 +200,41 @@ function json(data, status = 200) {
   });
 }
 
+function aiBidIndianPoker(players, myIdx, trumpSuit = null, werewolfSuit = null) {
+  // In round 1 (Indian Poker), the AI cannot see its own card.
+  // It can only reason from the other players' visible cards and the trump.
+  // Heuristic: with N players and 1 card each, base chance for a single trick
+  // depends on how strong the visible opponents' cards look, plus baseline randomness
+  // representing the unknown own card.
+  const effectiveTrump = werewolfSuit ?? trumpSuit;
+  const others = players.filter((_, i) => i !== myIdx);
+
+  // Estimate the strength of the strongest visible opponent card
+  let maxOpponentStrength = 0;
+  for (const p of others) {
+    const c = (p.hand ?? [])[0];
+    if (!c) continue;
+    let s = 0;
+    if (c.type === "wizard") s = 0.95;
+    else if (c.specialType === "dragon") s = 0.9;
+    else if (c.specialType === "fairy") s = 0.05;
+    else if (c.type === "fool") s = 0;
+    else if (c.type === "number") {
+      const isTrump = effectiveTrump && c.suit === effectiveTrump;
+      s = isTrump ? (c.value / 13) * 0.85 : (c.value / 13) * 0.45;
+    } else {
+      s = 0.3; // other specials
+    }
+    maxOpponentStrength = Math.max(maxOpponentStrength, s);
+  }
+
+  // Unknown own card: assume average strength (~0.4), reduced by how strong
+  // the best visible opponent card is (can't beat a very strong visible card reliably)
+  const ownEstimate = Math.max(0.05, 0.45 - maxOpponentStrength * 0.3);
+
+  return ownEstimate >= 0.4 ? 1 : 0;
+}
+
 async function tickAIBids(supabase, roomId, room, players) {
   // Always reload fresh players to get correct bid state
   const { data: freshBidPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
@@ -185,9 +245,12 @@ async function tickAIBids(supabase, roomId, room, players) {
   players = freshPlayers;
   const startBidder = (room.dealer + 1) % players.length;
   let iterations = 0;
+  const isIndianPokerRound = room.round === 1;
 
   while (players[current]?.is_ai && iterations++ < players.length) {
-    let bid = aiBid(players[current].hand);
+    let bid = isIndianPokerRound
+      ? aiBidIndianPoker(players, current, room.trump_suit, room.werewolf_suit)
+      : aiBid(players[current].hand, room.trump_suit, room.werewolf_suit);
     const forbidden = forbiddenDealerBid(bids, room.dealer, room.round);
     if (room.dealer === current && forbidden !== null && bid === forbidden) {
       bid = bid === room.round ? 0 : bid + 1;
@@ -387,20 +450,40 @@ async function advanceTrick(supabase, roomId, room, players) {
   const roundOver = allHandsEmpty || totalTricksPlayed >= currentRound;
   console.log("[advanceTrick] totalTricksPlayed:", totalTricksPlayed, "currentRound:", currentRound, "allHandsEmpty:", allHandsEmpty, "roundOver:", roundOver);
 
-  if (roundOver) {
+  // If the 9¾ winner is an AI, resolve it automatically right away
+  if (has9 && updatedPlayers2[winnerIdx]?.is_ai) {
+    const winnerPlayer = updatedPlayers2[winnerIdx];
+    const tricksWon = winnerPlayer.tricks_won ?? 0;
+    const currentBid = winnerPlayer.bid ?? 0;
+    // If exactly on target, must go up; otherwise random direction (but never below 0)
+    let adjust = 1;
+    if (tricksWon !== currentBid) {
+      adjust = (currentBid > 0 && Math.random() < 0.5) ? -1 : 1;
+    }
+    const newBid = Math.max(0, currentBid + adjust);
+    await supabase.from("room_players").update({ bid: newBid }).eq("id", winnerPlayer.id);
+    addLog(room, `${winnerPlayer.ai_name} ändert Vorhersage auf ${newBid}`);
+    await supabase.from("rooms").update({ pending_rainbow9: null, log: room.log }).eq("id", roomId);
+    updatedPlayers2[winnerIdx] = { ...winnerPlayer, bid: newBid };
+  }
+
+  const stillPendingRainbow9 = has9 && !updatedPlayers2[winnerIdx]?.is_ai;
+
+  if (roundOver && !stillPendingRainbow9) {
     await endRound(supabase, roomId, freshRoom2 ?? room, updatedPlayers2);
-  } else if (!hasPending) {
+  } else if (!hasPending && !stillPendingRainbow9) {
     // Stay in trickEnd - client will call clearTrick after 5s delay
     // (phase is already trickEnd from the rooms update above)
   } else {
-    // Has pending actions - stay in trickEnd, client handles
+    // Has pending actions (incl. 9¾ on last trick for a human) - stay in trickEnd, client handles
+    // Round-end check happens after the pending action resolves (see rainbow9Adjust, witchRevealDone)
   }
 
   return json({ ok: true });
 }
 
 async function dealRound(supabase, roomId, room, players) {
-  const deck = shuffle(buildDeck(room.edition ?? "classic"));
+  const deck = shuffle(buildDeck(room.edition ?? "classic", room.round === 1));
   const hands = players.map(() => []);
   for (let i = 0; i < room.round; i++)
     for (let p = 0; p < players.length; p++)
@@ -790,7 +873,21 @@ serve(async (req) => {
       const newBid = Math.max(0, (callerPlayer.bid ?? 0) + (body.adjust ?? 1));
       await supabase.from("room_players").update({ bid: newBid }).eq("id", callerPlayer.id);
       addLog(room, `${callerPlayer.ai_name} ändert Vorhersage auf ${newBid}`);
-      await supabase.from("rooms").update({ pending_rainbow9: null, phase: "playing", log: room.log }).eq("id", roomId);
+      await supabase.from("rooms").update({ pending_rainbow9: null, log: room.log }).eq("id", roomId);
+
+      // Check if round is over after the prediction adjustment
+      const { data: r9Players } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+      const { data: r9Room } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+      if (r9Players && r9Room) {
+        const totalT9 = r9Players.reduce((s, p) => s + (p.tricks_won ?? 0), 0);
+        const allE9 = r9Players.every(p => (p.hand ?? []).length === 0);
+        if (allE9 || totalT9 >= r9Room.round) {
+          await endRound(supabase, roomId, r9Room, r9Players);
+          return json({ ok: true });
+        }
+      }
+
+      await supabase.from("rooms").update({ phase: "playing" }).eq("id", roomId);
       return json({ ok: true });
     }
 
