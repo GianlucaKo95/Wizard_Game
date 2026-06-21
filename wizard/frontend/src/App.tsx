@@ -1227,7 +1227,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         position: "absolute" as const, bottom: 0, left: 0, right: 0, zIndex: 10,
         display: "flex", flexDirection: "column" as const, alignItems: "center",
         paddingBottom: "max(8px, env(safe-area-inset-bottom))",
-        background: "linear-gradient(180deg, rgba(5,8,15,0) 0%, rgba(5,8,15,0.55) 45%, rgba(5,8,15,0.82) 100%)",
+        background: "transparent",
       }}>
         {/* My seat pill - standalone markup, not absolutely positioned */}
         {(() => {
@@ -1380,7 +1380,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             {isChoosingTrump && <>
               <div style={{ ...cinzel, fontSize: 13, color: C.gold, marginBottom: 12 }}>TRUMPFFARBE WÄHLEN</div>
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                {SUITS.map(s => <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 14px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>)}
+                {SUITS.map(s => <button key={s} onClick={() => act("chooseTrump", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, fontWeight: 700, padding: "10px 14px", cursor: "pointer", ...cinzel }}>{SUIT_SYMBOLS[s]}</button>)}
               </div>
             </>}
 
@@ -1388,7 +1388,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               <div style={{ fontSize: 22, marginBottom: 4 }}>🐺</div>
               <div style={{ ...cinzel, fontSize: 13, color: C.gold, marginBottom: 12 }}>STICHFARBE WÄHLEN</div>
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                {SUITS.map(s => <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 24, padding: "10px 14px", cursor: "pointer" }}>{SUIT_SYMBOLS[s]}</button>)}
+                {SUITS.map(s => <button key={s} onClick={() => act("chooseWerewolf", { suit: s })} style={{ background: `${SUIT_COLORS[s]}33`, border: `2px solid ${SUIT_COLORS[s]}`, borderRadius: 8, color: SUIT_COLORS[s], fontSize: 22, fontWeight: 700, padding: "10px 14px", cursor: "pointer", ...cinzel }}>{SUIT_SYMBOLS[s]}</button>)}
               </div>
             </>}
 

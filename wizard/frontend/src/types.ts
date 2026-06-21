@@ -63,7 +63,7 @@ export interface GameState {
 }
 
 export const SUITS: Suit[] = ["red", "blue", "green", "yellow"];
-export const SUIT_SYMBOLS: Record<Suit, string> = { red: "♥", blue: "♠", green: "♣", yellow: "♦" };
+export const SUIT_SYMBOLS: Record<Suit, string> = { red: "G", blue: "R", green: "S", yellow: "H" };
 export const SUIT_COLORS: Record<Suit, string> = {
   red: "#e63946", blue: "#457b9d", green: "#2d6a4f", yellow: "#e9c46a"
 };
