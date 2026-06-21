@@ -41,7 +41,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
   // Face down card
   if (faceDown) {
     return (
-      <div style={{ ...base, background: "#0D1B2A", border: "1px solid rgba(201,168,76,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div onClick={!disabled ? onClick : undefined} style={{ ...base, background: "#0D1B2A", border: "1px solid rgba(201,168,76,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <svg viewBox="0 0 44 66" xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", height: "100%" }}>
           <rect width="44" height="66" fill="#0D1B2A" />
           {/* Diamond pattern */}

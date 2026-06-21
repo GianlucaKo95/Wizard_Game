@@ -561,7 +561,11 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   const [passingCard, setPassingCard] = useState<string|null>(null); // for 7½
   const logRef = useRef<HTMLDivElement>(null);
 
+  const actInFlight = useRef(false);
+
   const act = useCallback(async (action: string, extra = {}) => {
+    if (actInFlight.current) return; // prevent double-submission race conditions
+    actInFlight.current = true;
     setLoading(true); setError("");
     const res = await callGameAction(roomId, action, extra);
     if (res.error) {
@@ -572,6 +576,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
       }
     }
     setLoading(false);
+    actInFlight.current = false;
   }, [roomId]);
 
   useEffect(() => {
@@ -775,7 +780,9 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
           {isHost && room.phase === "roundEnd" && (
-            <button onClick={() => act("nextRound")} style={{ ...goldBtn(), padding: "12px 28px" }}>Weiter → Runde {room.round + 1}</button>
+            <button onClick={() => act("nextRound")} disabled={loading} style={{ ...goldBtn(), padding: "12px 28px", opacity: loading ? 0.5 : 1, cursor: loading ? "default" : "pointer" }}>
+              {loading ? "…" : `Weiter → Runde ${room.round + 1}`}
+            </button>
           )}
           <button onClick={onLeave} style={{ ...goldBtn(false), padding: "8px 20px", fontSize: 13 }}>🏠 Zurück zur Startseite</button>
           {isHost && room.phase === "gameEnd" && (
