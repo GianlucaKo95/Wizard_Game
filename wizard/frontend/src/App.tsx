@@ -618,7 +618,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 setTimeout(() => {
                   clearTrickPending.current = false;
                   callGameAction(roomId, "clearTrick", {});
-                }, 7500);
+                }, 10000);
               }
             }
             if (newRoom.phase === "witchReveal") {
@@ -685,6 +685,19 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
     : (room.current_trick ?? []);
   const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
   const dealerForbidden = room.dealer === effectiveMyIdx ? forbidden : null;
+
+  // Reliably open the 7½ "pass a card" window whenever this player is pending,
+  // independent of SpecialOverlay's render flow (which early-returns when
+  // specialAction is null and would otherwise never reach the trigger code).
+  useEffect(() => {
+    if (
+      Array.isArray(room.pending_rainbow7) &&
+      room.pending_rainbow7.includes(effectiveMyIdx) &&
+      !specialAction
+    ) {
+      setSpecialAction({ type: "rainbow7pass", cardId: "rainbow7" });
+    }
+  }, [room.pending_rainbow7, effectiveMyIdx, specialAction]);
 
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
@@ -931,14 +944,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         </div>
       </div>
     );
-
-    // 9¾ pending bid adjustment (triggered by room state after trick end)
-    // rainbow9 pending handled inline below
-
-    // 7½ pending card pass – show to all players in pending list
-    if (Array.isArray(room?.pending_rainbow7) && room.pending_rainbow7.includes(effectiveMyIdx) && !specialAction) {
-      setTimeout(() => setSpecialAction({ type: "rainbow7pass", cardId: "rainbow7" }), 100);
-    }
 
     // Witch pending swap - show inline between table and my pill
     // (handled inline, not as overlay)
@@ -1302,7 +1307,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           </span>
         </div>
 
-        <div style={{ display: "flex", gap: "clamp(3px,1vw,6px)", flexWrap: "nowrap", justifyContent: "center", overflowX: "auto", padding: "0 8px 8px", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
+        <div style={{ display: "flex", gap: "clamp(3px,1vw,6px)", flexWrap: "nowrap", justifyContent: myHand.length > 6 ? "flex-start" : "center", overflowX: "auto", alignSelf: "stretch", width: "100%", maxWidth: "100vw", minWidth: 0, boxSizing: "border-box" as const, padding: "0 8px 8px", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
           {myHand.map((card: any) => (
             <CardView key={card.id} card={card}
               selected={selected === card.id}

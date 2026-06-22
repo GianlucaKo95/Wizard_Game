@@ -154,7 +154,7 @@ function aiChooseCard(hand, trick, trumpSuit, werewolfSuit = null) {
     t.card.type === "number" ||
     (["rainbow7","rainbow9"].includes(t.card.specialType) && t.card.suit)
   );
-  const led = werewolfSuit ?? ledEntry?.card.suit ?? null;
+  const led = ledEntry?.card.suit ?? null;
   const followable = led ? hand.filter(c => c.suit === led && !isAlwaysPlayable(c)) : [];
   const playable = followable.length > 0 ? followable : hand;
 
@@ -469,15 +469,16 @@ async function advanceTrick(supabase, roomId, room, players) {
 
   const stillPendingRainbow9 = has9 && !updatedPlayers2[winnerIdx]?.is_ai;
 
-  if (roundOver && !stillPendingRainbow9) {
-    await endRound(supabase, roomId, freshRoom2 ?? room, updatedPlayers2);
-  } else if (!hasPending && !stillPendingRainbow9) {
-    // Stay in trickEnd - client will call clearTrick after 5s delay
-    // (phase is already trickEnd from the rooms update above)
-  } else {
+  // Note: even if roundOver is true, we do NOT call endRound here.
+  // We stay in "trickEnd" so the last trick remains visible for the same
+  // duration as any other trick. The client's clearTrick (after its display
+  // delay) will detect roundOver and call endRound at that point - unless
+  // there's a pending human action (9¾), which must resolve first.
+  if (stillPendingRainbow9 || hasPending) {
     // Has pending actions (incl. 9¾ on last trick for a human) - stay in trickEnd, client handles
     // Round-end check happens after the pending action resolves (see rainbow9Adjust, witchRevealDone)
   }
+  // else: stay in trickEnd - client will call clearTrick after its delay, which then checks roundOver
 
   return json({ ok: true });
 }
@@ -755,7 +756,7 @@ serve(async (req) => {
         t.card.type === "number" ||
         (["rainbow7","rainbow9"].includes(t.card.specialType) && t.card.suit)
       );
-      const effectiveLedSuit = room.werewolf_suit ?? ledEntry?.card.suit ?? null;
+      const effectiveLedSuit = ledEntry?.card.suit ?? null;
       if (!isAlwaysPlayable(card) && effectiveLedSuit) {
         const canFollow = hand.some(c => c.suit === effectiveLedSuit && !isAlwaysPlayable(c));
         if (canFollow && card.suit !== effectiveLedSuit)
@@ -763,9 +764,10 @@ serve(async (req) => {
       }
 
       const isWitch = card.specialType === "witch";
+      const isRainbowChoice = (card.specialType === "rainbow7" || card.specialType === "rainbow9") && body.suit;
       const newHand = hand.filter(c => c.id !== card.id);
       await supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id);
-      const playedCard = isWitch ? { ...card, type: "fool" } : card;
+      const playedCard = isWitch ? { ...card, type: "fool" } : (isRainbowChoice ? { ...card, suit: body.suit } : card);
       const newTrick = [...room.current_trick, { card: playedCard, playerIndex: callerIdx }];
       addLog(room, `${callerPlayer.ai_name}: ${cardLabel(card)}`);
       const updPlayers = players.map((p, i) => i === callerIdx ? { ...p, hand: newHand } : p);
