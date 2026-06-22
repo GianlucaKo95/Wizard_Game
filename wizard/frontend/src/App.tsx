@@ -637,7 +637,10 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             return [...prev, payload.new].sort((a,b) => a.player_index - b.player_index);
           });
         } else if (payload.eventType === "INSERT") {
-          setPlayers(prev => [...prev, payload.new].sort((a,b) => a.player_index - b.player_index));
+          setPlayers(prev => {
+            if (prev.some(p => p.id === payload.new.id)) return prev;
+            return [...prev, payload.new].sort((a,b) => a.player_index - b.player_index);
+          });
         } else {
           refreshState();
         }
@@ -651,6 +654,16 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   }, [roomId]);
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = 0; }, [room?.log]);
+
+  // When it becomes MY turn to bid/act, re-minimize the modal so the player
+  // can first see the table/hand before opening the window themselves.
+  // This handles the case where the player opened the modal to watch KIs bid,
+  // and then the turn comes to them with the modal already open.
+  useEffect(() => {
+    if (room?.phase === "bidding" && room?.current_player === effectiveMyIdxEarly) {
+      setModalMinimized(true);
+    }
+  }, [room?.current_player, room?.phase]);
 
   // Sync myIdx whenever players changes
   useEffect(() => {
@@ -1188,7 +1201,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
                 <div style={{ ...cinzel, fontSize: 7, color: C.gold, marginTop: 2 }}>TRUMPF</div>
                 {room.trump_suit && <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 11 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</div>}
-                {room.werewolf_suit && <div style={{ fontSize: 8, color: "#F7DC6F" }}>🐺{SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</div>}
+                {room.werewolf_suit && <div style={{ color: SUIT_COLORS[room.werewolf_suit as keyof typeof SUIT_COLORS], fontSize: 11 }}>🐺 {SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</div>}
               </div>
             )}
 
