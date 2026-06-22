@@ -618,7 +618,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 setTimeout(() => {
                   clearTrickPending.current = false;
                   callGameAction(roomId, "clearTrick", {});
-                }, 10000);
+                }, 5000);
               }
             }
             if (newRoom.phase === "witchReveal") {
@@ -1101,8 +1101,8 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         padding: "8px 12px 6px 12px",
         background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%)",
       }}>
-        <div style={{ ...cinzel, fontSize: "clamp(10px,2vw,12px)", color: "rgba(255,255,255,0.65)" }}>RUNDE {room.round}/{room.max_rounds}</div>
-        <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vw,16px)", color: C.gold, letterSpacing: "clamp(2px,0.6vw,4px)" }}>🧙 WIZARD</div>
+        <div style={{ ...cinzel, fontSize: "clamp(10px,1.8vmin,18px)", color: "rgba(255,255,255,0.65)" }}>RUNDE {room.round}/{room.max_rounds}</div>
+        <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vmin,22px)", color: C.gold, letterSpacing: "clamp(2px,0.5vmin,6px)" }}>🧙 WIZARD</div>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
           <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", fontSize: 11 }} title="Log">📜</button>
           <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 7px", fontSize: 11 }} title="Spielblatt">📋</button>
@@ -1116,11 +1116,11 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
         const seatPos = (position: string): React.CSSProperties => {
           switch (position) {
-            case "top":         return { top: "clamp(78px,13vh,96px)", left: "50%", transform: "translateX(-50%)" };
-            case "top-left":    return { top: "clamp(78px,13vh,96px)", left: "26%", transform: "translateX(-50%)" };
-            case "top-right":   return { top: "clamp(78px,13vh,96px)", left: "74%", transform: "translateX(-50%)" };
-            case "left":        return { top: "46%", left: "5%",  transform: "translateY(-50%)" };
-            case "right":       return { top: "46%", left: "95%", transform: "translate(-100%,-50%)" };
+            case "top":         return { top: "clamp(78px,11vh,140px)", left: "50%", transform: "translateX(-50%)" };
+            case "top-left":    return { top: "clamp(78px,11vh,140px)", left: "22%", transform: "translateX(-50%)" };
+            case "top-right":   return { top: "clamp(78px,11vh,140px)", left: "78%", transform: "translateX(-50%)" };
+            case "left":        return { top: "46%", left: "3%",  transform: "translateY(-50%)" };
+            case "right":       return { top: "46%", left: "97%", transform: "translate(-100%,-50%)" };
             default:            return { top: "clamp(78px,13vh,96px)", left: "50%", transform: "translateX(-50%)" };
           }
         };
@@ -1149,20 +1149,20 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
                 border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
                 boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
-                borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,15vw,110px)",
+                borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,12vmin,150px)",
                 transition: "all 0.3s ease",
               }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
                 <span style={{ fontSize: 10 }}>{p.is_ai ? "🤖" : "👤"}</span>
-                <span style={{ ...cinzel, fontSize: "clamp(9px,1.8vw,11px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis", maxWidth: 70 }}>
+                <span style={{ ...cinzel, fontSize: "clamp(9px,1.6vmin,16px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis", maxWidth: "clamp(70px,10vmin,120px)" }}>
                   {p.ai_name}
                 </span>
                 {hasPlayed && <span style={{ fontSize: 9, color: C.gold, marginLeft: "auto" }}>✓</span>}
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
-                <span style={{ ...cinzel, fontSize: "clamp(11px,2vw,14px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
+                <span style={{ ...cinzel, fontSize: "clamp(11px,2vmin,18px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
                 {hasBid ? (
-                  <span style={{ ...cinzel, fontSize: "clamp(9px,1.6vw,11px)", color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : "rgba(255,255,255,0.7)" }}>
+                  <span style={{ ...cinzel, fontSize: "clamp(9px,1.5vmin,15px)", color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : "rgba(255,255,255,0.7)" }}>
                     {p.tricks_won}/{p.bid}
                   </span>
                 ) : room.phase === "bidding" ? (
@@ -1184,7 +1184,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
             {/* Trumpf - always visible, fixed corner */}
             {room.trump_card && (
-              <div style={{ position: "absolute" as const, bottom: "26%", left: "5%", textAlign: "center", zIndex: 4 }}>
+              <div style={{ position: "absolute" as const, bottom: "26%", left: "clamp(10px,3vw,40px)", textAlign: "center", zIndex: 4 }}>
                 <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
                 <div style={{ ...cinzel, fontSize: 7, color: C.gold, marginTop: 2 }}>TRUMPF</div>
                 {room.trump_suit && <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 11 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</div>}
@@ -1193,7 +1193,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             )}
 
             {/* Trick cards - center of table, positional */}
-            <div style={{ position: "absolute" as const, top: "45%", left: "50%", transform: "translate(-50%,-50%)", width: "72%", height: "24%", zIndex: 3 }}>
+            <div style={{ position: "absolute" as const, top: "44%", left: "50%", transform: "translate(-50%,-50%)", width: "60%", height: "26%", zIndex: 3 }}>
               {trick.length === 0 && room.phase === "playing" && (
                 <div style={{ position: "absolute" as const, top: "50%", left: "50%", transform: "translate(-50%,-50%)", color: "rgba(255,255,255,0.25)", fontSize: 11, textAlign: "center", whiteSpace: "nowrap" as const }}>
                   {players[room.current_player]?.ai_name} beginnt…
@@ -1271,19 +1271,19 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
               border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
               boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
-              borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,15vw,110px)",
+              borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,12vmin,150px)",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2, justifyContent: "center" }}>
                 <span style={{ fontSize: 10 }}>👤</span>
-                <span style={{ ...cinzel, fontSize: "clamp(9px,1.8vw,11px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const }}>
+                <span style={{ ...cinzel, fontSize: "clamp(9px,1.6vmin,16px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const }}>
                   {p.ai_name}
                 </span>
                 {hasPlayed && <span style={{ fontSize: 9, color: C.gold }}>✓</span>}
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "baseline", justifyContent: "center" }}>
-                <span style={{ ...cinzel, fontSize: "clamp(11px,2vw,14px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
+                <span style={{ ...cinzel, fontSize: "clamp(11px,2vmin,18px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
                 {hasBid ? (
-                  <span style={{ ...cinzel, fontSize: "clamp(9px,1.6vw,11px)", color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : "rgba(255,255,255,0.7)" }}>
+                  <span style={{ ...cinzel, fontSize: "clamp(9px,1.5vmin,15px)", color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : "rgba(255,255,255,0.7)" }}>
                     {p.tricks_won}/{p.bid}
                   </span>
                 ) : room.phase === "bidding" ? (
@@ -1298,7 +1298,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         <div style={{ textAlign: "center", marginBottom: 6, minHeight: 22 }}>
           <span style={{
             ...cinzel,
-            fontSize: isPlaying ? "clamp(10px,2vw,12px)" : "clamp(8px,1.5vw,10px)",
+            fontSize: isPlaying ? "clamp(10px,2vmin,18px)" : "clamp(8px,1.5vmin,14px)",
             color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.45)",
             letterSpacing: 1,
             padding: isPlaying ? "5px 16px" : "0",
@@ -1323,7 +1323,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         </div>
         {room.round === 1 && (
           <div style={{ textAlign: "center", marginBottom: 4 }}>
-            <span style={{ ...cinzel, fontSize: "clamp(8px,1.5vw,10px)", color: "rgba(255,255,255,0.4)", letterSpacing: 1 }}>
+            <span style={{ ...cinzel, fontSize: "clamp(8px,1.5vmin,14px)", color: "rgba(255,255,255,0.4)", letterSpacing: 1 }}>
               🔮 Indianer-Poker: Deine Karte bleibt verdeckt
             </span>
           </div>

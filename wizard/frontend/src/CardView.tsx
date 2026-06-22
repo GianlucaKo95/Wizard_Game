@@ -14,8 +14,11 @@ interface Props {
 }
 
 export const CardView = memo(function CardView({ card, onClick, selected, small, faceDown, disabled, werewolfSuit }: Props) {
-  const w = small ? 44 : 66;
-  const h = small ? 66 : 100;
+  // Responsive sizing: vmin scales relative to the smaller viewport dimension,
+  // so cards are proportional on both mobile (portrait) and desktop (landscape).
+  // clamp(min, preferred, max) keeps cards usable on all screen sizes.
+  const w = small ? "clamp(36px, 5vmin, 56px)" : "clamp(60px, 9vmin, 110px)";
+  const h = small ? "clamp(54px, 7.5vmin, 84px)" : "clamp(90px, 13.5vmin, 165px)";
 
   const base: React.CSSProperties = {
     width: w, height: h,
