@@ -664,6 +664,23 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
       .then(({ data }) => { if (data) setRoundHistory(data); });
   }, [room?.phase, room?.round]);
 
+  // Compute early so the useEffect below (which must precede all early returns) can use it
+  const myPlayerEarly = players.find((p: any) => p.user_id === session.user.id);
+  const effectiveMyIdxEarly = myPlayerEarly?.player_index ?? myIdx;
+
+  // Must be before any conditional early returns (React Hook rules)
+  // Reliably open the 7½ "pass a card" window whenever this player is pending
+  useEffect(() => {
+    if (
+      room &&
+      Array.isArray(room.pending_rainbow7) &&
+      room.pending_rainbow7.includes(effectiveMyIdxEarly) &&
+      !specialAction
+    ) {
+      setSpecialAction({ type: "rainbow7pass", cardId: "rainbow7" });
+    }
+  }, [room?.pending_rainbow7, effectiveMyIdxEarly, specialAction]);
+
   if (!room) return (
     <div style={{ ...tableStyle, justifyContent: "center" }}>
       <div style={{ ...cinzel, fontSize: 18, color: C.gold }}>Lade…</div>
@@ -685,19 +702,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
     : (room.current_trick ?? []);
   const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
   const dealerForbidden = room.dealer === effectiveMyIdx ? forbidden : null;
-
-  // Reliably open the 7½ "pass a card" window whenever this player is pending,
-  // independent of SpecialOverlay's render flow (which early-returns when
-  // specialAction is null and would otherwise never reach the trigger code).
-  useEffect(() => {
-    if (
-      Array.isArray(room.pending_rainbow7) &&
-      room.pending_rainbow7.includes(effectiveMyIdx) &&
-      !specialAction
-    ) {
-      setSpecialAction({ type: "rainbow7pass", cardId: "rainbow7" });
-    }
-  }, [room.pending_rainbow7, effectiveMyIdx, specialAction]);
 
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
