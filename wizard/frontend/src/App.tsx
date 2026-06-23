@@ -537,6 +537,7 @@ function sortHand(hand: any[]): any[] {
 // ─── Game Room ────────────────────────────────────────────────────────────────
 function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: string; session: Session; aiCount: number; edition?: string; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
+  const aiTriggerLastKey = useRef<string>("");
   const clearTrickPending = useRef(false);
   const [showLog, setShowLog] = useState(false);
   const [modalMinimized, setModalMinimized] = useState(true);
@@ -604,8 +605,12 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           if (data) {
             setPlayers(data);
             if (newRoom.phase === "playing" && data[newRoom.current_player]?.is_ai) {
-              if (!aiTriggerPending.current) {
+              // Unique key: player index + current trick length to prevent duplicate triggers
+              // for the same turn (multiple room updates fire for one state change)
+              const triggerKey = `${newRoom.current_player}-${(newRoom.current_trick ?? []).length}-${newRoom.round}`;
+              if (!aiTriggerPending.current && aiTriggerLastKey.current !== triggerKey) {
                 aiTriggerPending.current = true;
+                aiTriggerLastKey.current = triggerKey;
                 setTimeout(() => {
                   aiTriggerPending.current = false;
                   callGameAction(roomId, "triggerAI", {});
@@ -1198,10 +1203,27 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             {/* Trumpf - always visible, fixed corner */}
             {room.trump_card && (
               <div style={{ position: "absolute" as const, bottom: "26%", left: "clamp(10px,3vw,40px)", textAlign: "center", zIndex: 4 }}>
-                <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
-                <div style={{ ...cinzel, fontSize: 7, color: C.gold, marginTop: 2 }}>TRUMPF</div>
-                {room.trump_suit && <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 11 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</div>}
-                {room.werewolf_suit && <div style={{ color: SUIT_COLORS[room.werewolf_suit as keyof typeof SUIT_COLORS], fontSize: 11 }}>🐺 {SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</div>}
+                <div style={{ position: "relative" as const, display: "inline-block" }}>
+                  {/* Chosen trump color badge - shown when trump card is wizard/special with no natural suit */}
+                  {room.trump_suit && (room.trump_card.type === "wizard" || room.trump_card.specialType === "wizardfool" || room.trump_card.specialType === "vampire" || room.trump_card.specialType === "rainbow9") && (
+                    <div style={{
+                      position: "absolute" as const, top: -10, left: "50%", transform: "translateX(-50%)",
+                      background: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS],
+                      color: "#fff", borderRadius: 20, padding: "2px 8px",
+                      fontSize: "clamp(8px,1.2vmin,12px)", fontWeight: 700, ...cinzel,
+                      whiteSpace: "nowrap" as const, zIndex: 5,
+                      boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
+                    }}>
+                      {SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}
+                    </div>
+                  )}
+                  <CardView card={room.trump_card} werewolfSuit={room.werewolf_suit} />
+                </div>
+                <div style={{ ...cinzel, fontSize: "clamp(7px,1vmin,10px)", color: C.gold, marginTop: 3 }}>TRUMPF</div>
+                {room.trump_suit && !(room.trump_card.type === "wizard" || room.trump_card.specialType === "wizardfool" || room.trump_card.specialType === "vampire" || room.trump_card.specialType === "rainbow9") && (
+                  <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: "clamp(10px,1.5vmin,14px)", fontWeight: 700 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</div>
+                )}
+                {room.werewolf_suit && <div style={{ color: SUIT_COLORS[room.werewolf_suit as keyof typeof SUIT_COLORS], fontSize: "clamp(10px,1.5vmin,14px)" }}>🐺 {SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</div>}
               </div>
             )}
 
@@ -1246,6 +1268,11 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                       {isMe ? "Du" : players[t.playerIndex]?.ai_name}
                     </div>
                     <CardView card={t.card} />
+                    {t.card.specialType === "wizardfool" && (
+                      <div style={{ ...cinzel, fontSize: 7, marginTop: 2, color: t.card.type === "wizard" ? C.gold : "#95A5A6" }}>
+                        {t.card.type === "wizard" ? "🧙 Zauberer" : "🃏 Narr"}
+                      </div>
+                    )}
                   </div>
                 );
               })}
