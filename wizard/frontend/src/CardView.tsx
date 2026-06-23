@@ -82,7 +82,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
   };
 
   const house = card.suit ?? "red";
-  const houseData = HOUSES[house as keyof typeof HOUSES];
+  const houseData = (card.suit && !isWizard && !isFool) ? HOUSES[house as keyof typeof HOUSES] : null;
   const charName = CHAR_NAMES[card.value] ?? "";
   const wizChar = WIZARD_CHARS[getIndex() % 4];
   const foolChar = FOOL_CHARS[getIndex() % 4];
