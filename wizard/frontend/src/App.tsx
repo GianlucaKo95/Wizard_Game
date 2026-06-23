@@ -660,15 +660,13 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = 0; }, [room?.log]);
 
-  // When it becomes MY turn to bid/act, re-minimize the modal so the player
-  // can first see the table/hand before opening the window themselves.
-  // This handles the case where the player opened the modal to watch KIs bid,
-  // and then the turn comes to them with the modal already open.
+  // Re-minimize modal on every transition into bidding/choosingTrump phase
+  // so the player always sees the table first before opening the window.
   useEffect(() => {
-    if (room?.phase === "bidding" && room?.current_player === effectiveMyIdxEarly) {
+    if (room?.phase === "bidding" || room?.phase === "choosingTrump" || room?.phase === "choosingWerewolf") {
       setModalMinimized(true);
     }
-  }, [room?.current_player, room?.phase]);
+  }, [room?.phase, room?.round]);
 
   // Sync myIdx whenever players changes
   useEffect(() => {
