@@ -255,6 +255,8 @@ function LobbyScreen({ session }: { session: Session }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [newNameInput, setNewNameInput] = useState("");
   const username = session.user.user_metadata?.username ?? "Spieler";
   const maxAI = Math.max(0, 6 - humanCount);
   const minAI = Math.max(0, 3 - humanCount); // minimum 3 players total
@@ -352,8 +354,25 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ ...glass({ padding: "6px 14px" }), ...cinzel, fontSize: 13, color: C.ivory }}>👤 {username}</div>
         <button onClick={() => setShowStats(s => !s)} style={{ ...goldBtn(false), padding: "6px 12px" }}>📊</button>
-        <button onClick={() => { sessionStorage.removeItem("wizard_room"); supabase.auth.signOut(); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12 }}>⬚ Name ändern</button>
+        <button onClick={() => { setNewNameInput(username); setEditingName(true); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12 }}>✏️ Name ändern</button>
       </div>
+      {editingName && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" as const }}>
+          <input
+            value={newNameInput}
+            onChange={e => setNewNameInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") { const n = newNameInput.trim(); if (n) supabase.auth.updateUser({ data: { username: n } }).then(() => setEditingName(false)); }
+              if (e.key === "Escape") setEditingName(false);
+            }}
+            placeholder="Neuer Name"
+            autoFocus
+            style={{ ...cinzel, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(201,168,76,0.4)", borderRadius: 8, color: "#fff", padding: "6px 12px", fontSize: 13, outline: "none", width: 140 }}
+          />
+          <button onClick={() => { const n = newNameInput.trim(); if (n) supabase.auth.updateUser({ data: { username: n } }).then(() => setEditingName(false)); }} style={{ ...goldBtn(), padding: "6px 14px", fontSize: 12 }}>✓</button>
+          <button onClick={() => setEditingName(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12 }}>✕</button>
+        </div>
+      )}
       {showStats && <StatsScreen userId={session.user.id} onBack={() => setShowStats(false)} />}
       <GoldDivider />
     </>
