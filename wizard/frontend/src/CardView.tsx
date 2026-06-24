@@ -90,7 +90,11 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
   };
 
   const house = card.suit ?? "red";
-  const houseData = HOUSES[house as keyof typeof HOUSES];
+  // Show house sigil for number cards and for rainbow7/9 when a suit has been chosen
+  const isRainbowWithSuit = (card.specialType === "rainbow7" || card.specialType === "rainbow9") && !!card.suit;
+  const houseData = (card.suit && !isWizard && !isFool && (!isSpecial || isRainbowWithSuit))
+    ? HOUSES[house as keyof typeof HOUSES]
+    : null;
   const charName = CHAR_NAMES[card.value] ?? "";
   const wizChar = WIZARD_CHARS[getIndex() % 4];
   const foolChar = FOOL_CHARS[getIndex() % 4];
