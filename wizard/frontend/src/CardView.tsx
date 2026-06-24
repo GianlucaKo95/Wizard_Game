@@ -67,10 +67,18 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
     );
   }
 
-  // Determine which art to show
-  const isWizard = card.type === "wizard";
-  const isFool = card.type === "fool";
-  const isSpecial = card.type === "special";
+  // Determine which art to show - based on specialType/id, NOT on type
+  // (witch played as fool still shows witch art; wizardfool shows its own art regardless of choice)
+  const isWizard = card.type === "wizard" && card.specialType !== "wizardfool";
+  const isFool = card.type === "fool" && !card.specialType; // only true for actual fool cards
+  const isSpecial = card.type === "special" || !!card.specialType;
+
+  // For label: witch keeps its label, wizardfool shows Z or N based on type
+  const displayLabel = card.specialType === "wizardfool"
+    ? (card.type === "wizard" ? "Z" : "N")
+    : card.specialType === "witch"
+    ? "🧹"
+    : null;
 
   // Get wizard/fool index from card id
   const getIndex = () => {
@@ -82,7 +90,11 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
   };
 
   const house = card.suit ?? "red";
-  const houseData = HOUSES[house as keyof typeof HOUSES];
+  // Show house sigil for number cards and for rainbow7/9 when a suit has been chosen
+  const isRainbowWithSuit = (card.specialType === "rainbow7" || card.specialType === "rainbow9") && !!card.suit;
+  const houseData = (card.suit && !isWizard && !isFool && (!isSpecial || isRainbowWithSuit))
+    ? HOUSES[house as keyof typeof HOUSES]
+    : null;
   const charName = CHAR_NAMES[card.value] ?? "";
   const wizChar = WIZARD_CHARS[getIndex() % 4];
   const foolChar = FOOL_CHARS[getIndex() % 4];
@@ -91,7 +103,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
   const specialConfigs: Record<string, { label: string; color: string }> = {
     dragon:     { label: "🐉", color: "#A8C0E8" },
     fairy:      { label: "✦", color: "#D2B4DE" },
-    witch:      { label: "N", color: "#C0392B" },
+    witch:      { label: "H", color: "#C0392B" },  // H = Hexe, keeps witch art
     werewolf:   { label: "W", color: "#F7DC6F" },
     vampire:    { label: "V", color: "#9B59B6" },
     bomb:       { label: "✕", color: "#E8DAEF" },
@@ -99,11 +111,22 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
     rainbow9:   { label: "9¾", color: "#AED6F1" },
     wizardfool: { label: "?", color: "#D3A625" },
   };
-  const specialCfg = isSpecial ? specialConfigs[card.id] ?? { label: "?", color: "#fff" } : null;
+  const specialCfg = isSpecial ? specialConfigs[card.specialType ?? card.id] ?? specialConfigs[card.id] ?? { label: "?", color: "#fff" } : null;
 
-  const label = isWizard ? "Z" : isFool ? "N" : isSpecial ? (specialCfg?.label ?? "?") : String(card.value);
-  const labelColor = isWizard ? "#C9A84C" : isFool ? "#95A5A6" : isSpecial ? (specialCfg?.color ?? "#fff") : houseData?.accent ?? "#fff";
-  const cardName = isWizard ? wizChar.name : isFool ? foolChar.name : charName;
+  // Label: wizardfool shows Z or N based on how it was played; witch keeps H; others normal
+  const label = card.specialType === "wizardfool"
+    ? (card.type === "wizard" ? "Z" : "N")
+    : isWizard ? "Z"
+    : (isFool && !card.specialType) ? "N"
+    : isSpecial ? (specialCfg?.label ?? "?")
+    : String(card.value);
+  const labelColor = card.specialType === "wizardfool"
+    ? (card.type === "wizard" ? "#C9A84C" : "#95A5A6")
+    : isWizard ? "#C9A84C"
+    : (isFool && !card.specialType) ? "#95A5A6"
+    : isSpecial ? (specialCfg?.color ?? "#fff")
+    : houseData?.accent ?? "#fff";
+  const cardName = isWizard ? wizChar.name : (isFool && !card.specialType) ? foolChar.name : charName;
 
   return (
     <div
