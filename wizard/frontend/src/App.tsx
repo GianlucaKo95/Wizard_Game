@@ -581,6 +581,43 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   const [passingCard, setPassingCard] = useState<string|null>(null); // for 7½
   const logRef = useRef<HTMLDivElement>(null);
 
+  // ── Chat state ──
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const showChatRef = useRef(false);
+  useEffect(() => { showChatRef.current = showChat; if (showChat) setUnreadCount(0); }, [showChat]);
+
+  // Load chat history + subscribe to new messages
+  useEffect(() => {
+    supabase.from("room_messages").select("*").eq("room_id", roomId).order("created_at").limit(100)
+      .then(({ data }) => { if (data) setChatMessages(data); });
+    const chatCh = supabase.channel(`chat:${roomId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_messages", filter: `room_id=eq.${roomId}` }, payload => {
+        setChatMessages(prev => prev.some(m => m.id === (payload.new as any).id) ? prev : [...prev, payload.new]);
+        if (!showChatRef.current && (payload.new as any).user_id !== session.user.id) {
+          setUnreadCount(c => c + 1);
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(chatCh); };
+  }, [roomId]);
+
+  // Auto-scroll chat to bottom on new messages
+  useEffect(() => {
+    if (showChat) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, showChat]);
+
+  const sendChat = async () => {
+    const text = chatInput.trim();
+    if (!text) return;
+    setChatInput("");
+    const username = session.user.user_metadata?.username ?? "Spieler";
+    await supabase.from("room_messages").insert({ room_id: roomId, user_id: session.user.id, username, text });
+  };
+
   const actInFlight = useRef(false);
 
   const act = useCallback(async (action: string, extra = {}) => {
@@ -991,6 +1028,68 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
     return null;
   };
 
+  // ── Chat Panel ──
+  const quickEmojis = ["😂","👍","🔥","😱","🎉","😈","🧙","💥","🍀","😅","🤯","❤️"];
+  const ChatPanel = () => (
+    <div style={{
+      position: "fixed" as const, right: 0, top: 0, bottom: 0, zIndex: 150,
+      width: "min(340px, 92vw)",
+      background: "rgba(10, 30, 18, 0.97)", borderLeft: `1px solid ${C.glassBorder}`,
+      display: "flex", flexDirection: "column" as const,
+      paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
+        <div style={{ ...cinzel, fontSize: 14, color: C.gold }}>💬 Chat</div>
+        <button onClick={() => setShowChat(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 20 }}>✕</button>
+      </div>
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: "auto" as const, padding: "10px 12px", display: "flex", flexDirection: "column" as const, gap: 8 }}>
+        {chatMessages.length === 0 && (
+          <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" as const, marginTop: 20 }}>Noch keine Nachrichten</div>
+        )}
+        {chatMessages.map((m: any) => {
+          const mine = m.user_id === session.user.id;
+          return (
+            <div key={m.id} style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "85%" }}>
+              {!mine && <div style={{ fontSize: 9, color: C.gold, marginBottom: 2, ...cinzel }}>{m.username}</div>}
+              <div style={{
+                background: mine ? "rgba(201,168,76,0.25)" : "rgba(255,255,255,0.08)",
+                border: `1px solid ${mine ? "rgba(201,168,76,0.4)" : "rgba(255,255,255,0.12)"}`,
+                borderRadius: mine ? "12px 12px 3px 12px" : "12px 12px 12px 3px",
+                padding: "7px 11px", fontSize: 14, color: "#fff",
+                wordBreak: "break-word" as const, lineHeight: 1.35,
+              }}>{m.text}</div>
+            </div>
+          );
+        })}
+        <div ref={chatEndRef} />
+      </div>
+      {/* Emoji quick row */}
+      <div style={{ display: "flex", gap: 4, padding: "6px 10px", overflowX: "auto" as const, borderTop: `1px solid ${C.glassBorder}` }}>
+        {quickEmojis.map(e => (
+          <button key={e} onClick={() => setChatInput(v => v + e)}
+            style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}>{e}</button>
+        ))}
+      </div>
+      {/* Input */}
+      <div style={{ display: "flex", gap: 8, padding: "8px 10px 12px" }}>
+        <input
+          value={chatInput}
+          onChange={e => setChatInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") sendChat(); }}
+          placeholder="Nachricht…"
+          style={{
+            flex: 1, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(201,168,76,0.3)",
+            borderRadius: 20, color: "#fff", padding: "9px 14px", fontSize: 14, outline: "none",
+          }}
+        />
+        <button onClick={sendChat} disabled={!chatInput.trim()}
+          style={{ ...goldBtn(), padding: "9px 16px", borderRadius: 20, opacity: chatInput.trim() ? 1 : 0.4 }}>➤</button>
+      </div>
+    </div>
+  );
+
   // ── Scoresheet Modal ──
   const Scoresheet = () => {
     // Bietreihenfolge: immer rechts vom Dealer (= dealer+1, dealer+2, ...)
@@ -1141,6 +1240,16 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vmin,22px)", color: C.gold, letterSpacing: "clamp(2px,0.5vmin,6px)" }}>🧙 WIZARD</div>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
           <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", fontSize: 11 }} title="Log">📜</button>
+          <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", fontSize: 11, position: "relative" as const }} title="Chat">
+            💬
+            {unreadCount > 0 && (
+              <span style={{
+                position: "absolute" as const, top: -6, right: -6,
+                background: "#C0392B", color: "#fff", borderRadius: 10,
+                fontSize: 9, fontWeight: 700, padding: "1px 5px", minWidth: 16,
+              }}>{unreadCount > 9 ? "9+" : unreadCount}</span>
+            )}
+          </button>
           <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 7px", fontSize: 11 }} title="Spielblatt">📋</button>
           <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 11, padding: "4px 7px", borderRadius: 6 }}>✕</button>
         </div>
@@ -1603,6 +1712,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
       )}
 
       {showScoresheet && <Scoresheet />}
+      {showChat && <ChatPanel />}
       <SpecialOverlay />
 
       {/* Error Toast */}
