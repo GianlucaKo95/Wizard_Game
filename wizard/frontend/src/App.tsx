@@ -925,7 +925,8 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             if (!passingCard) return;
             act("passCard", { cardId: passingCard });
             setPassingCard(null);
-            setSpecialAction(null);
+            setSpecialAction({ type: "rainbow7passed", cardId: "" }); // sentinel to block re-open
+            setTimeout(() => setSpecialAction(null), 3000); // auto-close after server catches up
           }} disabled={!passingCard}
             style={{ ...goldBtn(), padding: "11px 0", opacity: passingCard ? 1 : 0.4 }}>
             Karte weitergeben

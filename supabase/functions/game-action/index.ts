@@ -42,14 +42,14 @@ function shuffle(arr) {
   return a;
 }
 
-function trickWinnerWithoutBomb(trick, trumpSuit, werewolfSuit = null, trumpCardValue = 0) {
+function trickWinnerWithoutBomb(trick, trumpSuit, werewolfSuit = null, trumpCardValue = 0, trumpCardObj = null) {
   // Calculate winner ignoring bomb - used to determine who leads next
   const trickWithoutBomb = trick.filter(t => t.card.specialType !== "bomb");
   if (trickWithoutBomb.length === 0) return trick[0]?.playerIndex ?? 0;
-  return trickWinner(trickWithoutBomb, trumpSuit, werewolfSuit, trumpCardValue);
+  return trickWinner(trickWithoutBomb, trumpSuit, werewolfSuit, trumpCardValue, trumpCardObj);
 }
 
-function trickWinner(trick, trumpSuit, werewolfSuit = null, trumpCardValue = 0) {
+function trickWinner(trick, trumpSuit, werewolfSuit = null, trumpCardValue = 0, trumpCardObj = null) {
   if (trick.some(t => t.card.specialType === "bomb")) return -1;
 
   const effectiveTrump = werewolfSuit ?? trumpSuit;
@@ -82,6 +82,11 @@ function trickWinner(trick, trumpSuit, werewolfSuit = null, trumpCardValue = 0) 
 
   const effectiveTrick = trick.map(t => {
     if (t.card.specialType === "vampire") {
+      // Offiz. FAQ: Vampir kopiert die Trumpfkarte inkl. ALLER Effekte
+      if (trumpCardObj?.type === "wizard" || trumpCardObj?.specialType === "wizardfool")
+        return { ...t, card: { ...t.card, type: "wizard", suit: null } };
+      if (trumpCardObj?.type === "fool")
+        return t; // copies fool → passive
       if (!vampireSuit) return t; // no trump → vampire is passive like a fool
       return { ...t, card: { ...t.card, suit: vampireSuit, type: "number", value: vampireValue } };
     }
@@ -106,13 +111,13 @@ function trickWinner(trick, trumpSuit, werewolfSuit = null, trumpCardValue = 0) 
     const wt = effectiveTrump && wc.suit === effectiveTrump;
     if (ct && !wt) { w = i; continue; }
     if (wt && !ct) continue;
-    // Only the first card in the trick establishes the led suit
-    const firstTCard = effectiveTrick[0]?.card ?? null;
-    const firstLeadsT = firstTCard && (
-      firstTCard.type === "number" ||
-      ((firstTCard.specialType === "rainbow9" || firstTCard.specialType === "rainbow7") && firstTCard.suit)
-    );
-    const led = firstLeadsT ? (firstTCard.suit ?? null) : null;
+    // First non-passive card establishes led suit (fool is passive, wizard means no suit)
+    const isPassiveTW = (c) => !c || c.type === "fool" ||
+      // rainbow7/9 and vampire count as lead cards once they carry a suit
+      ((c.specialType === "rainbow7" || c.specialType === "rainbow9" || c.specialType === "vampire") && !c.suit) ||
+      ["witch","fairy","werewolf","wizardfool","bomb"].includes(c.specialType ?? "");
+    const leadTW = effectiveTrick.find(t => !isPassiveTW(t.card))?.card ?? null;
+    const led = leadTW ? (leadTW.suit ?? null) : null;
     if (c.suit === led && wc.suit !== led) { w = i; continue; }
     if (wc.suit === led && c.suit !== led) continue;
     if (c.value > wc.value) w = i;
@@ -170,38 +175,64 @@ function aiBid(hand, trumpSuit = null, werewolfSuit = null) {
 
 function isAlwaysPlayable(c) {
   return c.type === "fool" || c.type === "wizard" ||
-    // vampire: never forced to follow suit (official FAQ)
-    // rainbow7 (Jongleur): can always be played freely like a fool
-    ["witch","wizardfool","dragon","fairy","bomb","vampire","rainbow7"].includes(c.specialType ?? "");
+    // These can always be played freely regardless of led suit (official FAQ)
+    ["witch","wizardfool","dragon","fairy","bomb","vampire","rainbow7","rainbow9"].includes(c.specialType ?? "");
 }
 
-function aiChooseCard(hand, trick, trumpSuit, werewolfSuit = null) {
-  // Only the first card in the trick establishes the led suit
-  const firstTrickCard = trick[0]?.card ?? null;
-  const firstLeads = firstTrickCard && (
-    firstTrickCard.type === "number" ||
-    (["rainbow7","rainbow9"].includes(firstTrickCard.specialType) && firstTrickCard.suit)
-  );
-  const led = firstLeads ? (firstTrickCard.suit ?? null) : null;
+function aiChooseCard(hand, trick, trumpSuit, werewolfSuit = null, bid = null, tricksWon = 0) {
+  // First non-passive card establishes led suit (fool is passive, wizard means no suit)
+  const effTrumpForLead = werewolfSuit ?? trumpSuit;
+  const isPassiveAI = (c) => !c || c.type === "fool" ||
+    ((c.specialType === "rainbow7" || c.specialType === "rainbow9") && !c.suit) ||
+    (c.specialType === "vampire" && !effTrumpForLead) ||
+    ["witch","fairy","werewolf","wizardfool","bomb"].includes(c.specialType ?? "");
+  const leadAI = trick.find(t => !isPassiveAI(t.card))?.card ?? null;
+  const led = leadAI
+    ? (leadAI.specialType === "vampire" ? effTrumpForLead : (leadAI.suit ?? null))
+    : null;
   const followable = led ? hand.filter(c => c.suit === led && !isAlwaysPlayable(c)) : [];
   const playable = followable.length > 0 ? followable : hand;
 
-  const dragon = playable.find(c => c.specialType === "dragon");
-  if (dragon && trick.length > 0 && !trick.some(t => t.card.specialType === "fairy")) return dragon;
-
-  const wiz = playable.find(c => c.type === "wizard");
-  if (wiz && trick.length > 0) return wiz;
-
   const effectiveTrump = werewolfSuit ?? trumpSuit;
-  const str = (c) =>
+  const needsMoreTricks = bid === null || tricksWon < bid;
+
+  const winStr = (c) =>
     c.type === "wizard" ? 100 :
     c.specialType === "dragon" ? 99 :
-    isAlwaysPlayable(c) ? -1 :
-    effectiveTrump && c.suit === effectiveTrump ? 50 + c.value :
-    c.value;
+    isAlwaysPlayable(c) ? 1 :
+    effectiveTrump && c.suit === effectiveTrump ? 50 + (c.value ?? 0) :
+    led && c.suit === led ? 10 + (c.value ?? 0) :
+    c.value ?? 0;
 
-  const sorted = [...playable].sort((a, b) => str(b) - str(a));
-  return sorted[sorted.length - 1] ?? playable[0] ?? hand[0];
+  const loseStr = (c) =>
+    c.type === "wizard" ? 0 :
+    c.type === "fool" ? 1 :
+    isAlwaysPlayable(c) ? 40 :
+    effectiveTrump && c.suit === effectiveTrump ? 20 + (c.value ?? 0) :
+    c.value ?? 0;
+
+  if (needsMoreTricks) {
+    const wizardAlreadyInTrick = trick.some(t => t.card.type === "wizard");
+    const dragonAlreadyInTrick = trick.some(t => t.card.specialType === "dragon");
+    const fairyInTrick = trick.some(t => t.card.specialType === "fairy");
+
+    if (wizardAlreadyInTrick) {
+      const candidates = playable.filter(c => c.type !== "wizard");
+      const pool = candidates.length > 0 ? candidates : playable;
+      return [...pool].sort((a, b) => loseStr(a) - loseStr(b))[0] ?? pool[0] ?? hand[0];
+    }
+
+    const dragon = playable.find(c => c.specialType === "dragon");
+    if (dragon && trick.length > 0 && !fairyInTrick && !dragonAlreadyInTrick) return dragon;
+
+    const wiz = playable.find(c => c.type === "wizard");
+    if (wiz && trick.length > 0) return wiz;
+
+    return [...playable].sort((a, b) => winStr(b) - winStr(a))[0] ?? playable[0] ?? hand[0];
+  } else {
+    const sorted = [...playable].sort((a, b) => loseStr(a) - loseStr(b));
+    return sorted[0] ?? playable[0] ?? hand[0];
+  }
 }
 
 function addLog(room, msg) {
@@ -335,15 +366,36 @@ async function aiPlayNext(supabase, roomId, room, players) {
     }
   }
 
-  const card = aiChooseCard(currentPlayer.hand, room.current_trick ?? [], room.trump_suit, room.werewolf_suit);
+  const card = aiChooseCard(currentPlayer.hand, room.current_trick ?? [], room.trump_suit, room.werewolf_suit, currentPlayer.bid, currentPlayer.tricks_won ?? 0);
   if (!card) {
     console.log("[aiPlayNext] aiChooseCard returned undefined! hand:", JSON.stringify(currentPlayer.hand));
     return json({ ok: true });
   }
   console.log("[aiPlayNext] AI plays:", cardLabel(card));
   const newHand = currentPlayer.hand.filter(c => c.id !== card.id);
-  // Optimistic concurrency: only update if the card is still in the DB hand
-  // This prevents double-play from concurrent triggerAI calls
+  const expectedTrickLen = (room.current_trick ?? []).length;
+
+  // Atomic guard: attempt to advance current_player away from itself as a lock.
+  // Only one concurrent call can successfully claim the turn by using a WHERE
+  // condition on current_player - the second call's update affects 0 rows.
+  const lockToken = `locked-${Date.now()}-${Math.random()}`;
+  const { data: lockResult, error: lockErr } = await supabase
+    .from("rooms")
+    .update({ ai_lock: lockToken })
+    .eq("id", roomId)
+    .eq("current_player", current)
+    .select("ai_lock");
+  if (lockErr || !lockResult || lockResult.length === 0 || lockResult[0].ai_lock !== lockToken) {
+    console.log("[aiPlayNext] could not acquire lock, concurrent call in progress, skipping");
+    return json({ ok: true });
+  }
+  // Re-verify trick state and card presence after acquiring lock
+  const { data: freshRoomCheck } = await supabase.from("rooms").select("current_trick, current_player").eq("id", roomId).single();
+  const actualTrickLen = (freshRoomCheck?.current_trick ?? []).length;
+  if (actualTrickLen !== expectedTrickLen || freshRoomCheck?.current_player !== current) {
+    console.log("[aiPlayNext] trick state changed, skipping. expected:", expectedTrickLen, "actual:", actualTrickLen);
+    return json({ ok: true });
+  }
   const { data: verifyPlayer } = await supabase
     .from("room_players").select("hand").eq("id", currentPlayer.id).single();
   const dbHand = verifyPlayer?.hand ?? [];
@@ -352,8 +404,20 @@ async function aiPlayNext(supabase, roomId, room, players) {
     return json({ ok: true });
   }
   await supabase.from("room_players").update({ hand: newHand }).eq("id", currentPlayer.id);
-  const newTrick = [...(room.current_trick ?? []), { card, playerIndex: current }];
-  addLog(room, `${currentPlayer.ai_name}: ${cardLabel(card)}`);
+
+  // For wizardfool: AI decides wizard or fool based on whether it needs more tricks
+  let playedCard = card;
+  if (card.specialType === "wizardfool") {
+    const needsTricks = (currentPlayer.tricks_won ?? 0) < (currentPlayer.bid ?? 0);
+    const wizardInTrick = (room.current_trick ?? []).some(t => t.card.type === "wizard");
+    const choice = (needsTricks && !wizardInTrick) ? "wizard" : "fool";
+    playedCard = { ...card, type: choice };
+    addLog(room, `${currentPlayer.ai_name}: Ron als ${choice === "wizard" ? "Zauberer" : "Narr"}`);
+  } else {
+    addLog(room, `${currentPlayer.ai_name}: ${cardLabel(card)}`);
+  }
+
+  const newTrick = [...(room.current_trick ?? []), { card: playedCard, playerIndex: current }];
   // Let advanceTrick reload players fresh from DB - passing stale updPlayers
   // can cause empty-hand issues when DB writes from previous round haven't propagated
   return await advanceTrick(supabase, roomId, { ...room, current_trick: newTrick, current_player: current, log: room.log }, null);
@@ -437,55 +501,76 @@ async function advanceTrick(supabase, roomId, room, players) {
   await supabase.from("rooms").update({ current_trick: trick, current_player: room.current_player }).eq("id", roomId);
 
   // Trick complete
-  const trumpCardValue = room.werewolf_suit
+  let trumpCardValue = room.werewolf_suit
     ? (room.original_trump_card?.value ?? 0)
     : (room.trump_card?.value ?? 0);
 
   // Special case: Vampir im Stich + Werwolf als aktiver Trumpf
-  // → Karte unter dem Werwolf aufdecken, Trumpf wechseln, dann Stich normal auswerten
+  // → Karte unter dem Werwolf aufdecken; die neue Trumpffarbe gilt NUR FÜR DIESEN STICH.
+  // Danach bleibt der Werwolf-Suit als Trumpf aktiv (werewolf_suit unverändert in DB).
   const vampireInTrick = trick.some(t => t.card.specialType === "vampire");
-  if (vampireInTrick && room.werewolf_suit && !room.pending_vampire_reveal) {
+  let trickTrumpSuit = room.trump_suit;
+  let trickWerewolfSuit = room.werewolf_suit;
+  let trickTrumpCard = room.trump_card;
+  if (vampireInTrick && room.werewolf_suit) {
     const remaining = room.remaining_deck ?? [];
     const cardUnder = remaining.length > 0 ? remaining[remaining.length - 1] : null;
-    addLog(room, `🧛 Vampir kopiert Karte unter dem Werwolf: ${cardLabel(cardUnder)}`);
-    let newTrumpSuit = room.werewolf_suit; // default: keep werewolf suit
-    let newTrumpCard = room.trump_card;
+    addLog(room, `🧛 Vampir deckt Karte unter dem Werwolf auf: ${cardLabel(cardUnder)}`);
     if (cardUnder) {
       if (cardUnder.type === "number") {
-        newTrumpSuit = cardUnder.suit;
-        newTrumpCard = cardUnder;
-        addLog(room, `Neue Trumpffarbe: ${suitDot(newTrumpSuit)}`);
+        trickTrumpSuit = cardUnder.suit;
+        trickWerewolfSuit = null;
+        trickTrumpCard = cardUnder;
+        trumpCardValue = cardUnder.value;
+        addLog(room, `Trumpf für diesen Stich: ${suitDot(trickTrumpSuit)}`);
       } else if (cardUnder.type === "fool") {
-        newTrumpSuit = null;
-        addLog(room, `Kein Trumpf mehr (Narr)`);
+        trickTrumpSuit = null;
+        trickWerewolfSuit = null;
+        trickTrumpCard = cardUnder;
+        addLog(room, `Kein Trumpf in diesem Stich (Narr)`);
       } else if (cardUnder.type === "wizard" || cardUnder.specialType === "wizardfool") {
-        // Dealer wählt neue Trumpffarbe - für Einfachheit: zufällig für KI, TODO: menschliche Wahl
-        newTrumpSuit = SUITS[Math.floor(Math.random() * 4)];
-        addLog(room, `Zauberer: neue Trumpffarbe ${suitDot(newTrumpSuit)}`);
+        trickTrumpSuit = SUITS[Math.floor(Math.random() * 4)];
+        trickWerewolfSuit = null;
+        trickTrumpCard = cardUnder;
+        addLog(room, `Zauberer: Trumpf für diesen Stich ${suitDot(trickTrumpSuit)}`);
+      } else if (cardUnder.specialType) {
+        // Sonderkarte aufgedeckt → Vampir kopiert ALLE ihre Effekte (offiz. FAQ)
+        // Die Vampir-Karte im Stich wird zur kopierten Sonderkarte, sodass
+        // Drache/Fee/Bombe die Stichwertung und Hexe/Jongleur/Wolke die
+        // Nach-Stich-Effekte automatisch auslösen.
+        const vIdx = trick.findIndex(t => t.card.specialType === "vampire");
+        if (vIdx >= 0) {
+          trick[vIdx] = { ...trick[vIdx], card: { ...trick[vIdx].card, specialType: cardUnder.specialType, copiedByVampire: true } };
+          addLog(room, `🧛 Vampir wirkt als ${cardLabel(cardUnder)}`);
+        }
+        // Trumpf-Semantik der kopierten Karte: Hexe/Jongleur → kein Trumpf in diesem Stich
+        if (cardUnder.specialType === "witch" || cardUnder.specialType === "rainbow7") {
+          trickTrumpSuit = null;
+          trickWerewolfSuit = null;
+        } else if (cardUnder.specialType === "rainbow9") {
+          trickTrumpSuit = SUITS[Math.floor(Math.random() * 4)];
+          trickWerewolfSuit = null;
+          addLog(room, `Wolke: Trumpf für diesen Stich ${suitDot(trickTrumpSuit)}`);
+        }
+        // Drache/Fee/Bombe: Werwolf-Suit bleibt, Karte wirkt über specialType
       }
-      // Vampire, Witch, Bomb, etc. as card under werewolf: keep current werewolf suit
+      // Aufgedeckte Karte verlässt das Deck (permanent)
+      await supabase.from("rooms").update({
+        remaining_deck: remaining.slice(0, -1),
+        log: room.log
+      }).eq("id", roomId);
+      room.remaining_deck = remaining.slice(0, -1);
     }
-    // Update trump and continue trick evaluation with new trump
-    await supabase.from("rooms").update({
-      trump_suit: newTrumpSuit,
-      werewolf_suit: null,
-      trump_card: newTrumpCard,
-      original_trump_card: null,
-      pending_vampire_reveal: null,
-      log: room.log
-    }).eq("id", roomId);
-    // Re-evaluate trick with updated trump
-    room = { ...room, trump_suit: newTrumpSuit, werewolf_suit: null };
-    console.log("[vampire+werewolf] new trump_suit:", newTrumpSuit, "werewolf_suit set to null, room.trump_suit now:", room.trump_suit);
+    console.log("[vampire+werewolf] trick-only trump:", trickTrumpSuit, "werewolf_suit stays:", room.werewolf_suit);
   }
 
-  const winnerIdx = trickWinner(trick, room.trump_suit, room.werewolf_suit, trumpCardValue);
+  const winnerIdx = trickWinner(trick, trickTrumpSuit, trickWerewolfSuit, trumpCardValue, trickTrumpCard);
 
   if (winnerIdx === -1) {
     // Check if it was a bomb or all-fools
     const hasBomb = trick.some(t => t.card.specialType === "bomb");
     const nextLeader = hasBomb
-      ? trickWinnerWithoutBomb(trick, room.trump_suit, room.werewolf_suit, room.trump_card?.value ?? 0)
+      ? trickWinnerWithoutBomb(trick, trickTrumpSuit, trickWerewolfSuit, trumpCardValue, trickTrumpCard)
       : trick[0].playerIndex; // all fools: first player leads next
     const msg = hasBomb ? "💥 Elderstab! Stich annulliert." : "🃏 Nur Narren – kein Stich!";
     addLog(room, msg);
@@ -538,7 +623,6 @@ async function advanceTrick(supabase, roomId, room, players) {
       }
     }
 
-    return json({ ok: true });
     return json({ ok: true });
   }
 
@@ -803,14 +887,12 @@ async function dealRound(supabase, roomId, room, players) {
       return await tickAIBids(supabase, roomId, { ...room, phase: "bidding", current_player: nextBidder, werewolf_suit: suit }, dealtPlayers);
     }
   } else if (trumpCard?.specialType === "vampire") {
-    // Vampire copies the next drawn card and all its effects
-    const vResult = resolveVampireTrump([...remainingDeck], room.dealer, players, room, remainingDeck);
-    vResult.logs.forEach(l => addLog(room, l));
-    phase = vResult.phase;
-    currentPlayer = vResult.currentPlayer;
-    trumpSuit = vResult.trumpSuit;
-    // If AI is dealer and needs to choose, resolve automatically
-    if ((phase === "choosingTrump" || phase === "choosingWerewolf") && players[room.dealer].is_ai) {
+    // Offiz. FAQ: "Deckst du bei der Bestimmung der Trumpffarbe den Vampir auf,
+    // bestimmst du eine Trumpffarbe." → Dealer wählt, wie beim Zauberer.
+    phase = "choosingTrump";
+    currentPlayer = room.dealer;
+    addLog(room, `Runde ${room.round} – Vampir als Trumpf: Dealer wählt Trumpffarbe`);
+    if (players[room.dealer].is_ai) {
       trumpSuit = SUITS[Math.floor(Math.random() * 4)];
       phase = "bidding";
       currentPlayer = nextBidder;
@@ -960,18 +1042,19 @@ serve(async (req) => {
     }
 
     case "triggerAI": {
-      if (room.phase !== "playing") return json({ ok: true });
+      // Reload fresh room state - the room loaded at handler start may be stale
+      const { data: freshRoom2 } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+      const currentRoom = freshRoom2 ?? room;
+      if (currentRoom.phase !== "playing") return json({ ok: true });
       const { data: freshP } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
       const fp = freshP ?? players;
-      console.log("[triggerAI] current_player:", room.current_player, "is_ai:", fp[room.current_player]?.is_ai, "hand:", fp[room.current_player]?.hand?.length);
-      if (!fp[room.current_player]?.is_ai) return json({ ok: true });
-      // Guard against concurrent triggerAI calls: only proceed if hand is not empty
-      // (a concurrent call may have already consumed the card)
-      if (!fp[room.current_player]?.hand?.length) {
+      console.log("[triggerAI] current_player:", currentRoom.current_player, "is_ai:", fp[currentRoom.current_player]?.is_ai, "hand:", fp[currentRoom.current_player]?.hand?.length);
+      if (!fp[currentRoom.current_player]?.is_ai) return json({ ok: true });
+      if (!fp[currentRoom.current_player]?.hand?.length) {
         console.log("[triggerAI] hand already empty - concurrent call, skipping");
         return json({ ok: true });
       }
-      return await aiPlayNext(supabase, roomId, { ...room, current_trick: room.current_trick ?? [] }, fp);
+      return await aiPlayNext(supabase, roomId, { ...currentRoom, current_trick: currentRoom.current_trick ?? [] }, fp);
     }
 
     case "startGame": {
@@ -1042,18 +1125,18 @@ serve(async (req) => {
       }
 
       // Validate follow suit
-      // Only the FIRST card in the trick establishes the led suit.
-      // If the first card is a wizard, fool, or suitless special → no led suit, all free.
-      const firstCard = room.current_trick[0]?.card ?? null;
-      const firstEstablishessuit = firstCard && (
-        firstCard.type === "number" ||
-        (["rainbow7","rainbow9"].includes(firstCard.specialType) && firstCard.suit) ||
-        (firstCard.specialType === "vampire" && (room.werewolf_suit ?? room.trump_suit))
-      );
-      const effectiveLedSuit = !firstEstablishessuit ? null :
-        firstCard.specialType === "vampire"
+      // The FIRST non-passive card in the trick establishes the led suit.
+      // Fool is passive → if fool leads, the next number/rainbow card sets the suit.
+      // Wizard leads → no suit at all (everyone free).
+      const isPassiveCard = (c) => !c || c.type === "fool" ||
+        ((c.specialType === "rainbow7" || c.specialType === "rainbow9") && !c.suit) ||
+        (c.specialType === "vampire" && !(room.werewolf_suit ?? room.trump_suit)) ||
+        ["witch","fairy","werewolf","wizardfool","bomb"].includes(c.specialType ?? "");
+      const leadCard = room.current_trick.find(t => !isPassiveCard(t.card))?.card ?? null;
+      const effectiveLedSuit = !leadCard ? null :
+        leadCard.specialType === "vampire"
           ? (room.werewolf_suit ?? room.trump_suit)
-          : (firstCard.suit ?? null);
+          : (leadCard.suit ?? null);
       // Vampire is never forced as a follow-suit card (official FAQ rule)
       if (!isAlwaysPlayable(card) && effectiveLedSuit) {
         const canFollow = hand.some(c => c.suit === effectiveLedSuit && !isAlwaysPlayable(c));

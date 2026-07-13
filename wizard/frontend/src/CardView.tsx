@@ -113,15 +113,15 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
   };
   const specialCfg = isSpecial ? specialConfigs[card.specialType ?? card.id] ?? specialConfigs[card.id] ?? { label: "?", color: "#fff" } : null;
 
-  // Label: wizardfool shows Z or N based on how it was played; witch keeps H; others normal
+  // Label: wizardfool shows N/Z while unresolved (in hand), Z or N once played; witch keeps H; others normal
   const label = card.specialType === "wizardfool"
-    ? (card.type === "wizard" ? "Z" : "N")
+    ? (card.type === "wizard" ? "Z" : card.type === "fool" ? "N" : "N/Z")
     : isWizard ? "Z"
     : (isFool && !card.specialType) ? "N"
     : isSpecial ? (specialCfg?.label ?? "?")
     : String(card.value);
   const labelColor = card.specialType === "wizardfool"
-    ? (card.type === "wizard" ? "#C9A84C" : "#95A5A6")
+    ? (card.type === "wizard" ? "#C9A84C" : card.type === "fool" ? "#95A5A6" : "#D3A625")
     : isWizard ? "#C9A84C"
     : (isFool && !card.specialType) ? "#95A5A6"
     : isSpecial ? (specialCfg?.color ?? "#fff")
