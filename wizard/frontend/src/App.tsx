@@ -1029,8 +1029,8 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   };
 
   // ── Chat Panel ──
-  const quickEmojis = ["😂","👍","🔥","😱","🎉","😈","🧙","💥","🍀","😅","🤯","❤️"];
-  const ChatPanel = () => (
+  // Plain JSX (NOT a nested component) so typing doesn't remount the input and close the keyboard
+  const chatPanel = (
     <div style={{
       position: "fixed" as const, right: 0, top: 0, bottom: 0, zIndex: 150,
       width: "min(340px, 92vw)",
@@ -1064,13 +1064,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           );
         })}
         <div ref={chatEndRef} />
-      </div>
-      {/* Emoji quick row */}
-      <div style={{ display: "flex", gap: 4, padding: "6px 10px", overflowX: "auto" as const, borderTop: `1px solid ${C.glassBorder}` }}>
-        {quickEmojis.map(e => (
-          <button key={e} onClick={() => setChatInput(v => v + e)}
-            style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}>{e}</button>
-        ))}
       </div>
       {/* Input */}
       <div style={{ display: "flex", gap: 8, padding: "8px 10px 12px" }}>
@@ -1712,7 +1705,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
       )}
 
       {showScoresheet && <Scoresheet />}
-      {showChat && <ChatPanel />}
+      {showChat && chatPanel}
       <SpecialOverlay />
 
       {/* Error Toast */}
