@@ -253,6 +253,14 @@ function cardLabel(card) {
   return `${card.value}${sym}`;
 }
 
+// Logs failed writes instead of silently swallowing them (root cause of
+// several "missing trump card" bugs when a DB column didn't exist yet).
+async function upd(promise, label) {
+  const { error } = await promise;
+  if (error) console.error(`[db:${label}]`, error.message);
+  return { error };
+}
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status, headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -385,7 +393,11 @@ async function aiPlayNext(supabase, roomId, room, players) {
     .eq("id", roomId)
     .eq("current_player", current)
     .select("ai_lock");
-  if (lockErr || !lockResult || lockResult.length === 0 || lockResult[0].ai_lock !== lockToken) {
+  if (lockErr) {
+    // Column missing or DB error: proceed WITHOUT lock rather than deadlocking the game.
+    // The trick-length + card-presence checks below still catch most races.
+    console.log("[aiPlayNext] ai_lock unavailable (", lockErr.message, ") - proceeding without lock");
+  } else if (!lockResult || lockResult.length === 0 || lockResult[0].ai_lock !== lockToken) {
     console.log("[aiPlayNext] could not acquire lock, concurrent call in progress, skipping");
     return json({ ok: true });
   }
@@ -403,7 +415,7 @@ async function aiPlayNext(supabase, roomId, room, players) {
     console.log("[aiPlayNext] card already played by concurrent call, skipping");
     return json({ ok: true });
   }
-  await supabase.from("room_players").update({ hand: newHand }).eq("id", currentPlayer.id);
+  await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", currentPlayer.id), "aiPlay.hand");
 
   // For wizardfool: AI decides wizard or fool based on whether it needs more tricks
   let playedCard = card;
@@ -449,7 +461,7 @@ async function endRound(supabase, roomId, room, players) {
     return { playerIndex: i, name: p.ai_name, bid: p.bid ?? 0, got: p.tricks_won, delta, totalScore: p.score + delta };
   });
   for (const r of results) {
-    await supabase.from("room_players").update({ score: r.totalScore }).eq("id", players[r.playerIndex].id);
+    await upd(supabase.from("room_players").update({ score: r.totalScore }).eq("id", players[r.playerIndex].id), "endRound.score");
   }
   await supabase.from("round_history").insert({ room_id: roomId, round: room.round, results });
 
@@ -741,64 +753,6 @@ async function advanceTrick(supabase, roomId, room, players) {
   return json({ ok: true });
 }
 
-// Resolves what happens when the vampire is flipped as the trump card.
-// Returns { trumpCard, trumpSuit, werewolfSuit, phase, currentPlayer, extraLog }
-// according to the rules:
-// - Vampire copies the NEXT drawn card and all its effects
-// - If next card is Werewolf → draw again; dealer chooses suit
-// - If next card is Wizard/WizardFool → dealer chooses trump
-// - If next card is Fool → no trump
-// - If next card is another Vampire → dealer chooses trump
-// - Otherwise → card's suit becomes trump (and is effective immediately)
-function resolveVampireTrump(deck, dealer, players, room, remainingDeck) {
-  const logs: string[] = [];
-  let card = deck.pop() ?? null;
-  remainingDeck.splice(0, remainingDeck.length, ...deck); // update in place
-
-  if (!card) {
-    logs.push(`Runde ${room.round} – Vampir: kein Karten mehr im Deck, kein Trumpf`);
-    return { trumpCard: null, trumpSuit: null, werewolfSuit: null, phase: "bidding", currentPlayer: (dealer + 1) % players.length, logs };
-  }
-
-  logs.push(`🧛 Vampir aufgedeckt – kopiert: ${card.type === "fool" ? "Narr" : card.type === "wizard" ? "Zauberer" : card.specialType ?? card.suit ?? "?"}`);
-
-  // Vampire copies another Vampire → dealer chooses trump
-  if (card.specialType === "vampire") {
-    logs.push(`Vampir kopiert Vampir – Dealer wählt Trumpffarbe`);
-    return { trumpCard: card, trumpSuit: null, werewolfSuit: null, phase: "choosingTrump", currentPlayer: dealer, logs };
-  }
-
-  // Werewolf → draw again, dealer chooses werewolf suit
-  if (card.specialType === "werewolf") {
-    const nextCard = deck.pop() ?? null;
-    remainingDeck.splice(0, remainingDeck.length, ...deck);
-    logs.push(`Vampir kopiert Werwolf – neue Karte aufgedeckt: ${nextCard?.specialType ?? nextCard?.suit ?? "?"}`);
-    // Recurse with the new card (but use nextCard directly, not recurse vampire again)
-    if (!nextCard || nextCard.type === "fool") {
-      return { trumpCard: nextCard, trumpSuit: null, werewolfSuit: null, phase: "bidding", currentPlayer: (dealer + 1) % players.length, logs };
-    }
-    if (nextCard.type === "wizard" || nextCard.specialType === "wizardfool" || nextCard.specialType === "vampire") {
-      return { trumpCard: nextCard, trumpSuit: null, werewolfSuit: null, phase: "choosingTrump", currentPlayer: dealer, logs };
-    }
-    // Normal card or special with suit → werewolf-like: dealer chooses suit
-    return { trumpCard: card, trumpSuit: null, werewolfSuit: null, phase: "choosingWerewolf", currentPlayer: dealer, logs };
-  }
-
-  // Wizard or WizardFool → dealer chooses trump
-  if (card.type === "wizard" || card.specialType === "wizardfool") {
-    return { trumpCard: card, trumpSuit: null, werewolfSuit: null, phase: "choosingTrump", currentPlayer: dealer, logs };
-  }
-
-  // Fool → no trump
-  if (card.type === "fool") {
-    return { trumpCard: card, trumpSuit: null, werewolfSuit: null, phase: "bidding", currentPlayer: (dealer + 1) % players.length, logs };
-  }
-
-  // Normal number card or special with a suit → that suit is trump immediately
-  const trumpSuit = card.suit ?? null;
-  logs.push(`Vampir kopiert Trumpf: ${suitDot(trumpSuit)}`);
-  return { trumpCard: card, trumpSuit, werewolfSuit: null, phase: "bidding", currentPlayer: (dealer + 1) % players.length, logs };
-}
 
 async function dealRound(supabase, roomId, room, players) {
   const deck = shuffle(buildDeck(room.edition ?? "classic", room.round === 1));
@@ -982,10 +936,12 @@ serve(async (req) => {
       const fr = freshCR2 ?? room;
       const fp2 = freshCP2 ?? players;
 
-      const hasPendingItems = fr.pending_rainbow9 !== null ||
-        fr.pending_rainbow9_deferred !== null ||
+      // Loose != null: treats undefined (missing DB column) as "no pending item"
+      // Strict !== null would deadlock the game in trickEnd if a column is missing
+      const hasPendingItems = fr.pending_rainbow9 != null ||
+        fr.pending_rainbow9_deferred != null ||
         Array.isArray(fr.pending_rainbow7) ||
-        fr.pending_witch !== null;
+        fr.pending_witch != null;
 
       if (hasPendingItems) {
         // Pending actions still open - ensure we stay in trickEnd
@@ -1055,6 +1011,32 @@ serve(async (req) => {
         return json({ ok: true });
       }
       return await aiPlayNext(supabase, roomId, { ...currentRoom, current_trick: currentRoom.current_trick ?? [] }, fp);
+    }
+
+    case "createRoom": {
+      const code = Array.from({ length: 5 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
+      const uname = (body.username ?? "Spieler").toString().slice(0, 24);
+      const { data: newRoom, error: crErr } = await supabase.from("rooms")
+        .insert({ code, host_id: user.id, phase: "lobby", round: 0, max_rounds: 0, dealer: 0, current_player: 0, log: [], edition: body.edition === "anniversary" ? "anniversary" : "classic" })
+        .select("id, code").single();
+      if (crErr || !newRoom) return json({ error: "Raum konnte nicht erstellt werden" }, 500);
+      await upd(supabase.from("room_players").insert({ room_id: newRoom.id, user_id: user.id, player_index: 0, is_ai: false, ai_name: uname, hand: [], score: 0, tricks_won: 0, connected: true }), "createRoom.player");
+      return json({ ok: true, roomId: newRoom.id, code: newRoom.code });
+    }
+
+    case "joinRoom": {
+      const jcode = (body.code ?? "").toString().toUpperCase().slice(0, 8);
+      const { data: jRoom } = await supabase.from("rooms").select("id, phase").eq("code", jcode).single();
+      if (!jRoom) return json({ error: "Raum nicht gefunden" }, 404);
+      if (jRoom.phase !== "lobby") return json({ error: "Spiel läuft bereits" }, 400);
+      const { data: existing } = await supabase.from("room_players").select("player_index, user_id").eq("room_id", jRoom.id);
+      if (existing?.some(p => p.user_id === user.id)) return json({ ok: true, roomId: jRoom.id }); // already joined
+      if ((existing?.length ?? 0) >= 6) return json({ error: "Raum ist voll" }, 400);
+      const uname2 = (body.username ?? "Spieler").toString().slice(0, 24);
+      await upd(supabase.from("room_players").insert({ room_id: jRoom.id, user_id: user.id, player_index: existing?.length ?? 0, is_ai: false, ai_name: uname2, hand: [], score: 0, tricks_won: 0, connected: true }), "joinRoom.player");
+      // Touch rooms so lobby clients get a realtime event and reload the player list
+      await upd(supabase.from("rooms").update({ log: [`${uname2} ist beigetreten`] }).eq("id", jRoom.id), "joinRoom.touch");
+      return json({ ok: true, roomId: jRoom.id });
     }
 
     case "startGame": {
@@ -1146,8 +1128,9 @@ serve(async (req) => {
 
       const isWitch = card.specialType === "witch";
       const isRainbowChoice = (card.specialType === "rainbow7" || card.specialType === "rainbow9") && body.suit;
+      if (isRainbowChoice && !SUITS.includes(body.suit)) return json({ error: "Ungültige Farbe" }, 400);
       const newHand = hand.filter(c => c.id !== card.id);
-      await supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id);
+      await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
       const playedCard = isWitch ? { ...card, type: "fool" } : (isRainbowChoice ? { ...card, suit: body.suit } : card);
       const newTrick = [...room.current_trick, { card: playedCard, playerIndex: callerIdx }];
       addLog(room, `${callerPlayer.ai_name}: ${cardLabel(card)}`);
@@ -1164,7 +1147,7 @@ serve(async (req) => {
         const givenCard = callerPlayer.hand.find(c => c.id === giveCardId);
         const newHand = callerPlayer.hand.filter(c => c.id !== giveCardId);
         newHand.push(takenCard);
-        await supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id);
+        await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
         addLog(room, `🧹 ${callerPlayer.ai_name} tauscht: gibt ${cardLabel(givenCard)} · nimmt ${cardLabel(takenCard)}`);
         // Store swap info for 4 seconds display
         await supabase.from("rooms").update({
@@ -1191,7 +1174,7 @@ serve(async (req) => {
         const card = callerPlayer.hand.find(c => c.id === cardId);
         if (!card) return json({ error: "Karte nicht gefunden" }, 400);
         const newHand = callerPlayer.hand.filter(c => c.id !== cardId);
-        await supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id);
+        await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
         const resolvedCard = { ...card, type: choice === "wizard" ? "wizard" : "fool" };
         const newTrick = [...room.current_trick, { card: resolvedCard, playerIndex: callerIdx }];
         addLog(room, `${callerPlayer.ai_name}: Ron als ${choice === "wizard" ? "Zauberer" : "Narr"}`);
@@ -1207,7 +1190,7 @@ serve(async (req) => {
       const passedCard = callerPlayer.hand.find(c => c.id === body.cardId);
       if (!passedCard) return json({ error: "Karte nicht gefunden" }, 400);
       const newHand = callerPlayer.hand.filter(c => c.id !== body.cardId);
-      await supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id);
+      await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
       const buffer = room.pending_rainbow7_buffer ?? {};
       buffer[callerIdx] = passedCard;
       addLog(room, `${callerPlayer.ai_name} hat eine Karte gewählt`);

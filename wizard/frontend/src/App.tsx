@@ -263,25 +263,19 @@ function LobbyScreen({ session }: { session: Session }) {
 
   async function createRoom() {
     setLoading(true); setError("");
-    const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const { data, error: e } = await supabase.from("rooms").insert({ code, host_id: session.user.id, phase: "lobby", edition }).select().single();
-    if (e || !data) { setError(e?.message ?? "Fehler"); setLoading(false); return; }
-    await supabase.from("room_players").insert({ room_id: data.id, user_id: session.user.id, player_index: 0, is_ai: false, ai_name: username, hand: [], score: 0, tricks_won: 0, connected: true });
-    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: data.id, code }));
-    setRoomId(data.id);
+    const res = await callGameAction("", "createRoom", { username, edition });
+    if (!res?.roomId) { setError(res?.error ?? "Fehler"); setLoading(false); return; }
+    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code }));
+    setRoomId(res.roomId);
     setLoading(false);
   }
 
   async function joinRoom() {
     setLoading(true); setError("");
-    const { data: room } = await supabase.from("rooms").select("*").eq("code", codeInput.toUpperCase()).single();
-    if (!room) { setError("Raum nicht gefunden"); setLoading(false); return; }
-    if (room.phase !== "lobby") { setError("Spiel bereits gestartet"); setLoading(false); return; }
-    const { data: existing } = await supabase.from("room_players").select("player_index").eq("room_id", room.id);
-    if ((existing?.length ?? 0) >= 6) { setError("Raum voll (max. 6 Spieler)"); setLoading(false); return; }
-    await supabase.from("room_players").insert({ room_id: room.id, user_id: session.user.id, player_index: existing?.length ?? 0, is_ai: false, ai_name: username, hand: [], score: 0, tricks_won: 0, connected: true });
-    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: room.id, code: codeInput.toUpperCase() }));
-    setRoomId(room.id);
+    const res = await callGameAction("", "joinRoom", { username, code: codeInput.toUpperCase() });
+    if (!res?.roomId) { setError(res?.error ?? "Raum nicht gefunden"); setLoading(false); return; }
+    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: codeInput.toUpperCase() }));
+    setRoomId(res.roomId);
     setLoading(false);
   }
 
@@ -553,6 +547,25 @@ function sortHand(hand: any[]): any[] {
   });
 }
 
+// Loads players from the hand-free view and merges the caller's own hand
+// (own row is still readable via RLS). Opponents get hand as an array of
+// face-down placeholders sized by hand_count; in round 1 visible_hand shows
+// their real cards (Indian poker).
+async function loadPlayersSecure(roomId: string, myUserId: string) {
+  const [{ data: pub }, { data: mine }] = await Promise.all([
+    supabase.from("room_players_view").select("*").eq("room_id", roomId).order("player_index"),
+    supabase.from("room_players").select("player_index, hand").eq("room_id", roomId).eq("user_id", myUserId).maybeSingle(),
+  ]);
+  if (!pub) return null;
+  return pub.map((p: any) => {
+    const isMe = p.player_index === mine?.player_index;
+    const hand = isMe
+      ? (mine?.hand ?? [])
+      : (p.visible_hand ?? Array.from({ length: p.hand_count ?? 0 }, (_, i) => ({ id: `hidden-${p.player_index}-${i}`, type: "hidden" })));
+    return { ...p, hand };
+  });
+}
+
 // ─── Game Room ────────────────────────────────────────────────────────────────
 function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: string; session: Session; aiCount: number; edition?: string; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
@@ -637,8 +650,8 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   }, [roomId]);
 
   useEffect(() => {
-    supabase.from("rooms").select("*").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
-    supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => {
+    supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
+    loadPlayersSecure(roomId, session.user.id).then(data => {
       if (data) {
         setPlayers(data);
         const mine = data.find((p: any) => p.user_id === session.user.id);
@@ -649,15 +662,15 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
   useEffect(() => {
     const refreshState = () => {
-      supabase.from("rooms").select("*").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
-      supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => { if (data) setPlayers(data); });
+      supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
+      loadPlayersSecure(roomId, session.user.id).then(data => { if (data) setPlayers(data); });
     };
 
     const ch = supabase.channel(`room:${roomId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => {
         const newRoom = payload.new;
         setRoom(newRoom);
-        supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index").then(({ data }) => {
+        loadPlayersSecure(roomId, session.user.id).then(data => {
           if (data) {
             setPlayers(data);
             if (newRoom.phase === "playing" && data[newRoom.current_player]?.is_ai) {
@@ -713,6 +726,33 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
     return () => { supabase.removeChannel(ch); clearInterval(poll); };
   }, [roomId]);
+
+  // ── Watchdogs: state-based fallbacks in case a realtime event was missed ──
+  // These fire on ANY room-state change (realtime OR polling), so the game
+  // can never get permanently stuck in trickEnd or at an AI turn.
+  useEffect(() => {
+    if (room?.phase !== "trickEnd") return;
+    const t = setTimeout(() => {
+      if (!clearTrickPending.current) {
+        clearTrickPending.current = true;
+        callGameAction(roomId, "clearTrick", {}).finally(() => { clearTrickPending.current = false; });
+      }
+    }, 6000); // slightly after the primary 5s realtime-driven schedule
+    return () => clearTimeout(t);
+  }, [room?.phase, room?.last_trick_winner]);
+
+  useEffect(() => {
+    if (room?.phase !== "playing") return;
+    if (!players[room.current_player]?.is_ai) return;
+    const triggerKey = `wd-${room.current_player}-${(room.current_trick ?? []).length}-${room.round}`;
+    const t = setTimeout(() => {
+      if (aiTriggerLastKey.current !== triggerKey) {
+        aiTriggerLastKey.current = triggerKey;
+        callGameAction(roomId, "triggerAI", {});
+      }
+    }, 4000); // primary realtime path fires at 2s; this is the safety net
+    return () => clearTimeout(t);
+  }, [room?.phase, room?.current_player, (room?.current_trick ?? []).length, players]);
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = 0; }, [room?.log]);
 
