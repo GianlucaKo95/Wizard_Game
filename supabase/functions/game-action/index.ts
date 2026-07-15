@@ -36,12 +36,24 @@ function addLog(room, msg) {
 // ── Server-side game driver ─────────────────────────────────────
 // Keeps the game moving without depending on any client being online.
 // Client triggers remain as fallback; all paths are idempotent (ai_lock, phase guards).
+let waitUntilWarned = false;
 function schedule(task: () => Promise<unknown>, delayMs: number) {
   const p = (async () => {
     await new Promise(r => setTimeout(r, delayMs));
     try { await task(); } catch (e) { console.error("[schedule]", (e as Error).message); }
   })();
-  try { (globalThis as any).EdgeRuntime?.waitUntil?.(p); } catch { /* local dev: fire-and-forget */ }
+  const waitUntil = (globalThis as any).EdgeRuntime?.waitUntil;
+  if (typeof waitUntil === "function") {
+    waitUntil(p);
+  } else if (!waitUntilWarned) {
+    // Runtime doesn't expose EdgeRuntime.waitUntil (unexpected outside local dev).
+    // Without it the instance may be frozen after the response is sent, silently
+    // dropping the server-driven AI/clearTrick path back onto client polling only.
+    // Logged once per instance so this is visible in production logs instead of
+    // failing invisibly.
+    waitUntilWarned = true;
+    console.error("[schedule] EdgeRuntime.waitUntil unavailable — falling back to client-triggered scheduling only");
+  }
 }
 
 function scheduleAITurn(supabase, roomId, delayMs = 1800) {
