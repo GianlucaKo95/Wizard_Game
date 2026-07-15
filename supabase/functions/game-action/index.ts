@@ -2,304 +2,131 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+import {
+  SUITS, buildDeck, shuffle, trickWinner, trickWinnerWithoutBomb,
+  calcScore, forbiddenDealerBid, aiBid, isAlwaysPlayable, aiChooseCard,
+  suitDot, cardLabel, aiBidIndianPoker,
+} from "./logic.ts";
+
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const SUITS = ["red","blue","green","yellow"];
-
-function buildDeck(edition, excludeWerewolf = false) {
-  const deck = [];
-  for (const suit of SUITS)
-    for (let v = 1; v <= 13; v++)
-      deck.push({ id: `${suit}-${v}`, type: "number", suit, value: v });
-  for (let i = 0; i < 4; i++) deck.push({ id: `fool-${i}`, type: "fool", suit: null, value: 0 });
-  for (let i = 0; i < 4; i++) deck.push({ id: `wizard-${i}`, type: "wizard", suit: null, value: 14 });
-  if (edition === "anniversary") {
-    deck.push({ id: "dragon",     type: "special", specialType: "dragon",     suit: null, value: 15 });
-    deck.push({ id: "fairy",      type: "special", specialType: "fairy",      suit: null, value: -1 });
-    deck.push({ id: "witch",      type: "special", specialType: "witch",      suit: null, value: 0  });
-    if (!excludeWerewolf) {
-      deck.push({ id: "werewolf", type: "special", specialType: "werewolf",   suit: null, value: 0  });
-    }
-    deck.push({ id: "vampire",    type: "special", specialType: "vampire",    suit: null, value: 0  });
-    deck.push({ id: "bomb",       type: "special", specialType: "bomb",       suit: null, value: 0  });
-    deck.push({ id: "rainbow7",   type: "special", specialType: "rainbow7",   suit: null, value: 7.5 });
-    deck.push({ id: "rainbow9",   type: "special", specialType: "rainbow9",   suit: null, value: 9.75 });
-    deck.push({ id: "wizardfool", type: "special", specialType: "wizardfool", suit: null, value: 0  });
-  }
-  return deck;
+// Lightweight per-user rate limit (per instance): 20 actions / 10s.
+const rateMap = new Map<string, number[]>();
+function rateLimited(userId: string): boolean {
+  const now = Date.now();
+  const hits = (rateMap.get(userId) ?? []).filter(t => now - t < 10_000);
+  hits.push(now);
+  rateMap.set(userId, hits);
+  return hits.length > 20;
 }
 
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length-1; i > 0; i--) {
-    const j = Math.floor(Math.random()*(i+1));
-    [a[i],a[j]] = [a[j],a[i]];
-  }
-  return a;
-}
-
-function trickWinnerWithoutBomb(trick, trumpSuit, werewolfSuit = null, trumpCardValue = 0, trumpCardObj = null) {
-  // Calculate winner ignoring bomb - used to determine who leads next
-  const trickWithoutBomb = trick.filter(t => t.card.specialType !== "bomb");
-  if (trickWithoutBomb.length === 0) return trick[0]?.playerIndex ?? 0;
-  return trickWinner(trickWithoutBomb, trumpSuit, werewolfSuit, trumpCardValue, trumpCardObj);
-}
-
-function trickWinner(trick, trumpSuit, werewolfSuit = null, trumpCardValue = 0, trumpCardObj = null) {
-  if (trick.some(t => t.card.specialType === "bomb")) return -1;
-
-  const effectiveTrump = werewolfSuit ?? trumpSuit;
-  const hasDragon = trick.some(t => t.card.specialType === "dragon");
-  const hasFairy  = trick.some(t => t.card.specialType === "fairy");
-
-  if (hasDragon) {
-    if (hasFairy) {
-      return trick[trick.findIndex(t => t.card.specialType === "fairy")].playerIndex;
-    }
-    return trick[trick.findIndex(t => t.card.specialType === "dragon")].playerIndex;
-  }
-
-  const hasVampire = trick.some(t => t.card.specialType === "vampire");
-  let vampireSuit = null;
-  let vampireValue = 0;
-  if (hasVampire) {
-    if (werewolfSuit) {
-      // Werwolf war Trumpfkarte → Vampir kopiert die Karte UNTER dem Werwolf
-      // Die Stichfarbe ist werewolfSuit, der Wert kommt aus original_trump_card (via trumpCardValue)
-      vampireSuit = werewolfSuit;
-      vampireValue = trumpCardValue > 0 ? trumpCardValue : 7; // fallback: mittlerer Wert falls keine originale Karte
-    } else if (effectiveTrump) {
-      // Normal: Vampir kopiert die Trumpfkarte
-      vampireSuit = effectiveTrump;
-      vampireValue = trumpCardValue > 0 ? trumpCardValue : 7;
-    }
-    // else: kein Trumpf → Vampir ist passiv wie ein Narr
-  }
-
-  const effectiveTrick = trick.map(t => {
-    if (t.card.specialType === "vampire") {
-      // Offiz. FAQ: Vampir kopiert die Trumpfkarte inkl. ALLER Effekte
-      if (trumpCardObj?.type === "wizard" || trumpCardObj?.specialType === "wizardfool")
-        return { ...t, card: { ...t.card, type: "wizard", suit: null } };
-      if (trumpCardObj?.type === "fool")
-        return t; // copies fool → passive
-      if (!vampireSuit) return t; // no trump → vampire is passive like a fool
-      return { ...t, card: { ...t.card, suit: vampireSuit, type: "number", value: vampireValue } };
-    }
-    return t;
-  });
-
-  const isPassive = (c) =>
-    c.type === "fool" ||
-    // rainbow9 (9¾) and rainbow7 (7½) are passive only if no suit chosen yet
-    ((c.specialType === "rainbow9" || c.specialType === "rainbow7") && !c.suit) ||
-    ["witch","fairy","werewolf","wizardfool","bomb"].includes(c.specialType ?? "");
-
-  let w = 0;
-  for (let i = 0; i < effectiveTrick.length; i++) {
-    const c = effectiveTrick[i].card;
-    const wc = effectiveTrick[w].card;
-    if (c.type === "wizard") { if (wc.type !== "wizard") w = i; continue; }
-    if (wc.type === "wizard") continue;
-    if (isPassive(c)) continue;
-    if (isPassive(wc)) { w = i; continue; }
-    const ct = effectiveTrump && c.suit === effectiveTrump;
-    const wt = effectiveTrump && wc.suit === effectiveTrump;
-    if (ct && !wt) { w = i; continue; }
-    if (wt && !ct) continue;
-    // First non-passive card establishes led suit (fool is passive, wizard means no suit)
-    const isPassiveTW = (c) => !c || c.type === "fool" ||
-      // rainbow7/9 and vampire count as lead cards once they carry a suit
-      ((c.specialType === "rainbow7" || c.specialType === "rainbow9" || c.specialType === "vampire") && !c.suit) ||
-      ["witch","fairy","werewolf","wizardfool","bomb"].includes(c.specialType ?? "");
-    const leadTW = effectiveTrick.find(t => !isPassiveTW(t.card))?.card ?? null;
-    const led = leadTW ? (leadTW.suit ?? null) : null;
-    if (c.suit === led && wc.suit !== led) { w = i; continue; }
-    if (wc.suit === led && c.suit !== led) continue;
-    if (c.value > wc.value) w = i;
-  }
-  return trick[w].playerIndex;
-}
-
-function calcScore(bid, got) {
-  return bid === got ? 20 + bid * 10 : -Math.abs(bid - got) * 10;
-}
-
-function forbiddenDealerBid(bids, dealerIdx, round) {
-  const sum = bids.reduce((acc, b, i) => i === dealerIdx ? acc : acc + (b ?? 0), 0);
-  const f = round - sum;
-  return f >= 0 && f <= round ? f : null;
-}
-
-function aiBid(hand, trumpSuit = null, werewolfSuit = null) {
-  const effectiveTrump = werewolfSuit ?? trumpSuit;
-  const n = hand.length; // round number = hand size
-  let e = 0;
-  for (const c of hand) {
-    if (c.type === "wizard") {
-      e += 0.95;
-    } else if (c.specialType === "dragon") {
-      e += 0.9;
-    } else if (c.specialType === "fairy") {
-      e += 0.05;
-    } else if (c.specialType === "bomb" || c.specialType === "rainbow7" || c.specialType === "rainbow9" || c.specialType === "witch" || c.specialType === "wizardfool") {
-      e += 0.3;
-    } else if (c.type === "fool") {
-      e += 0;
-    } else if (c.type === "number") {
-      const isTrump = effectiveTrump && c.suit === effectiveTrump;
-      if (isTrump) {
-        if (c.value >= 11) e += 0.85;
-        else if (c.value >= 8)  e += 0.65;
-        else if (c.value >= 5)  e += 0.4;
-        else e += 0.2;
-      } else {
-        // Non-trump: scale with round size - in round 10+ a 13 is much more likely to win
-        // because more cards are in play and fewer players can trump
-        const scaleFactor = Math.min(1.0, n / 8); // 0→1 as rounds grow to 8+
-        if (c.value >= 13) e += 0.45 + 0.25 * scaleFactor; // up to 0.70
-        else if (c.value >= 12) e += 0.30 + 0.20 * scaleFactor; // up to 0.50
-        else if (c.value >= 11) e += 0.18 + 0.17 * scaleFactor; // up to 0.35
-        else if (c.value >= 10) e += 0.10 + 0.10 * scaleFactor; // up to 0.20
-        else if (c.value >= 9)  e += 0.05 + 0.05 * scaleFactor; // up to 0.10
-        // below 9: essentially 0 in non-trump
-      }
-    }
-  }
-  return Math.max(0, Math.round(e));
-}
-
-function isAlwaysPlayable(c) {
-  return c.type === "fool" || c.type === "wizard" ||
-    // These can always be played freely regardless of led suit (official FAQ)
-    ["witch","wizardfool","dragon","fairy","bomb","vampire","rainbow7","rainbow9"].includes(c.specialType ?? "");
-}
-
-function aiChooseCard(hand, trick, trumpSuit, werewolfSuit = null, bid = null, tricksWon = 0) {
-  // First non-passive card establishes led suit (fool is passive, wizard means no suit)
-  const effTrumpForLead = werewolfSuit ?? trumpSuit;
-  const isPassiveAI = (c) => !c || c.type === "fool" ||
-    ((c.specialType === "rainbow7" || c.specialType === "rainbow9") && !c.suit) ||
-    (c.specialType === "vampire" && !effTrumpForLead) ||
-    ["witch","fairy","werewolf","wizardfool","bomb"].includes(c.specialType ?? "");
-  const leadAI = trick.find(t => !isPassiveAI(t.card))?.card ?? null;
-  const led = leadAI
-    ? (leadAI.specialType === "vampire" ? effTrumpForLead : (leadAI.suit ?? null))
-    : null;
-  const followable = led ? hand.filter(c => c.suit === led && !isAlwaysPlayable(c)) : [];
-  const playable = followable.length > 0 ? followable : hand;
-
-  const effectiveTrump = werewolfSuit ?? trumpSuit;
-  const needsMoreTricks = bid === null || tricksWon < bid;
-
-  const winStr = (c) =>
-    c.type === "wizard" ? 100 :
-    c.specialType === "dragon" ? 99 :
-    isAlwaysPlayable(c) ? 1 :
-    effectiveTrump && c.suit === effectiveTrump ? 50 + (c.value ?? 0) :
-    led && c.suit === led ? 10 + (c.value ?? 0) :
-    c.value ?? 0;
-
-  const loseStr = (c) =>
-    c.type === "wizard" ? 0 :
-    c.type === "fool" ? 1 :
-    isAlwaysPlayable(c) ? 40 :
-    effectiveTrump && c.suit === effectiveTrump ? 20 + (c.value ?? 0) :
-    c.value ?? 0;
-
-  if (needsMoreTricks) {
-    const wizardAlreadyInTrick = trick.some(t => t.card.type === "wizard");
-    const dragonAlreadyInTrick = trick.some(t => t.card.specialType === "dragon");
-    const fairyInTrick = trick.some(t => t.card.specialType === "fairy");
-
-    if (wizardAlreadyInTrick) {
-      const candidates = playable.filter(c => c.type !== "wizard");
-      const pool = candidates.length > 0 ? candidates : playable;
-      return [...pool].sort((a, b) => loseStr(a) - loseStr(b))[0] ?? pool[0] ?? hand[0];
-    }
-
-    const dragon = playable.find(c => c.specialType === "dragon");
-    if (dragon && trick.length > 0 && !fairyInTrick && !dragonAlreadyInTrick) return dragon;
-
-    const wiz = playable.find(c => c.type === "wizard");
-    if (wiz && trick.length > 0) return wiz;
-
-    return [...playable].sort((a, b) => winStr(b) - winStr(a))[0] ?? playable[0] ?? hand[0];
-  } else {
-    const sorted = [...playable].sort((a, b) => loseStr(a) - loseStr(b));
-    return sorted[0] ?? playable[0] ?? hand[0];
-  }
-}
+const DEBUG = Deno.env.get("WIZARD_DEBUG") === "1";
+const dbg = (...a: unknown[]) => { if (DEBUG) dbg(...a); };
 
 function addLog(room, msg) {
   room.log = [msg, ...room.log].slice(0, 30);
 }
 
-function suitDot(suit) {
-  const dots = { red: "🔴", blue: "🔵", green: "🟢", yellow: "🟡" };
-  return dots[suit] ?? suit ?? "–";
+
+// ── Server-side game driver ─────────────────────────────────────
+// Keeps the game moving without depending on any client being online.
+// Client triggers remain as fallback; all paths are idempotent (ai_lock, phase guards).
+function schedule(task: () => Promise<unknown>, delayMs: number) {
+  const p = (async () => {
+    await new Promise(r => setTimeout(r, delayMs));
+    try { await task(); } catch (e) { console.error("[schedule]", (e as Error).message); }
+  })();
+  try { (globalThis as any).EdgeRuntime?.waitUntil?.(p); } catch { /* local dev: fire-and-forget */ }
 }
 
-function cardLabel(card) {
-  if (!card) return "?";
-  if (card.type === "wizard") return "🧙";
-  if (card.type === "fool") return "🃏";
-  if (card.specialType) return card.specialType;
-  const sym = {red:"♥",blue:"♠",green:"♣",yellow:"♦"}[card.suit] ?? "?";
-  return `${card.value}${sym}`;
+function scheduleAITurn(supabase, roomId, delayMs = 1800) {
+  schedule(async () => {
+    const { data: r } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+    if (!r || r.phase !== "playing") return;
+    const { data: ps } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+    if (!ps?.[r.current_player]?.is_ai || !ps[r.current_player]?.hand?.length) return;
+    await aiPlayNext(supabase, roomId, { ...r, current_trick: r.current_trick ?? [] }, ps);
+  }, delayMs);
 }
 
-// Logs failed writes instead of silently swallowing them (root cause of
-// several "missing trump card" bugs when a DB column didn't exist yet).
+function scheduleClearTrick(supabase, roomId, delayMs = 5000) {
+  schedule(async () => {
+    const { data: r } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+    if (!r || r.phase !== "trickEnd") return;
+    await handleClearTrick(supabase, roomId, r);
+  }, delayMs);
+}
+
 async function upd(promise, label) {
   const { error } = await promise;
   if (error) console.error(`[db:${label}]`, error.message);
   return { error };
 }
 
+async function handleClearTrick(supabase, roomId, room) {
+      if (room.phase !== "trickEnd") return json({ ok: true });
+
+      // Load fresh state
+      const { data: freshCR2 } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+      const { data: freshCP2 } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+      const fr = freshCR2 ?? room;
+      const fp2 = freshCP2 ?? [];
+
+      // Loose != null: treats undefined (missing DB column) as "no pending item"
+      // Strict !== null would deadlock the game in trickEnd if a column is missing
+      const hasPendingItems = fr.pending_rainbow9 != null ||
+        fr.pending_rainbow9_deferred != null ||
+        Array.isArray(fr.pending_rainbow7) ||
+        fr.pending_witch != null;
+
+      if (hasPendingItems) {
+        // Pending actions still open - ensure we stay in trickEnd
+        // so the pending action handlers can fire
+        if (fr.phase !== "trickEnd") {
+          await supabase.from("rooms").update({ phase: "trickEnd" }).eq("id", roomId);
+        }
+        return json({ ok: true });
+      }
+
+      // Check round over
+      const totalTricks2 = fp2.reduce((sum, p) => sum + (p.tricks_won ?? 0), 0);
+      const allEmpty2 = fp2.every(p => (p.hand ?? []).length === 0);
+      const roundOver2 = allEmpty2 || totalTricks2 >= fr.round;
+
+      dbg("[clearTrick] totalTricks:", totalTricks2, "round:", fr.round, "allEmpty:", allEmpty2, "roundOver:", roundOver2, "players tricks_won:", fp2.map(p => p.tricks_won));
+
+      if (roundOver2) {
+        // Atomically set phase to "scoring" first to prevent concurrent clearTrick calls
+        // from both calling endRound and double-counting points
+        const { error: lockError } = await supabase.from("rooms")
+          .update({ phase: "scoring" })
+          .eq("id", roomId)
+          .eq("phase", "trickEnd"); // only update if still in trickEnd (optimistic lock)
+        if (lockError) return json({ ok: true }); // another call won the race
+        // Re-check after lock: reload fresh room to confirm we got the lock
+        const { data: lockedRoom } = await supabase.from("rooms").select("phase").eq("id", roomId).single();
+        if (lockedRoom?.phase !== "scoring") return json({ ok: true }); // lost the race
+        await endRound(supabase, roomId, fr, fp2);
+      } else {
+        // Just set phase to playing - client will trigger AI via triggerAI
+        await supabase.from("rooms").update({
+          phase: "playing",
+          current_player: fr.last_trick_winner ?? fr.current_player
+        }).eq("id", roomId);
+      scheduleAITurn(supabase, roomId);
+      }
+      return json({ ok: true });
+}
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status, headers: { ...corsHeaders, "Content-Type": "application/json" }
   });
-}
-
-function aiBidIndianPoker(players, myIdx, trumpSuit = null, werewolfSuit = null) {
-  // In round 1 (Indian Poker), the AI cannot see its own card.
-  // It can only reason from the other players' visible cards and the trump.
-  // Heuristic: with N players and 1 card each, base chance for a single trick
-  // depends on how strong the visible opponents' cards look, plus baseline randomness
-  // representing the unknown own card.
-  const effectiveTrump = werewolfSuit ?? trumpSuit;
-  const others = players.filter((_, i) => i !== myIdx);
-
-  // Estimate the strength of the strongest visible opponent card
-  let maxOpponentStrength = 0;
-  for (const p of others) {
-    const c = (p.hand ?? [])[0];
-    if (!c) continue;
-    let s = 0;
-    if (c.type === "wizard") s = 0.95;
-    else if (c.specialType === "dragon") s = 0.9;
-    else if (c.specialType === "fairy") s = 0.05;
-    else if (c.type === "fool") s = 0;
-    else if (c.type === "number") {
-      const isTrump = effectiveTrump && c.suit === effectiveTrump;
-      s = isTrump ? (c.value / 13) * 0.85 : (c.value / 13) * 0.45;
-    } else {
-      s = 0.3; // other specials
-    }
-    maxOpponentStrength = Math.max(maxOpponentStrength, s);
-  }
-
-  // Unknown own card: assume average strength (~0.4), reduced by how strong
-  // the best visible opponent card is (can't beat a very strong visible card reliably)
-  const ownEstimate = Math.max(0.05, 0.45 - maxOpponentStrength * 0.3);
-
-  return ownEstimate >= 0.4 ? 1 : 0;
 }
 
 async function tickAIBids(supabase, roomId, room, players) {
@@ -335,13 +162,13 @@ async function tickAIBids(supabase, roomId, room, players) {
   const newCurrent = allBid ? startBidder : current;
   await supabase.from("rooms").update({ phase: newPhase, current_player: newCurrent, log: room.log }).eq("id", roomId);
 
-  console.log("[tickAIBids] allBid:", allBid, "newCurrent:", newCurrent, "is_ai:", players[newCurrent]?.is_ai);
+  dbg("[tickAIBids] allBid:", allBid, "newCurrent:", newCurrent, "is_ai:", players[newCurrent]?.is_ai);
   return json({ ok: true });
 }
 
 async function aiPlayNext(supabase, roomId, room, players) {
   const current = room.current_player;
-  console.log("[aiPlayNext] called, current_player:", current, "phase:", room.phase);
+  dbg("[aiPlayNext] called, current_player:", current, "phase:", room.phase);
   // Note: no blocking delay here - would cause timeout
   // Delay is handled client-side via triggerAI polling
 
@@ -349,37 +176,37 @@ async function aiPlayNext(supabase, roomId, room, players) {
   const { data: freshPlayers, error: fpErr } = await supabase
     .from("room_players").select("*").eq("room_id", roomId).order("player_index");
 
-  console.log("[aiPlayNext] freshPlayers loaded:", freshPlayers?.length, "error:", fpErr?.message);
+  dbg("[aiPlayNext] freshPlayers loaded:", freshPlayers?.length, "error:", fpErr?.message);
   const allPlayers = freshPlayers ?? players;
 
   let currentPlayer = allPlayers[current];
-  console.log("[aiPlayNext] currentPlayer:", currentPlayer?.ai_name, "is_ai:", currentPlayer?.is_ai, "hand length:", currentPlayer?.hand?.length);
+  dbg("[aiPlayNext] currentPlayer:", currentPlayer?.ai_name, "is_ai:", currentPlayer?.is_ai, "hand length:", currentPlayer?.hand?.length);
 
   if (!currentPlayer?.is_ai) {
-    console.log("[aiPlayNext] not AI, returning");
+    dbg("[aiPlayNext] not AI, returning");
     return json({ ok: true });
   }
 
   // If hand is empty, wait and retry - DB write may not be committed yet
   if (!currentPlayer.hand || currentPlayer.hand.length === 0) {
-    console.log("[aiPlayNext] empty hand, waiting 800ms and retrying...");
+    dbg("[aiPlayNext] empty hand, waiting 800ms and retrying...");
     await new Promise(r => setTimeout(r, 800));
     const { data: retryPlayers } = await supabase
       .from("room_players").select("*").eq("room_id", roomId).order("player_index");
     currentPlayer = (retryPlayers ?? allPlayers)[current];
-    console.log("[aiPlayNext] after retry, hand length:", currentPlayer?.hand?.length);
+    dbg("[aiPlayNext] after retry, hand length:", currentPlayer?.hand?.length);
     if (!currentPlayer?.hand || currentPlayer.hand.length === 0) {
-      console.log("[aiPlayNext] still empty after retry!");
+      dbg("[aiPlayNext] still empty after retry!");
       return json({ ok: true });
     }
   }
 
   const card = aiChooseCard(currentPlayer.hand, room.current_trick ?? [], room.trump_suit, room.werewolf_suit, currentPlayer.bid, currentPlayer.tricks_won ?? 0);
   if (!card) {
-    console.log("[aiPlayNext] aiChooseCard returned undefined! hand:", JSON.stringify(currentPlayer.hand));
+    dbg("[aiPlayNext] aiChooseCard returned undefined! hand:", JSON.stringify(currentPlayer.hand));
     return json({ ok: true });
   }
-  console.log("[aiPlayNext] AI plays:", cardLabel(card));
+  dbg("[aiPlayNext] AI plays:", cardLabel(card));
   const newHand = currentPlayer.hand.filter(c => c.id !== card.id);
   const expectedTrickLen = (room.current_trick ?? []).length;
 
@@ -396,23 +223,23 @@ async function aiPlayNext(supabase, roomId, room, players) {
   if (lockErr) {
     // Column missing or DB error: proceed WITHOUT lock rather than deadlocking the game.
     // The trick-length + card-presence checks below still catch most races.
-    console.log("[aiPlayNext] ai_lock unavailable (", lockErr.message, ") - proceeding without lock");
+    dbg("[aiPlayNext] ai_lock unavailable (", lockErr.message, ") - proceeding without lock");
   } else if (!lockResult || lockResult.length === 0 || lockResult[0].ai_lock !== lockToken) {
-    console.log("[aiPlayNext] could not acquire lock, concurrent call in progress, skipping");
+    dbg("[aiPlayNext] could not acquire lock, concurrent call in progress, skipping");
     return json({ ok: true });
   }
   // Re-verify trick state and card presence after acquiring lock
   const { data: freshRoomCheck } = await supabase.from("rooms").select("current_trick, current_player").eq("id", roomId).single();
   const actualTrickLen = (freshRoomCheck?.current_trick ?? []).length;
   if (actualTrickLen !== expectedTrickLen || freshRoomCheck?.current_player !== current) {
-    console.log("[aiPlayNext] trick state changed, skipping. expected:", expectedTrickLen, "actual:", actualTrickLen);
+    dbg("[aiPlayNext] trick state changed, skipping. expected:", expectedTrickLen, "actual:", actualTrickLen);
     return json({ ok: true });
   }
   const { data: verifyPlayer } = await supabase
     .from("room_players").select("hand").eq("id", currentPlayer.id).single();
   const dbHand = verifyPlayer?.hand ?? [];
   if (!dbHand.some((c: any) => c.id === card.id)) {
-    console.log("[aiPlayNext] card already played by concurrent call, skipping");
+    dbg("[aiPlayNext] card already played by concurrent call, skipping");
     return json({ ok: true });
   }
   await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", currentPlayer.id), "aiPlay.hand");
@@ -442,6 +269,7 @@ async function advanceBidder(supabase, roomId, room, players, bids) {
   const newPhase = allBid ? "playing" : "bidding";
   const newCurrent = allBid ? startBidder : next;
   await supabase.from("rooms").update({ phase: newPhase, current_player: newCurrent, log: room.log }).eq("id", roomId);
+  if (allBid && players[newCurrent]?.is_ai) scheduleAITurn(supabase, roomId);
   if (!allBid && players[newCurrent]?.is_ai) {
     return await tickAIBids(supabase, roomId, { ...room, phase: newPhase, current_player: newCurrent }, players);
   }
@@ -453,17 +281,25 @@ async function endRound(supabase, roomId, room, players) {
   // This prevents double scoring if endRound is called concurrently
   const validPhases = ["trickEnd", "scoring", "playing"];
   if (!validPhases.includes(room.phase)) {
-    console.log("[endRound] skipping - phase is", room.phase, "(already processed)");
+    dbg("[endRound] skipping - phase is", room.phase, "(already processed)");
     return;
   }
   const results = players.map((p, i) => {
     const delta = calcScore(p.bid ?? 0, p.tricks_won);
     return { playerIndex: i, name: p.ai_name, bid: p.bid ?? 0, got: p.tricks_won, delta, totalScore: p.score + delta };
   });
-  for (const r of results) {
-    await upd(supabase.from("room_players").update({ score: r.totalScore }).eq("id", players[r.playerIndex].id), "endRound.score");
+  // Atomic: all scores + history in one transaction (RPC); falls back to
+  // per-row writes if the RPC isn't deployed yet.
+  const { error: rpcErr } = await supabase.rpc("apply_round_scores", {
+    p_room_id: roomId, p_round: room.round, p_results: results,
+  });
+  if (rpcErr) {
+    console.error("[endRound] RPC unavailable, falling back:", rpcErr.message);
+    for (const r of results) {
+      await upd(supabase.from("room_players").update({ score: r.totalScore }).eq("id", players[r.playerIndex].id), "endRound.score");
+    }
+    await upd(supabase.from("round_history").insert({ room_id: roomId, round: room.round, results }), "endRound.history");
   }
-  await supabase.from("round_history").insert({ room_id: roomId, round: room.round, results });
 
   if (room.round >= room.max_rounds) {
     await supabase.from("rooms").update({ phase: "gameEnd", log: room.log }).eq("id", roomId);
@@ -498,12 +334,12 @@ async function advanceTrick(supabase, roomId, room, players) {
     const next = (room.current_player + 1) % players.length;
     await supabase.from("rooms").update({ current_trick: trick, current_player: next, log: room.log }).eq("id", roomId);
     if (players[next]?.is_ai) {
-      // Break chain - save state, client triggers next AI move with delay
       await supabase.from("rooms").update({
         current_trick: trick,
         current_player: next,
         log: room.log
       }).eq("id", roomId);
+      scheduleAITurn(supabase, roomId); // server drives the next AI move
       return json({ ok: true });
     }
     return json({ ok: true });
@@ -525,7 +361,8 @@ async function advanceTrick(supabase, roomId, room, players) {
   let trickWerewolfSuit = room.werewolf_suit;
   let trickTrumpCard = room.trump_card;
   if (vampireInTrick && room.werewolf_suit) {
-    const remaining = room.remaining_deck ?? [];
+    const { data: deckRow } = await supabase.from("room_decks").select("deck").eq("room_id", roomId).maybeSingle();
+    const remaining = deckRow?.deck ?? room.remaining_deck ?? [];
     const cardUnder = remaining.length > 0 ? remaining[remaining.length - 1] : null;
     addLog(room, `🧛 Vampir deckt Karte unter dem Werwolf auf: ${cardLabel(cardUnder)}`);
     if (cardUnder) {
@@ -567,13 +404,10 @@ async function advanceTrick(supabase, roomId, room, players) {
         // Drache/Fee/Bombe: Werwolf-Suit bleibt, Karte wirkt über specialType
       }
       // Aufgedeckte Karte verlässt das Deck (permanent)
-      await supabase.from("rooms").update({
-        remaining_deck: remaining.slice(0, -1),
-        log: room.log
-      }).eq("id", roomId);
-      room.remaining_deck = remaining.slice(0, -1);
+      await upd(supabase.from("room_decks").upsert({ room_id: roomId, deck: remaining.slice(0, -1) }), "deck.vampire");
+      await upd(supabase.from("rooms").update({ log: room.log }).eq("id", roomId), "log.vampire");
     }
-    console.log("[vampire+werewolf] trick-only trump:", trickTrumpSuit, "werewolf_suit stays:", room.werewolf_suit);
+    dbg("[vampire+werewolf] trick-only trump:", trickTrumpSuit, "werewolf_suit stays:", room.werewolf_suit);
   }
 
   const winnerIdx = trickWinner(trick, trickTrumpSuit, trickWerewolfSuit, trumpCardValue, trickTrumpCard);
@@ -676,7 +510,8 @@ async function advanceTrick(supabase, roomId, room, players) {
     pending_witch: pendingWitch,
     log: room.log
   }).eq("id", roomId);
-  console.log("[advanceTrick] after trickEnd update, room.trump_suit:", room.trump_suit, "room.werewolf_suit:", room.werewolf_suit);
+  scheduleClearTrick(supabase, roomId); // server clears the trick after display delay
+  dbg("[advanceTrick] after trickEnd update, room.trump_suit:", room.trump_suit, "room.werewolf_suit:", room.werewolf_suit);
 
   // If the witch player is an AI, auto-swap immediately
   if (pendingWitch !== null && players[pendingWitch]?.is_ai) {
@@ -718,7 +553,7 @@ async function advanceTrick(supabase, roomId, room, players) {
   const totalTricksPlayed = updatedPlayers2.reduce((sum, p) => sum + (p.tricks_won ?? 0), 0);
   const allHandsEmpty = updatedPlayers2.every(p => (p.hand ?? []).length === 0);
   const roundOver = allHandsEmpty || totalTricksPlayed >= currentRound;
-  console.log("[advanceTrick] totalTricksPlayed:", totalTricksPlayed, "currentRound:", currentRound, "allHandsEmpty:", allHandsEmpty, "roundOver:", roundOver);
+  dbg("[advanceTrick] totalTricksPlayed:", totalTricksPlayed, "currentRound:", currentRound, "allHandsEmpty:", allHandsEmpty, "roundOver:", roundOver);
 
   // If the 9¾ winner is an AI, resolve it automatically right away
   if (has9Active && updatedPlayers2[winnerIdx]?.is_ai) {
@@ -763,12 +598,21 @@ async function dealRound(supabase, roomId, room, players) {
 
   const trumpCard = deck.pop() ?? null;
   const remainingDeck = [...deck];
+  await upd(supabase.from("room_decks").upsert({ room_id: roomId, deck: remainingDeck }), "deck.deal");
 
-  console.log("[dealRound] dealing", room.round, "cards to", players.length, "players, deck size:", deck.length + players.length * room.round + 1);
-  for (let i = 0; i < players.length; i++) {
-    console.log("[dealRound] player", i, "hand size:", hands[i].length, "id:", players[i].id);
-    const { error: dealErr } = await supabase.from("room_players").update({ hand: hands[i], bid: null, tricks_won: 0 }).eq("id", players[i].id);
-    if (dealErr) console.log("[dealRound] ERROR saving hand:", dealErr.message);
+  dbg("[dealRound] dealing", room.round, "cards to", players.length, "players, deck size:", deck.length + players.length * room.round + 1);
+  // Atomic dealing via RPC (all hands in one transaction); per-row fallback if RPC missing.
+  {
+    const { error: dealRpcErr } = await supabase.rpc("deal_hands", {
+      p_room_id: roomId,
+      p_hands: players.map((p, i) => ({ playerIndex: p.player_index, hand: hands[i] })),
+    });
+    if (dealRpcErr) {
+      console.error("[dealRound] RPC unavailable, falling back:", dealRpcErr.message);
+      for (let i = 0; i < players.length; i++) {
+        await upd(supabase.from("room_players").update({ hand: hands[i], bid: null, tricks_won: 0 }).eq("id", players[i].id), "deal.hand");
+      }
+    }
   }
 
   // Check if any player got werewolf in hand
@@ -792,7 +636,7 @@ async function dealRound(supabase, roomId, room, players) {
       trump_card: werewolfCard, trump_suit: null,
       original_trump_card: cardUnderWerewolf, // card under werewolf - vampire copies this
       phase: wPhase, current_player: wPlayer,
-      werewolf_suit: wSuit, remaining_deck: remainingDeck,
+      werewolf_suit: wSuit,
       current_trick: [], last_trick_winner: null, last_trick_cards: null,
       pending_rainbow7: null, pending_rainbow9: null, pending_rainbow9_deferred: null, pending_witch: null, pending_vampire_reveal: null,
       log: room.log
@@ -833,7 +677,6 @@ async function dealRound(supabase, roomId, room, players) {
         trump_card: trumpCard, trump_suit: null, werewolf_suit: suit,
         original_trump_card: cardUnderWerwolf2,
         phase: "bidding", current_player: nextBidder,
-        remaining_deck: remainingDeck,
         current_trick: [], last_trick_winner: null, last_trick_cards: null,
         pending_rainbow7: null, pending_rainbow9: null, pending_rainbow9_deferred: null, pending_witch: null, pending_vampire_reveal: null,
         log: room.log
@@ -876,7 +719,6 @@ async function dealRound(supabase, roomId, room, players) {
     trump_card: trumpCard, trump_suit: trumpSuit,
     original_trump_card: null,
     phase, current_player: currentPlayer,
-    remaining_deck: remainingDeck,
     current_trick: [], last_trick_winner: null, last_trick_cards: null,
     werewolf_suit: null, pending_rainbow7: null, pending_rainbow9: null, pending_rainbow9_deferred: null, pending_witch: null, pending_vampire_reveal: null,
     log: room.log
@@ -924,62 +766,12 @@ serve(async (req) => {
   const callerPlayer = players.find(p => p.user_id === user.id);
   const callerIdx = callerPlayer?.player_index ?? -1;
 
+  if (rateLimited(user.id)) return json({ error: "Zu viele Anfragen" }, 429);
+
   switch (action) {
 
 
-    case "clearTrick": {
-      if (room.phase !== "trickEnd") return json({ ok: true });
-
-      // Load fresh state
-      const { data: freshCR2 } = await supabase.from("rooms").select("*").eq("id", roomId).single();
-      const { data: freshCP2 } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
-      const fr = freshCR2 ?? room;
-      const fp2 = freshCP2 ?? players;
-
-      // Loose != null: treats undefined (missing DB column) as "no pending item"
-      // Strict !== null would deadlock the game in trickEnd if a column is missing
-      const hasPendingItems = fr.pending_rainbow9 != null ||
-        fr.pending_rainbow9_deferred != null ||
-        Array.isArray(fr.pending_rainbow7) ||
-        fr.pending_witch != null;
-
-      if (hasPendingItems) {
-        // Pending actions still open - ensure we stay in trickEnd
-        // so the pending action handlers can fire
-        if (fr.phase !== "trickEnd") {
-          await supabase.from("rooms").update({ phase: "trickEnd" }).eq("id", roomId);
-        }
-        return json({ ok: true });
-      }
-
-      // Check round over
-      const totalTricks2 = fp2.reduce((sum, p) => sum + (p.tricks_won ?? 0), 0);
-      const allEmpty2 = fp2.every(p => (p.hand ?? []).length === 0);
-      const roundOver2 = allEmpty2 || totalTricks2 >= fr.round;
-
-      console.log("[clearTrick] totalTricks:", totalTricks2, "round:", fr.round, "allEmpty:", allEmpty2, "roundOver:", roundOver2, "players tricks_won:", fp2.map(p => p.tricks_won));
-
-      if (roundOver2) {
-        // Atomically set phase to "scoring" first to prevent concurrent clearTrick calls
-        // from both calling endRound and double-counting points
-        const { error: lockError } = await supabase.from("rooms")
-          .update({ phase: "scoring" })
-          .eq("id", roomId)
-          .eq("phase", "trickEnd"); // only update if still in trickEnd (optimistic lock)
-        if (lockError) return json({ ok: true }); // another call won the race
-        // Re-check after lock: reload fresh room to confirm we got the lock
-        const { data: lockedRoom } = await supabase.from("rooms").select("phase").eq("id", roomId).single();
-        if (lockedRoom?.phase !== "scoring") return json({ ok: true }); // lost the race
-        await endRound(supabase, roomId, fr, fp2);
-      } else {
-        // Just set phase to playing - client will trigger AI via triggerAI
-        await supabase.from("rooms").update({
-          phase: "playing",
-          current_player: fr.last_trick_winner ?? fr.current_player
-        }).eq("id", roomId);
-      }
-      return json({ ok: true });
-    }
+    case "clearTrick": return await handleClearTrick(supabase, roomId, room);
 
     case "witchRevealDone": {
       const { data: wrPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
@@ -1004,10 +796,10 @@ serve(async (req) => {
       if (currentRoom.phase !== "playing") return json({ ok: true });
       const { data: freshP } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
       const fp = freshP ?? players;
-      console.log("[triggerAI] current_player:", currentRoom.current_player, "is_ai:", fp[currentRoom.current_player]?.is_ai, "hand:", fp[currentRoom.current_player]?.hand?.length);
+      dbg("[triggerAI] current_player:", currentRoom.current_player, "is_ai:", fp[currentRoom.current_player]?.is_ai, "hand:", fp[currentRoom.current_player]?.hand?.length);
       if (!fp[currentRoom.current_player]?.is_ai) return json({ ok: true });
       if (!fp[currentRoom.current_player]?.hand?.length) {
-        console.log("[triggerAI] hand already empty - concurrent call, skipping");
+        dbg("[triggerAI] hand already empty - concurrent call, skipping");
         return json({ ok: true });
       }
       return await aiPlayNext(supabase, roomId, { ...currentRoom, current_trick: currentRoom.current_trick ?? [] }, fp);
@@ -1050,12 +842,12 @@ serve(async (req) => {
       if (aiInserts.length > 0) {
         const { data: aiData } = await supabase.from("room_players").insert(aiInserts).select();
         insertedAI = aiData ?? [];
-        console.log("[startGame] inserted AI players:", insertedAI.length, insertedAI.map(p => p.id));
+        dbg("[startGame] inserted AI players:", insertedAI.length, insertedAI.map(p => p.id));
       }
       // Reload ALL players from DB to get correct IDs
       const { data: freshAllPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
       const allPlayers = freshAllPlayers ?? [...players, ...insertedAI];
-      console.log("[startGame] allPlayers:", allPlayers.length, allPlayers.map(p => ({ id: p.id, name: p.ai_name })));
+      dbg("[startGame] allPlayers:", allPlayers.length, allPlayers.map(p => ({ id: p.id, name: p.ai_name })));
       const maxRounds = Math.floor(60 / allPlayers.length);
       const edition = body.edition ?? room.edition ?? "classic";
       addLog(room, `Spiel gestartet mit ${allPlayers.length} Spielern (${edition === "anniversary" ? "30 Jahre Edition" : "Classic"})`);

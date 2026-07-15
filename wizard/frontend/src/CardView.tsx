@@ -176,7 +176,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
             <NumberArt value={7} house="red" />;
           if (!imgName) return fallback;
           return (
-            <img src={`/cards/${imgName}.png`} alt={imgName}
+            <img src={`/cards/${imgName}.webp`} alt={imgName} loading="eager" decoding="async"
               style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }}
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
@@ -189,7 +189,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
           ? (() => {
             const idx = (getIndex() % 4) + 1;
             return (
-              <img src={`/cards/Wizard_${idx}.png`} alt={`Wizard ${idx}`}
+              <img src={`/cards/Wizard_${idx}.webp`} alt={`Wizard ${idx}`} loading="eager" decoding="async"
                 style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }}
                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
             );
@@ -198,7 +198,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
           ? (() => {
             const idx = (getIndex() % 4) + 1;
             return (
-              <img src={`/cards/Fool_${idx}.png`} alt={`Fool ${idx}`}
+              <img src={`/cards/Fool_${idx}.webp`} alt={`Fool ${idx}`} loading="eager" decoding="async"
                 style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }}
                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
             );
@@ -211,12 +211,14 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
               yellow: "Hufflepuff",
             };
             const folder = folderMap[house];
-            const imgPath = `/cards/${folder}_${card.value}.png`;
+            const imgPath = `/cards/${folder}_${card.value}.webp`;
             return (
               <div style={{ position: "relative", width: "100%", height: "100%" }}>
                 <img
                   src={imgPath}
                   alt={`${folder} ${card.value}`}
+                  loading="eager"
+                  decoding="async"
                   style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top" }}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
