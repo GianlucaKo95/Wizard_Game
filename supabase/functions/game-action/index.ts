@@ -5,7 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   SUITS, buildDeck, shuffle, trickWinner, trickWinnerWithoutBomb,
   calcScore, forbiddenDealerBid, aiBid, isAlwaysPlayable, aiChooseCard,
-  suitDot, cardLabel, aiBidIndianPoker,
+  suitDot, cardLabel, aiBidIndianPoker, aiWorstCard,
 } from "./logic.ts";
 
 
@@ -508,7 +508,6 @@ async function advanceTrick(supabase, roomId, room, players) {
   const pendingWitch = (hasWitch && !isLastTrick && witchPlayerHand.length > 0)
     ? witchPlayerIdx
     : null;
-  const hasPending = !isLastTrick && (has9Active || has7 || hasWitch);
 
   await supabase.from("rooms").update({
     current_trick: [], current_player: winnerIdx,
@@ -584,18 +583,12 @@ async function advanceTrick(supabase, roomId, room, players) {
     updatedPlayers2[winnerIdx] = { ...winnerPlayer, bid: newBid };
   }
 
-  const stillPendingRainbow9 = has9Active && !updatedPlayers2[winnerIdx]?.is_ai;
-
   // Note: even if roundOver is true, we do NOT call endRound here.
   // We stay in "trickEnd" so the last trick remains visible for the same
   // duration as any other trick. The client's clearTrick (after its display
   // delay) will detect roundOver and call endRound at that point - unless
-  // there's a pending human action (9¾), which must resolve first.
-  if (stillPendingRainbow9 || hasPending) {
-    // Has pending actions (incl. 9¾ on last trick for a human) - stay in trickEnd, client handles
-    // Round-end check happens after the pending action resolves (see rainbow9Adjust, witchRevealDone)
-  }
-  // else: stay in trickEnd - client will call clearTrick after its delay, which then checks roundOver
+  // there's a pending human action (9¾/7½/Hexe), which must resolve first
+  // (see rainbow9Adjust, passCard, witchRevealDone).
 
   return json({ ok: true });
 }
@@ -875,6 +868,7 @@ serve(async (req) => {
     case "chooseTrump": {
       if (room.phase !== "choosingTrump") return json({ error: "Falscher Status" }, 400);
       if (room.current_player !== callerIdx) return json({ error: "Nicht dein Zug" }, 403);
+      if (!SUITS.includes(body.suit)) return json({ error: "Ungültige Farbe" }, 400);
       addLog(room, `Trumpf gewählt: ${suitDot(body.suit)}`);
       const nextBidder = (room.dealer + 1) % players.length;
       await supabase.from("rooms").update({ trump_suit: body.suit, phase: "bidding", current_player: nextBidder, log: room.log }).eq("id", roomId);
@@ -884,6 +878,7 @@ serve(async (req) => {
     case "chooseWerewolf": {
       if (room.phase !== "choosingWerewolf") return json({ error: "Falscher Status" }, 400);
       if (room.current_player !== callerIdx) return json({ error: "Nicht dein Zug" }, 403);
+      if (!SUITS.includes(body.suit)) return json({ error: "Ungültige Farbe" }, 400);
       addLog(room, `🐺 Stichfarbe gewählt: ${suitDot(body.suit)}`);
       const nextBidder = (room.dealer + 1) % players.length;
       await supabase.from("rooms").update({ werewolf_suit: body.suit, phase: "bidding", current_player: nextBidder, log: room.log }).eq("id", roomId);
@@ -894,6 +889,7 @@ serve(async (req) => {
       if (room.phase !== "bidding") return json({ error: "Falscher Status" }, 400);
       if (room.current_player !== callerIdx) return json({ error: "Nicht dein Zug" }, 403);
       const bid = Number(body.bid);
+      if (!Number.isInteger(bid) || bid < 0 || bid > room.round) return json({ error: "Ungültiges Gebot" }, 400);
       const forbidden = forbiddenDealerBid(players.map(p => p.bid), room.dealer, room.round);
       if (room.dealer === callerIdx && forbidden !== null && bid === forbidden)
         return json({ error: `Stichzwang: ${forbidden} ist verboten!` }, 400);
@@ -1012,7 +1008,7 @@ serve(async (req) => {
       for (const aiIdx of [...remaining]) {
         const aiPlayer = updPlayers.find(p => p.player_index === aiIdx);
         if (aiPlayer?.is_ai && aiPlayer.hand.length > 0) {
-          const aiCard = aiPlayer.hand[Math.floor(Math.random() * aiPlayer.hand.length)];
+          const aiCard = aiWorstCard(aiPlayer.hand, room.trump_suit, room.werewolf_suit);
           const aiNewHand = aiPlayer.hand.filter(c => c.id !== aiCard.id);
           await supabase.from("room_players").update({ hand: aiNewHand }).eq("id", aiPlayer.id);
           buffer[aiIdx] = aiCard;

@@ -504,27 +504,6 @@ function getSeatPositions(players: any[], myIdx: number) {
   return seats;
 }
 
-// ─── Playability Check (client-side hint) ────────────────────────────────────
-function isCardPlayable(card: any, hand: any[], trick: any[], werewolfSuit?: string|null): boolean {
-  const alwaysOk = (c: any) =>
-    c.type === "fool" || c.type === "wizard" ||
-    ["witch","wizardfool","dragon","fairy","bomb","werewolf"].includes(c.specialType ?? "");
-
-  if (alwaysOk(card)) return true;
-
-  const ledEntry = trick.find((t:any) =>
-    t.card.type === "number" ||
-    (t.card.specialType === "rainbow7" && t.card.suit) ||
-    (t.card.specialType === "rainbow9" && t.card.suit)
-  );
-  const led = werewolfSuit ?? ledEntry?.card.suit ?? null;
-  if (!led) return true;
-
-  const canFollow = hand.some((c:any) => c.suit === led && !alwaysOk(c));
-  if (canFollow && card.suit !== led) return false;
-  return true;
-}
-
 // ─── Hand Sorting ─────────────────────────────────────────────────────────────
 const SUIT_ORDER: Record<string, number> = { red: 0, blue: 1, green: 2, yellow: 3 };
 const TYPE_ORDER: Record<string, number> = { fool: 0, number: 1, wizard: 2, special: 3 };
@@ -589,7 +568,10 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
     }
   }, [showScoresheet]);
   const [roundHistory, setRoundHistory] = useState<any[]>([]);
-  const [specialAction, setSpecialAction] = useState<null|{type:string;cardId:string;trickCards?:any[]}>(null);
+  type SpecialAction =
+    | { type: "rainbow7pass" | "rainbow7passed" | "rainbow7suit" | "rainbow9suit" | "wizardfool"; cardId: string }
+    | { type: "witchGive"; takeCardId: string };
+  const [specialAction, setSpecialAction] = useState<SpecialAction | null>(null);
   const [pendingCard, setPendingCard] = useState<any>(null);
   const [passingCard, setPassingCard] = useState<string|null>(null); // for 7½
   const logRef = useRef<HTMLDivElement>(null);
@@ -934,31 +916,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
       zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
     };
 
-    // Werewolf – choose suit for whole round
-    // Witch – swap a card from trick
-    if (specialAction.type === "witch") return (
-      <div style={overlayStyle}>
-        <div style={{ ...glass({ padding: 24 }), width: "min(400px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ fontSize: 32 }}>🧹</div>
-          <div style={{ ...cinzel, fontSize: 15, color: C.gold }}>Bellatrix – Karte tauschen</div>
-          <div style={{ fontSize: 11, color: C.ivoryDim }}>Wähle eine Karte aus dem Stich die du auf deine Hand nimmst</div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-            {(specialAction.trickCards ?? []).filter((t:any) => t.card.id !== specialAction.cardId).map((t:any) => (
-              <div key={t.card.id} style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 9, color: C.ivoryDim, marginBottom: 3 }}>{players[t.playerIndex]?.ai_name}</div>
-                <CardView card={t.card} onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "witch", takeCardId: t.card.id }); setSpecialAction(null); }} />
-              </div>
-            ))}
-          </div>
-          <button onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "witchSkip" }); setSpecialAction(null); }}
-            style={{ ...goldBtn(false), fontSize: 12, padding: "8px 16px" }}>
-            Keine Karte tauschen
-          </button>
-        </div>
-      </div>
-    );
-
-
     // Rainbow 7½ suit chooser
     if (specialAction.type === "rainbow7suit") return (
       <div style={overlayStyle}>
@@ -1041,22 +998,6 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               style={{ ...goldBtn(), flex: 1, padding: "14px 0", fontSize: 14 }}>🧙 Zauberer</button>
             <button onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "wizardfool", choice: "fool" }); setSpecialAction(null); }}
               style={{ ...goldBtn(false), flex: 1, padding: "14px 0", fontSize: 14 }}>🃏 Narr</button>
-          </div>
-        </div>
-      </div>
-    );
-
-    // Rainbow 9¾ – adjust bid
-    if (specialAction.type === "rainbow9") return (
-      <div style={overlayStyle}>
-        <div style={{ ...glass({ padding: 24 }), width: "min(340px,92vw)", textAlign: "center", display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Gleis 9¾ – Vorhersage anpassen</div>
-          <div style={{ fontSize: 12, color: C.ivoryDim }}>Der Stichgewinner muss seine Vorhersage um 1 ändern</div>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-            <button onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "rainbow9", adjust: 1 }); setSpecialAction(null); }}
-              style={{ ...goldBtn(), flex: 1, padding: "14px 0", fontSize: 16 }}>+1</button>
-            <button onClick={() => { act("playSpecial", { cardId: specialAction.cardId, specialAction: "rainbow9", adjust: -1 }); setSpecialAction(null); }}
-              style={{ ...goldBtn(false), flex: 1, padding: "14px 0", fontSize: 16 }}>−1</button>
           </div>
         </div>
       </div>
