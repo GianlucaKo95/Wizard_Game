@@ -769,6 +769,39 @@ serve(async (req) => {
   }
   const { action, roomId } = body;
 
+  if (rateLimited(user.id)) return json({ error: "Zu viele Anfragen" }, 429);
+
+  // createRoom/joinRoom don't operate on an existing roomId yet (createRoom
+  // makes one, joinRoom resolves the room from a room code) - skip the lookup.
+  if (action === "createRoom" || action === "joinRoom") {
+    switch (action) {
+      case "createRoom": {
+        const code = Array.from({ length: 5 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
+        const uname = (body.username ?? "Spieler").toString().slice(0, 24);
+        const { data: newRoom, error: crErr } = await supabase.from("rooms")
+          .insert({ code, host_id: user.id, phase: "lobby", round: 0, max_rounds: 0, dealer: 0, current_player: 0, log: [], edition: body.edition === "anniversary" ? "anniversary" : "classic" })
+          .select("id, code").single();
+        if (crErr || !newRoom) return json({ error: "Raum konnte nicht erstellt werden" }, 500);
+        await upd(supabase.from("room_players").insert({ room_id: newRoom.id, user_id: user.id, player_index: 0, is_ai: false, ai_name: uname, hand: [], score: 0, tricks_won: 0, connected: true }), "createRoom.player");
+        return json({ ok: true, roomId: newRoom.id, code: newRoom.code });
+      }
+      case "joinRoom": {
+        const jcode = (body.code ?? "").toString().toUpperCase().slice(0, 8);
+        const { data: jRoom } = await supabase.from("rooms").select("id, phase").eq("code", jcode).single();
+        if (!jRoom) return json({ error: "Raum nicht gefunden" }, 404);
+        if (jRoom.phase !== "lobby") return json({ error: "Spiel läuft bereits" }, 400);
+        const { data: existing } = await supabase.from("room_players").select("player_index, user_id").eq("room_id", jRoom.id);
+        if (existing?.some(p => p.user_id === user.id)) return json({ ok: true, roomId: jRoom.id }); // already joined
+        if ((existing?.length ?? 0) >= 6) return json({ error: "Raum ist voll" }, 400);
+        const uname2 = (body.username ?? "Spieler").toString().slice(0, 24);
+        await upd(supabase.from("room_players").insert({ room_id: jRoom.id, user_id: user.id, player_index: existing?.length ?? 0, is_ai: false, ai_name: uname2, hand: [], score: 0, tricks_won: 0, connected: true }), "joinRoom.player");
+        // Touch rooms so lobby clients get a realtime event and reload the player list
+        await upd(supabase.from("rooms").update({ log: [`${uname2} ist beigetreten`] }).eq("id", jRoom.id), "joinRoom.touch");
+        return json({ ok: true, roomId: jRoom.id });
+      }
+    }
+  }
+
   const { data: roomRow } = await supabase.from("rooms").select("*").eq("id", roomId).single();
   if (!roomRow) return json({ error: "Raum nicht gefunden" }, 404);
   const room = roomRow;
@@ -777,8 +810,6 @@ serve(async (req) => {
   const players = playerRows ?? [];
   const callerPlayer = players.find(p => p.user_id === user.id);
   const callerIdx = callerPlayer?.player_index ?? -1;
-
-  if (rateLimited(user.id)) return json({ error: "Zu viele Anfragen" }, 429);
 
   switch (action) {
 
@@ -815,32 +846,6 @@ serve(async (req) => {
         return json({ ok: true });
       }
       return await aiPlayNext(supabase, roomId, { ...currentRoom, current_trick: currentRoom.current_trick ?? [] }, fp);
-    }
-
-    case "createRoom": {
-      const code = Array.from({ length: 5 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
-      const uname = (body.username ?? "Spieler").toString().slice(0, 24);
-      const { data: newRoom, error: crErr } = await supabase.from("rooms")
-        .insert({ code, host_id: user.id, phase: "lobby", round: 0, max_rounds: 0, dealer: 0, current_player: 0, log: [], edition: body.edition === "anniversary" ? "anniversary" : "classic" })
-        .select("id, code").single();
-      if (crErr || !newRoom) return json({ error: "Raum konnte nicht erstellt werden" }, 500);
-      await upd(supabase.from("room_players").insert({ room_id: newRoom.id, user_id: user.id, player_index: 0, is_ai: false, ai_name: uname, hand: [], score: 0, tricks_won: 0, connected: true }), "createRoom.player");
-      return json({ ok: true, roomId: newRoom.id, code: newRoom.code });
-    }
-
-    case "joinRoom": {
-      const jcode = (body.code ?? "").toString().toUpperCase().slice(0, 8);
-      const { data: jRoom } = await supabase.from("rooms").select("id, phase").eq("code", jcode).single();
-      if (!jRoom) return json({ error: "Raum nicht gefunden" }, 404);
-      if (jRoom.phase !== "lobby") return json({ error: "Spiel läuft bereits" }, 400);
-      const { data: existing } = await supabase.from("room_players").select("player_index, user_id").eq("room_id", jRoom.id);
-      if (existing?.some(p => p.user_id === user.id)) return json({ ok: true, roomId: jRoom.id }); // already joined
-      if ((existing?.length ?? 0) >= 6) return json({ error: "Raum ist voll" }, 400);
-      const uname2 = (body.username ?? "Spieler").toString().slice(0, 24);
-      await upd(supabase.from("room_players").insert({ room_id: jRoom.id, user_id: user.id, player_index: existing?.length ?? 0, is_ai: false, ai_name: uname2, hand: [], score: 0, tricks_won: 0, connected: true }), "joinRoom.player");
-      // Touch rooms so lobby clients get a realtime event and reload the player list
-      await upd(supabase.from("rooms").update({ log: [`${uname2} ist beigetreten`] }).eq("id", jRoom.id), "joinRoom.touch");
-      return json({ ok: true, roomId: jRoom.id });
     }
 
     case "startGame": {
