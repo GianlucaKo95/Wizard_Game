@@ -1,0 +1,36 @@
+name: Deploy Supabase Edge Function
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+      - "supabase/config.toml"
+      - ".github/workflows/supabase-deploy.yml"
+
+env:
+  SUPABASE_PROJECT_REF: iqsxlypitmktbdurxdcg
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run Wizard rules test suite
+        working-directory: supabase/functions/game-action
+        run: npx --yes tsx logic_test.ts
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy game-action
+        run: supabase functions deploy game-action --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
