@@ -80,6 +80,25 @@ async function upd(promise, label) {
   return { error };
 }
 
+// Reveals the card hidden under the Werewolf trump card the moment the
+// Vampire is actually played (not at trick-end) - so any player still to
+// act in this trick sees the same information a real reveal would give
+// them immediately, instead of only finding out from the log afterwards.
+// Persists the reveal to `rooms.original_trump_card` right away; advanceTrick
+// picks it up from there once the trick resolves, instead of re-reading and
+// re-popping the deck itself.
+async function revealCardUnderWerewolf(supabase, roomId, room) {
+  const { data: deckRow } = await supabase.from("room_decks").select("deck").eq("room_id", roomId).maybeSingle();
+  const remaining = deckRow?.deck ?? [];
+  const cardUnder = remaining.length > 0 ? remaining[remaining.length - 1] : null;
+  if (!cardUnder) return null;
+  addLog(room, `🧛 Vampir deckt Karte unter dem Werwolf auf: ${cardLabel(cardUnder)}`);
+  room.original_trump_card = cardUnder;
+  await upd(supabase.from("room_decks").upsert({ room_id: roomId, deck: remaining.slice(0, -1) }), "deck.vampireReveal");
+  await upd(supabase.from("rooms").update({ original_trump_card: cardUnder, log: room.log }).eq("id", roomId), "log.vampireReveal");
+  return cardUnder;
+}
+
 async function handleClearTrick(supabase, roomId, room) {
       if (room.phase !== "trickEnd") return json({ ok: true });
 
@@ -273,6 +292,10 @@ async function aiPlayNext(supabase, roomId, room, players) {
     addLog(room, `${currentPlayer.ai_name}: ${cardLabel(card)}`);
   }
 
+  if (card.specialType === "vampire" && room.werewolf_suit) {
+    await revealCardUnderWerewolf(supabase, roomId, room);
+  }
+
   const newTrick = [...(room.current_trick ?? []), { card: playedCard, playerIndex: current }];
   // Let advanceTrick reload players fresh from DB - passing stale updPlayers
   // can cause empty-hand issues when DB writes from previous round haven't propagated
@@ -373,15 +396,15 @@ async function advanceTrick(supabase, roomId, room, players) {
   // Special case: Vampir im Stich + Werwolf als aktiver Trumpf
   // → Karte unter dem Werwolf aufdecken; die neue Trumpffarbe gilt NUR FÜR DIESEN STICH.
   // Danach bleibt der Werwolf-Suit als Trumpf aktiv (werewolf_suit unverändert in DB).
+  // Reveal itself already happened (and was logged) the moment the Vampire was
+  // played - see revealCardUnderWerewolf() - so it's picked up from
+  // room.original_trump_card here instead of being looked up/logged/popped again.
   const vampireInTrick = trick.some(t => t.card.specialType === "vampire");
   let trickTrumpSuit = room.trump_suit;
   let trickWerewolfSuit = room.werewolf_suit;
   let trickTrumpCard = room.trump_card;
   if (vampireInTrick && room.werewolf_suit) {
-    const { data: deckRow } = await supabase.from("room_decks").select("deck").eq("room_id", roomId).maybeSingle();
-    const remaining = deckRow?.deck ?? room.remaining_deck ?? [];
-    const cardUnder = remaining.length > 0 ? remaining[remaining.length - 1] : null;
-    addLog(room, `🧛 Vampir deckt Karte unter dem Werwolf auf: ${cardLabel(cardUnder)}`);
+    const cardUnder = room.original_trump_card ?? null;
     if (cardUnder) {
       if (cardUnder.type === "number") {
         trickTrumpSuit = cardUnder.suit;
@@ -420,8 +443,6 @@ async function advanceTrick(supabase, roomId, room, players) {
         }
         // Drache/Fee/Bombe: Werwolf-Suit bleibt, Karte wirkt über specialType
       }
-      // Aufgedeckte Karte verlässt das Deck (permanent)
-      await upd(supabase.from("room_decks").upsert({ room_id: roomId, deck: remaining.slice(0, -1) }), "deck.vampire");
       await upd(supabase.from("rooms").update({ log: room.log }).eq("id", roomId), "log.vampire");
     }
     dbg("[vampire+werewolf] trick-only trump:", trickTrumpSuit, "werewolf_suit stays:", room.werewolf_suit);
@@ -945,6 +966,9 @@ serve(async (req) => {
       const playedCard = isWitch ? { ...card, type: "fool" } : (isRainbowChoice ? { ...card, suit: body.suit } : card);
       const newTrick = [...room.current_trick, { card: playedCard, playerIndex: callerIdx }];
       addLog(room, `${callerPlayer.ai_name}: ${cardLabel(playedCard)}`);
+      if (card.specialType === "vampire" && room.werewolf_suit) {
+        await revealCardUnderWerewolf(supabase, roomId, room);
+      }
       return await advanceTrick(supabase, roomId, { ...room, current_trick: newTrick, current_player: callerIdx, log: room.log }, null);
     }
 
