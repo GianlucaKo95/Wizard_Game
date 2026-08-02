@@ -1316,11 +1316,16 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             ))}
 
             {/* Trumpf - always visible, fixed corner */}
-            {room.trump_card && (
+            {room.trump_card && (() => {
+              // These trump cards have no natural suit of their own - the dealer
+              // picks one instead, shown as a badge/letter since the card itself
+              // can't display it.
+              const trumpHasChosenSuit = room.trump_card.type === "wizard" ||
+                ["wizardfool", "vampire", "rainbow9", "dragon"].includes(room.trump_card.specialType);
+              return (
               <div style={{ position: "absolute" as const, bottom: "26%", left: "clamp(10px,3vw,40px)", textAlign: "center", zIndex: 4 }}>
                 <div style={{ position: "relative" as const, display: "inline-block" }}>
-                  {/* Chosen trump color badge - shown when trump card is wizard/special with no natural suit */}
-                  {room.trump_suit && (room.trump_card.type === "wizard" || room.trump_card.specialType === "wizardfool" || room.trump_card.specialType === "vampire" || room.trump_card.specialType === "rainbow9") && (
+                  {room.trump_suit && trumpHasChosenSuit && (
                     <div style={{
                       position: "absolute" as const, top: -10, left: "50%", transform: "translateX(-50%)",
                       background: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS],
@@ -1335,12 +1340,13 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                   <CardView card={room.trump_card} werewolfSuit={room.werewolf_suit} />
                 </div>
                 <div style={{ ...cinzel, fontSize: "clamp(7px,1vmin,10px)", color: C.gold, marginTop: 3 }}>TRUMPF</div>
-                {room.trump_suit && !(room.trump_card.type === "wizard" || room.trump_card.specialType === "wizardfool" || room.trump_card.specialType === "vampire" || room.trump_card.specialType === "rainbow9") && (
+                {room.trump_suit && !trumpHasChosenSuit && (
                   <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: "clamp(10px,1.5vmin,14px)", fontWeight: 700 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</div>
                 )}
                 {room.werewolf_suit && <div style={{ color: SUIT_COLORS[room.werewolf_suit as keyof typeof SUIT_COLORS], fontSize: "clamp(10px,1.5vmin,14px)" }}>🐺 {SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</div>}
               </div>
-            )}
+              );
+            })()}
 
             {/* Trick cards - center of table, positional */}
             <div style={{ position: "absolute" as const, top: "44%", left: "50%", transform: "translate(-50%,-50%)", width: "60%", height: "26%", zIndex: 3 }}>
