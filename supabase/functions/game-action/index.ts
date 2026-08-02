@@ -843,7 +843,8 @@ serve(async (req) => {
 
     case "startGame": {
       if (callerIdx !== 0) return json({ error: "Nur der Host kann starten" }, 403);
-      const aiCount = body.aiCount ?? 0;
+      const aiCount = Number(body.aiCount ?? 0);
+      if (!Number.isInteger(aiCount) || aiCount < 0) return json({ error: "Ungültige KI-Anzahl" }, 400);
       const aiInserts = [];
       for (let i = players.length; i < Math.min(6, players.length + aiCount); i++) {
         aiInserts.push({ room_id: roomId, player_index: i, is_ai: true, ai_name: `KI ${i - players.length + 1}`, hand: [], score: 0, tricks_won: 0, connected: true });

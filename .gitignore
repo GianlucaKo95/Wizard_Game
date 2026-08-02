@@ -5,3 +5,4 @@ wizard/frontend/dist/
 wizard/dist/
 .env
 *.local
+supabase/.temp/
