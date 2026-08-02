@@ -26,7 +26,7 @@ function rateLimited(userId: string): boolean {
 }
 
 const DEBUG = Deno.env.get("WIZARD_DEBUG") === "1";
-const dbg = (...a: unknown[]) => { if (DEBUG) dbg(...a); };
+const dbg = (...a: unknown[]) => { if (DEBUG) console.log(...a); };
 
 function addLog(room, msg) {
   room.log = [msg, ...room.log].slice(0, 30);
@@ -71,6 +71,18 @@ function scheduleClearTrick(supabase, roomId, delayMs = 5000) {
     const { data: r } = await supabase.from("rooms").select("*").eq("id", roomId).single();
     if (!r || r.phase !== "trickEnd") return;
     await handleClearTrick(supabase, roomId, r);
+  }, delayMs);
+}
+
+// Client calls "witchRevealDone" ~4s after showing the swap result (see App.tsx).
+// Unlike trickEnd this had no server-side fallback at all - if every client
+// disconnects right as phase becomes "witchReveal", the room was stuck there
+// forever. Mirrors scheduleClearTrick/handleClearTrick.
+function scheduleWitchRevealDone(supabase, roomId, delayMs = 6000) {
+  schedule(async () => {
+    const { data: r } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+    if (!r || r.phase !== "witchReveal") return;
+    await handleWitchRevealDone(supabase, roomId, r);
   }, delayMs);
 }
 
@@ -133,15 +145,17 @@ async function handleClearTrick(supabase, roomId, room) {
 
       if (roundOver2) {
         // Atomically set phase to "scoring" first to prevent concurrent clearTrick calls
-        // from both calling endRound and double-counting points
-        const { error: lockError } = await supabase.from("rooms")
+        // from both calling endRound and double-counting points.
+        // A plain .update() doesn't error when its WHERE clause matches 0 rows, so both
+        // racing calls would see no error and both proceed - .select() forces PostgREST
+        // to return the affected rows, so an empty result reliably means we lost the race
+        // (same pattern as the ai_lock check in aiPlayNext).
+        const { data: lockRows, error: lockError } = await supabase.from("rooms")
           .update({ phase: "scoring" })
           .eq("id", roomId)
-          .eq("phase", "trickEnd"); // only update if still in trickEnd (optimistic lock)
-        if (lockError) return json({ ok: true }); // another call won the race
-        // Re-check after lock: reload fresh room to confirm we got the lock
-        const { data: lockedRoom } = await supabase.from("rooms").select("phase").eq("id", roomId).single();
-        if (lockedRoom?.phase !== "scoring") return json({ ok: true }); // lost the race
+          .eq("phase", "trickEnd") // only update if still in trickEnd (optimistic lock)
+          .select("id");
+        if (lockError || !lockRows || lockRows.length === 0) return json({ ok: true }); // lost the race
         await endRound(supabase, roomId, fr, fp2);
       } else {
         // Just set phase to playing - client will trigger AI via triggerAI
@@ -152,6 +166,33 @@ async function handleClearTrick(supabase, roomId, room) {
       scheduleAITurn(supabase, roomId);
       }
       return json({ ok: true });
+}
+
+async function handleWitchRevealDone(supabase, roomId, room) {
+  if (room.phase !== "witchReveal") return json({ ok: true });
+
+  const { data: wrPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
+  const { data: wrRoom } = await supabase.from("rooms").select("*").eq("id", roomId).single();
+  const fr = wrRoom ?? room;
+  const fp = wrPlayers ?? [];
+
+  const totalTWR = fp.reduce((s, p) => s + (p.tricks_won ?? 0), 0);
+  const allEWR = fp.every(p => (p.hand ?? []).length === 0);
+  if (allEWR || totalTWR >= fr.round) {
+    // Same atomic optimistic lock as handleClearTrick - only one of two
+    // concurrent calls (client trigger + server schedule) may proceed.
+    const { data: lockRows, error: lockError } = await supabase.from("rooms")
+      .update({ phase: "scoring", witch_swap: null })
+      .eq("id", roomId)
+      .eq("phase", "witchReveal")
+      .select("id");
+    if (lockError || !lockRows || lockRows.length === 0) return json({ ok: true }); // lost the race
+    await endRound(supabase, roomId, { ...fr, witch_swap: null }, fp);
+    return json({ ok: true });
+  }
+
+  await supabase.from("rooms").update({ phase: "playing", witch_swap: null }).eq("id", roomId);
+  return json({ ok: true });
 }
 
 function json(data, status = 200) {
@@ -462,7 +503,11 @@ async function advanceTrick(supabase, roomId, room, players) {
     // Even with a bomb, Jongleur (7½) and Hexe still trigger (official FAQ)
     const bombHas7 = hasBomb && trick.some(t => t.card.specialType === "rainbow7");
     const bombHasWitch = hasBomb && trick.some(t => t.card.id === "witch" || t.card.specialType === "witch");
-    const bombIsLastTrick = (players.reduce((s, p) => s + (p.tricks_won ?? 0), 0)) >= room.round - 1;
+    // Bombed tricks never add to tricks_won, so comparing totalTricks to room.round
+    // doesn't track physical tricks played when multiple bombs void tricks in the
+    // same round - checking hand emptiness directly (like isLastTrick below) is robust
+    // regardless of how many prior tricks were voided.
+    const bombIsLastTrick = players.every(p => (p.hand ?? []).length === 0);
 
     const bombRainbow7Players = (bombHas7 && !bombIsLastTrick) ? players.map((_, i) => i) : null;
     const bombWitchPlayerIdx = trick.find(t => t.card.id === "witch" || t.card.specialType === "witch")?.playerIndex ?? null;
@@ -502,6 +547,7 @@ async function advanceTrick(supabase, roomId, room, players) {
           witch_swap: { playerName: witchAI.ai_name, gave: givenCard, took: takenCard },
           log: room.log
         }).eq("id", roomId);
+        scheduleWitchRevealDone(supabase, roomId);
       } else {
         await supabase.from("rooms").update({ pending_witch: null }).eq("id", roomId);
       }
@@ -524,9 +570,15 @@ async function advanceTrick(supabase, roomId, room, players) {
   const has7 = trick.some(t => t.card.specialType === "rainbow7");
   const hasWitch = trick.some(t => t.card.id === "witch" || t.card.specialType === "witch");
 
-  // Check if this is the last trick - if so, skip all pending actions
+  // Check if this is the last trick - if so, skip all pending actions.
+  // Mirrors roundOver2's check in handleClearTrick: totalTricksAfter alone
+  // undercounts once a bomb has voided a trick (nobody's tricks_won increases
+  // for it), which would otherwise leave this the true last trick with
+  // totalTricksAfter < room.round and incorrectly try to set up a card-pass/
+  // witch-swap when no player has any cards left to give away.
   const totalTricksAfter = players.reduce((s, p) => s + (p.tricks_won ?? 0), 0);
-  const isLastTrick = totalTricksAfter >= room.round;
+  const allHandsEmptyNow = players.every(p => (p.hand ?? []).length === 0);
+  const isLastTrick = allHandsEmptyNow || totalTricksAfter >= room.round;
 
   const rainbow7Players = (has7 && !isLastTrick) ? players.map((_, i) => i) : null;
   const witchPlayerIdx = trick.find(t => t.card.id === "witch" || t.card.specialType === "witch")?.playerIndex ?? null;
@@ -572,6 +624,7 @@ async function advanceTrick(supabase, roomId, room, players) {
         witch_swap: { playerName: witchAI.ai_name, gave: givenCard, took: takenCard },
         log: room.log
       }).eq("id", roomId);
+      scheduleWitchRevealDone(supabase, roomId);
     } else {
       await supabase.from("rooms").update({ pending_witch: null }).eq("id", roomId);
     }
@@ -835,21 +888,7 @@ serve(async (req) => {
 
     case "clearTrick": return await handleClearTrick(supabase, roomId, room);
 
-    case "witchRevealDone": {
-      const { data: wrPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
-      const { data: wrRoom } = await supabase.from("rooms").select("*").eq("id", roomId).single();
-      if (wrPlayers && wrRoom) {
-        const totalTWR = wrPlayers.reduce((s, p) => s + (p.tricks_won ?? 0), 0);
-        const allEWR = wrPlayers.every(p => (p.hand ?? []).length === 0);
-        if (allEWR || totalTWR >= wrRoom.round) {
-          await supabase.from("rooms").update({ witch_swap: null }).eq("id", roomId);
-          await endRound(supabase, roomId, { ...wrRoom, witch_swap: null }, wrPlayers);
-          return json({ ok: true });
-        }
-      }
-      await supabase.from("rooms").update({ phase: "playing", witch_swap: null }).eq("id", roomId);
-      return json({ ok: true });
-    }
+    case "witchRevealDone": return await handleWitchRevealDone(supabase, roomId, room);
 
     case "triggerAI": {
       // Reload fresh room state - the room loaded at handler start may be stale
@@ -991,17 +1030,9 @@ serve(async (req) => {
           witch_swap: { playerName: callerPlayer.ai_name, gave: givenCard, took: takenCard },
           log: room.log
         }).eq("id", roomId);
-        // Check if round is over after witch swap
-        const { data: afterWitchPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
-        const { data: afterWitchRoom } = await supabase.from("rooms").select("*").eq("id", roomId).single();
-        if (afterWitchPlayers && afterWitchRoom) {
-          const totalTW = afterWitchPlayers.reduce((s, p) => s + (p.tricks_won ?? 0), 0);
-          const allEW = afterWitchPlayers.every(p => (p.hand ?? []).length === 0);
-          if (allEW || totalTW >= afterWitchRoom.round) {
-            // Delay endRound until after witchReveal display
-            // witchRevealDone will handle it
-          }
-        }
+        // Round-over check happens in witchRevealDone/scheduleWitchRevealDone,
+        // once the swap result has actually been displayed.
+        scheduleWitchRevealDone(supabase, roomId);
         return json({ ok: true });
       }
 
