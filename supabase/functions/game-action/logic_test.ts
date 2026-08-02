@@ -50,6 +50,18 @@ console.log("── 30 Jahre: Hexe ──");
 test("Hexe verliert immer", () =>
   eq(trickWinner(T(sp("witch"), n("red", 1)), null), 1));
 
+console.log("── Rangfolge unter passiven Karten: Hexe < Fee < Narr ──");
+test("Narr schlägt Fee (kein Drache)", () =>
+  eq(trickWinner(T(sp("fairy"), fool()), null), 1));
+test("Narr schlägt Hexe", () =>
+  eq(trickWinner(T(sp("witch"), fool()), null), 1));
+test("Fee schlägt Hexe", () =>
+  eq(trickWinner(T(sp("witch"), sp("fairy")), null), 1));
+test("Narr, Fee, Hexe, Narr → erster Narr gewinnt (nicht die zuerst gespielte Karte)", () =>
+  eq(trickWinner(T(fool(), sp("fairy"), sp("witch"), fool()), null), 0));
+test("Fee, Narr, Hexe, Narr → Narr gewinnt, nicht die zuerst gespielte Fee", () =>
+  eq(trickWinner(T(sp("fairy"), fool(), sp("witch"), fool()), null), 1));
+
 console.log("── 30 Jahre: Bombe ──");
 test("Bombe annulliert → -1", () =>
   eq(trickWinner(T(n("red", 13), sp("bomb")), "red"), -1));
