@@ -793,10 +793,22 @@ async function dealRound(supabase, roomId, room, players) {
       currentPlayer = nextBidder;
       addLog(room, `${players[room.dealer].ai_name} wählt Trumpf: ${suitDot(trumpSuit)}`);
     }
-  } else if (trumpCard?.specialType === "witch" || trumpCard?.specialType === "rainbow7") {
-    // Hexe oder Jongleur als Trumpfkarte → kein Trumpf (offiz. FAQ)
-    addLog(room, `Runde ${room.round} – ${trumpCard.specialType === "rainbow7" ? "Jongleur" : "Hexe"} als Trumpf: Kein Trumpf`);
+  } else if (trumpCard?.specialType === "witch") {
+    // Hexe als Trumpfkarte → kein Trumpf (offiz. FAQ)
+    addLog(room, `Runde ${room.round} – Hexe als Trumpf: Kein Trumpf`);
     // phase stays "bidding", trumpSuit stays null
+  } else if (trumpCard?.specialType === "rainbow7") {
+    // Jongleur als Trumpfkarte → Dealer wählt Trumpffarbe (offiz. FAQ - anders
+    // als die Hexe, mit der er zuvor fälschlich zusammengefasst war)
+    phase = "choosingTrump";
+    currentPlayer = room.dealer;
+    addLog(room, `Runde ${room.round} – Jongleur als Trumpf: Dealer wählt Trumpffarbe`);
+    if (players[room.dealer].is_ai) {
+      trumpSuit = SUITS[Math.floor(Math.random() * 4)];
+      phase = "bidding";
+      currentPlayer = nextBidder;
+      addLog(room, `${players[room.dealer].ai_name} wählt Trumpf: ${suitDot(trumpSuit)}`);
+    }
   } else if (trumpCard?.specialType === "rainbow9") {
     // Wolke als Trumpfkarte → Dealer wählt Trumpffarbe (offiz. FAQ)
     phase = "choosingTrump";

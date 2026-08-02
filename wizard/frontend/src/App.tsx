@@ -1321,7 +1321,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               // picks one instead, shown as a badge/letter since the card itself
               // can't display it.
               const trumpHasChosenSuit = room.trump_card.type === "wizard" ||
-                ["wizardfool", "vampire", "rainbow9", "dragon"].includes(room.trump_card.specialType);
+                ["wizardfool", "vampire", "rainbow9", "dragon", "rainbow7"].includes(room.trump_card.specialType);
               return (
               <div style={{ position: "absolute" as const, bottom: "26%", left: "clamp(10px,3vw,40px)", textAlign: "center", zIndex: 4 }}>
                 <div style={{ position: "relative" as const, display: "inline-block" }}>
