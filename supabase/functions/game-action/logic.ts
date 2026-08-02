@@ -94,12 +94,28 @@ export function trickWinner(trick, trumpSuit, werewolfSuit = null, trumpCardValu
     ((c.specialType === "rainbow9" || c.specialType === "rainbow7") && !c.suit) ||
     ["witch","fairy","werewolf","wizardfool","bomb"].includes(c.specialType ?? "");
 
+  // Among passive (always-losing) cards there's still a rank (offiz. FAQ):
+  // Hexe is the weakest, then Fee, then Narr (incl. Zauberernarr played as
+  // Narr) and everything else. If several end up in the same trick with no
+  // Drache to save the Fee, the highest-ranked one present wins - not
+  // simply whoever played it first (that's only the tie-break when the
+  // ranks are equal, e.g. an all-Narren trick).
+  const passiveRank = (c) => {
+    if (c.specialType === "witch") return 0;
+    if (c.specialType === "fairy") return 1;
+    return 2;
+  };
+
   let w = 0;
   for (let i = 0; i < effectiveTrick.length; i++) {
     const c = effectiveTrick[i].card;
     const wc = effectiveTrick[w].card;
     if (c.type === "wizard") { if (wc.type !== "wizard") w = i; continue; }
     if (wc.type === "wizard") continue;
+    if (isPassive(c) && isPassive(wc)) {
+      if (passiveRank(c) > passiveRank(wc)) w = i;
+      continue;
+    }
     if (isPassive(c)) continue;
     if (isPassive(wc)) { w = i; continue; }
     const ct = effectiveTrump && c.suit === effectiveTrump;
