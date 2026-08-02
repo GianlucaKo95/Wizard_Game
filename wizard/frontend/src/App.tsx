@@ -569,11 +569,12 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   }, [showScoresheet]);
   const [roundHistory, setRoundHistory] = useState<any[]>([]);
   type SpecialAction =
-    | { type: "rainbow7pass" | "rainbow7passed" | "rainbow7suit" | "rainbow9suit" | "wizardfool"; cardId: string }
+    | { type: "rainbow7pass" | "rainbow7suit" | "rainbow9suit" | "wizardfool"; cardId: string }
     | { type: "witchGive"; takeCardId: string };
   const [specialAction, setSpecialAction] = useState<SpecialAction | null>(null);
   const [pendingCard, setPendingCard] = useState<any>(null);
   const [passingCard, setPassingCard] = useState<string|null>(null); // for 7½
+  const [passedRainbow7, setPassedRainbow7] = useState(false); // true once I've submitted my card for the current pending_rainbow7 round, until the server confirms I'm no longer pending
   const logRef = useRef<HTMLDivElement>(null);
 
   // ── Chat state ──
@@ -763,17 +764,18 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   const effectiveMyIdxEarly = myPlayerEarly?.player_index ?? myIdx;
 
   // Must be before any conditional early returns (React Hook rules)
-  // Reliably open the 7½ "pass a card" window whenever this player is pending
+  // Reliably open the 7½ "pass a card" window whenever this player is pending,
+  // and only reset passedRainbow7 once the server confirms (via realtime) that
+  // we're no longer in pending_rainbow7 - not after a fixed delay, which can
+  // race the realtime update and reopen the window right after submitting.
   useEffect(() => {
-    if (
-      room &&
-      Array.isArray(room.pending_rainbow7) &&
-      room.pending_rainbow7.includes(effectiveMyIdxEarly) &&
-      !specialAction
-    ) {
+    const amPending = !!room && Array.isArray(room.pending_rainbow7) && room.pending_rainbow7.includes(effectiveMyIdxEarly);
+    if (amPending && !specialAction && !passedRainbow7) {
       setSpecialAction({ type: "rainbow7pass", cardId: "rainbow7" });
+    } else if (!amPending && passedRainbow7) {
+      setPassedRainbow7(false);
     }
-  }, [room?.pending_rainbow7, effectiveMyIdxEarly, specialAction]);
+  }, [room?.pending_rainbow7, effectiveMyIdxEarly, specialAction, passedRainbow7]);
 
   if (!room) return (
     <div style={{ ...tableStyle, justifyContent: "center" }}>
@@ -959,8 +961,8 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             if (!passingCard) return;
             act("passCard", { cardId: passingCard });
             setPassingCard(null);
-            setSpecialAction({ type: "rainbow7passed", cardId: "" }); // sentinel to block re-open
-            setTimeout(() => setSpecialAction(null), 3000); // auto-close after server catches up
+            setPassedRainbow7(true); // stays closed until the server confirms via realtime
+            setSpecialAction(null);
           }} disabled={!passingCard}
             style={{ ...goldBtn(), padding: "11px 0", opacity: passingCard ? 1 : 0.4 }}>
             Karte weitergeben
