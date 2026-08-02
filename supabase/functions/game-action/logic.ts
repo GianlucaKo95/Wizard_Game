@@ -257,9 +257,30 @@ export function cardLabel(card) {
   if (!card) return "?";
   if (card.type === "wizard") return "🧙";
   if (card.type === "fool") return "🃏";
-  if (card.specialType) return card.specialType;
+  if (card.specialType) {
+    if ((card.specialType === "rainbow7" || card.specialType === "rainbow9") && card.suit) {
+      const val = card.specialType === "rainbow7" ? "7½" : "9¾";
+      return `${val} ${suitDot(card.suit)}`;
+    }
+    return card.specialType;
+  }
   const sym = {red:"♥",blue:"♠",green:"♣",yellow:"♦"}[card.suit] ?? "?";
   return `${card.value}${sym}`;
+}
+
+// Picks the suit an AI assigns to a Jongleur (7½) or Wolke (9¾) when playing it.
+// Needs a trick → use the current trump so the card can actually win.
+// Otherwise → join the led suit (if any) and avoid trump, so it stays a likely loser.
+export function aiChooseRainbowSuit(trick, trumpSuit = null, werewolfSuit = null, needsMoreTricks = true) {
+  const effectiveTrump = werewolfSuit ?? trumpSuit;
+  const isPassiveLead = (c) => !c || c.type === "fool" ||
+    ((c.specialType === "rainbow7" || c.specialType === "rainbow9") && !c.suit) ||
+    ["witch", "fairy", "werewolf", "wizardfool", "bomb"].includes(c.specialType ?? "");
+  const led = trick.find(t => !isPassiveLead(t.card))?.card?.suit ?? null;
+
+  if (needsMoreTricks) return effectiveTrump ?? led ?? SUITS[0];
+  if (led && led !== effectiveTrump) return led;
+  return SUITS.find(s => s !== effectiveTrump) ?? SUITS[0];
 }
 
 // Logs failed writes instead of silently swallowing them (root cause of

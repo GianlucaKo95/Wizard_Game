@@ -5,7 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   SUITS, buildDeck, shuffle, trickWinner, trickWinnerWithoutBomb,
   calcScore, forbiddenDealerBid, aiBid, isAlwaysPlayable, aiChooseCard,
-  suitDot, cardLabel, aiBidIndianPoker, aiWorstCard,
+  suitDot, cardLabel, aiBidIndianPoker, aiWorstCard, aiChooseRainbowSuit,
 } from "./logic.ts";
 
 
@@ -264,6 +264,11 @@ async function aiPlayNext(supabase, roomId, room, players) {
     const choice = (needsTricks && !wizardInTrick) ? "wizard" : "fool";
     playedCard = { ...card, type: choice };
     addLog(room, `${currentPlayer.ai_name}: Ron als ${choice === "wizard" ? "Zauberer" : "Narr"}`);
+  } else if (card.specialType === "rainbow7" || card.specialType === "rainbow9") {
+    const needsTricks = (currentPlayer.tricks_won ?? 0) < (currentPlayer.bid ?? 0);
+    const suit = aiChooseRainbowSuit(room.current_trick ?? [], room.trump_suit, room.werewolf_suit, needsTricks);
+    playedCard = { ...card, suit };
+    addLog(room, `${currentPlayer.ai_name}: ${cardLabel(playedCard)}`);
   } else {
     addLog(room, `${currentPlayer.ai_name}: ${cardLabel(card)}`);
   }
@@ -939,7 +944,7 @@ serve(async (req) => {
       await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
       const playedCard = isWitch ? { ...card, type: "fool" } : (isRainbowChoice ? { ...card, suit: body.suit } : card);
       const newTrick = [...room.current_trick, { card: playedCard, playerIndex: callerIdx }];
-      addLog(room, `${callerPlayer.ai_name}: ${cardLabel(card)}`);
+      addLog(room, `${callerPlayer.ai_name}: ${cardLabel(playedCard)}`);
       return await advanceTrick(supabase, roomId, { ...room, current_trick: newTrick, current_player: callerIdx, log: room.log }, null);
     }
 
