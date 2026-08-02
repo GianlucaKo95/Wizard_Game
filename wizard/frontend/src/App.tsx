@@ -339,12 +339,17 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (roomId) return <GameRoom roomId={roomId} session={session} aiCount={Math.min(aiCount, maxAI)} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
-  const HeaderBlock = () => (
+  // compact: skips the big mascot/title hero (only makes sense once, on the
+  // home screen) so content-heavy sub-screens like "create" don't push their
+  // primary action button below the fold and force scrolling to reach it.
+  const HeaderBlock = ({ compact = false }: { compact?: boolean } = {}) => (
     <>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "clamp(36px,10vw,52px)" }}>🧙</div>
-        <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
-      </div>
+      {!compact && (
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: "clamp(36px,10vw,52px)" }}>🧙</div>
+          <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ ...glass({ padding: "6px 14px" }), ...cinzel, fontSize: 13, color: C.ivory }}>👤 {username}</div>
         <button onClick={() => setShowStats(s => !s)} style={{ ...goldBtn(false), padding: "6px 12px" }}>📊</button>
@@ -401,7 +406,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "create") return (
     <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
-      <HeaderBlock />
+      <HeaderBlock compact />
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
@@ -462,7 +467,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   return (
     <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
-      <HeaderBlock />
+      <HeaderBlock compact />
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Spiel beitreten</div>
