@@ -575,6 +575,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   const [pendingCard, setPendingCard] = useState<any>(null);
   const [passingCard, setPassingCard] = useState<string|null>(null); // for 7½
   const [passedRainbow7, setPassedRainbow7] = useState(false); // true once I've submitted my card for the current pending_rainbow7 round, until the server confirms I'm no longer pending
+  const [witchSwapped, setWitchSwapped] = useState(false); // true once I've submitted my Hexe swap, until the server confirms I'm no longer pending_witch
   const logRef = useRef<HTMLDivElement>(null);
 
   // ── Chat state ──
@@ -776,6 +777,16 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
       setPassedRainbow7(false);
     }
   }, [room?.pending_rainbow7, effectiveMyIdxEarly, specialAction, passedRainbow7]);
+
+  // Same fix as passedRainbow7 above, for the Hexe swap: room.pending_witch
+  // still shows this player as pending locally until the realtime update
+  // confirming the swap arrives, which would otherwise flash step 1 (choose
+  // a trick card) again right after step 2 was already submitted.
+  useEffect(() => {
+    if (witchSwapped && room?.pending_witch !== effectiveMyIdxEarly) {
+      setWitchSwapped(false);
+    }
+  }, [room?.pending_witch, effectiveMyIdxEarly, witchSwapped]);
 
   if (!room) return (
     <div style={{ ...tableStyle, justifyContent: "center" }}>
@@ -1181,10 +1192,11 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
   // ── Main Game ──
   const isBidding = room.phase === "bidding" && isMyTurn;
-  // Debug - remove later
-  console.log("Debug:", { phase: room.phase, current_player: room.current_player, effectiveMyIdx, isMyTurn, isBidding, myPlayerId: myPlayer?.id });
   const isChoosingTrump = room.phase === "choosingTrump" && isMyTurn;
   const isChoosingWerewolf = room.phase === "choosingWerewolf" && isMyTurn;
+  // !witchSwapped: room.pending_witch still shows me as pending locally until
+  // the realtime update confirming the swap arrives - see witchSwapped useEffect.
+  const pendingWitchForMe = room?.pending_witch === effectiveMyIdx && !witchSwapped;
   const isPlaying = room.phase === "playing" && isMyTurn && !loading;
   const seats = getSeatPositions(players, effectiveMyIdx);
 
@@ -1505,7 +1517,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
         (room.phase === "bidding" && !isMyTurn) ||
         (room.phase === "choosingWerewolf" && !isMyTurn) ||
         room?.pending_rainbow9 === effectiveMyIdx ||
-        room?.pending_witch === effectiveMyIdx ||
+        pendingWitchForMe ||
         specialAction?.type === "witchGive" ||
         room.phase === "witchReveal") && (
         modalMinimized ? (
@@ -1518,7 +1530,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
               : isChoosingTrump ? "Trumpf wählen"
               : isChoosingWerewolf ? "Stichfarbe wählen"
               : room?.pending_rainbow9 === effectiveMyIdx ? "9¾ – Vorhersage anpassen"
-              : room?.pending_witch === effectiveMyIdx ? "Hexe – Karte tauschen"
+              : pendingWitchForMe ? "Hexe – Karte tauschen"
               : specialAction?.type === "witchGive" ? "Hexe – Karte abgeben"
               : room.phase === "witchReveal" ? "Tausch-Ergebnis ansehen"
               : "Aktion erforderlich"}
@@ -1619,7 +1631,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             })()}
 
             {/* Hexe – Karte tauschen */}
-            {room?.pending_witch === effectiveMyIdx && (() => {
+            {pendingWitchForMe && (() => {
               const trickCards = (room.last_trick_cards ?? []).filter((t:any) =>
                 t.card.specialType !== "witch" && t.card.id !== "witch"
               );
@@ -1660,6 +1672,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                         takeCardId: specialAction.takeCardId,
                         giveCardId: c.id
                       });
+                      setWitchSwapped(true); // stays closed until the server confirms via realtime
                       setSpecialAction(null);
                     }} />
                   ))}
