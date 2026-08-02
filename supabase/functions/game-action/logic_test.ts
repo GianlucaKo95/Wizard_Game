@@ -148,6 +148,9 @@ test("cardLabel zeigt gewählte Farbe bei 7½", () => {
 test("cardLabel ohne Farbe zeigt nur specialType", () => {
   eq(cardLabel({ id: "rainbow9", specialType: "rainbow9", suit: null }), "rainbow9");
 });
+test("cardLabel zeigt Farbkreis statt Kartensymbol bei Zahlenkarten", () => {
+  eq(cardLabel(n("blue", 13)), "13 🔵");
+});
 
 console.log("── Deck ──");
 test("Classic: 60 Karten", () => eq(buildDeck("classic").length, 60));

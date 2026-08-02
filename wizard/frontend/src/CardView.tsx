@@ -243,6 +243,19 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
         </div>
       )}
 
+      {/* Rainbow (7½/9¾) chosen-suit badge - separate from the house sigil since
+          these cards have no house-colored art of their own to signal the suit */}
+      {isRainbowWithSuit && houseData && (
+        <div style={{
+          position: "absolute", top: small ? 2 : 4, right: small ? 2 : 4,
+          width: small ? 8 : 13, height: small ? 8 : 13,
+          borderRadius: "50%",
+          background: houseData.accent,
+          border: "1.5px solid rgba(0,0,0,0.6)",
+          boxShadow: "0 0 4px rgba(0,0,0,0.7)",
+        }} />
+      )}
+
       {/* Small card label */}
       {small && (
         <div style={{ position: "absolute", top: 2, left: 3, fontSize: 9, fontWeight: 700, color: labelColor, fontFamily: "Cinzel, serif", background: "rgba(0,0,0,0.6)", borderRadius: 2, padding: "1px 3px" }}>

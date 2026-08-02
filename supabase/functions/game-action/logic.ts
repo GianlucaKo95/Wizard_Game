@@ -264,8 +264,7 @@ export function cardLabel(card) {
     }
     return card.specialType;
   }
-  const sym = {red:"♥",blue:"♠",green:"♣",yellow:"♦"}[card.suit] ?? "?";
-  return `${card.value}${sym}`;
+  return `${card.value} ${suitDot(card.suit)}`;
 }
 
 // Picks the suit an AI assigns to a Jongleur (7½) or Wolke (9¾) when playing it.
