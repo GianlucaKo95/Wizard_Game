@@ -1,7 +1,7 @@
 // Run with:  deno test logic_test.ts   — or —   npx tsx logic_test.ts
 import {
   trickWinner, trickWinnerWithoutBomb, calcScore, forbiddenDealerBid,
-  aiBid, isAlwaysPlayable, aiChooseCard, buildDeck,
+  aiBid, isAlwaysPlayable, aiChooseCard, buildDeck, aiWorstCard,
 } from "./logic.ts";
 
 let passed = 0, failed = 0;
@@ -112,6 +112,20 @@ test("KI wirft Zauberer ab wenn Stiche voll", () => {
 test("aiBid Runde 10 mit starker Hand ≥ 3", () => {
   const hand = [wiz(), n("red", 13), n("red", 12), n("blue", 13), n("blue", 12), n("green", 11), n("green", 6), n("yellow", 9), n("yellow", 4), fool()];
   eq(aiBid(hand, "red") >= 3, true);
+});
+
+console.log("── KI: Jongleur-Weitergabe ──");
+test("KI gibt Zahlenkarte statt Zauberer weiter", () => {
+  const hand = [wiz(), n("red", 3)];
+  eq((aiWorstCard(hand, "red") as any).type !== "wizard", true);
+});
+test("KI gibt Nicht-Trumpf statt Trumpfkarte weiter", () => {
+  const hand = [n("red", 10), n("blue", 2)];
+  eq(aiWorstCard(hand, "red"), n("blue", 2));
+});
+test("KI gibt niedrigste Nicht-Trumpfkarte weiter", () => {
+  const hand = [n("blue", 9), n("green", 2), n("red", 5)];
+  eq(aiWorstCard(hand, "red"), n("green", 2));
 });
 
 console.log("── Deck ──");

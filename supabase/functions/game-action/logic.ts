@@ -174,6 +174,24 @@ export function isAlwaysPlayable(c) {
     ["witch","wizardfool","dragon","fairy","bomb","vampire","rainbow7","rainbow9"].includes(c.specialType ?? "");
 }
 
+// Picks the card an AI would least mind giving away (Jongleur/7½ pass-left).
+// Keeps wizards, dragons and high trump cards; hands over weak/passive cards first.
+export function aiWorstCard(hand, trumpSuit = null, werewolfSuit = null) {
+  const effectiveTrump = werewolfSuit ?? trumpSuit;
+  const keepValue = (c) => {
+    if (c.type === "wizard") return 100;
+    if (c.specialType === "dragon") return 95;
+    if (c.type === "number" && effectiveTrump && c.suit === effectiveTrump) return 50 + c.value;
+    if (c.specialType === "vampire") return 40;
+    if (["rainbow7", "rainbow9", "witch", "wizardfool", "bomb"].includes(c.specialType ?? "")) return 25;
+    if (c.type === "number") return c.value;
+    if (c.type === "fool") return -1;
+    if (c.specialType === "fairy") return -2;
+    return 0;
+  };
+  return [...hand].sort((a, b) => keepValue(a) - keepValue(b))[0] ?? hand[0];
+}
+
 export function aiChooseCard(hand, trick, trumpSuit, werewolfSuit = null, bid = null, tricksWon = 0) {
   // First non-passive card establishes led suit (fool is passive, wizard means no suit)
   const effTrumpForLead = werewolfSuit ?? trumpSuit;
