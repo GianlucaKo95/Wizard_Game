@@ -767,6 +767,20 @@ async function dealRound(supabase, roomId, room, players) {
       }).eq("id", roomId);
       return await tickAIBids(supabase, roomId, { ...room, phase: "bidding", current_player: nextBidder, werewolf_suit: suit }, dealtPlayers);
     }
+  } else if (trumpCard?.specialType === "dragon") {
+    // Offiz. FAQ: Drache als Trumpfkarte → Dealer bestimmt eine Trumpffarbe
+    // (wie beim Zauberer). Zuvor fiel dies durch den generischen Fallback
+    // fälschlich auf "kein Trumpf" (dragon.suit ist null), da kein eigener
+    // Zweig existierte.
+    phase = "choosingTrump";
+    currentPlayer = room.dealer;
+    addLog(room, `Runde ${room.round} – Drache als Trumpf: Dealer wählt Trumpffarbe`);
+    if (players[room.dealer].is_ai) {
+      trumpSuit = SUITS[Math.floor(Math.random() * 4)];
+      phase = "bidding";
+      currentPlayer = nextBidder;
+      addLog(room, `${players[room.dealer].ai_name} wählt Trumpf: ${suitDot(trumpSuit)}`);
+    }
   } else if (trumpCard?.specialType === "vampire") {
     // Offiz. FAQ: "Deckst du bei der Bestimmung der Trumpffarbe den Vampir auf,
     // bestimmst du eine Trumpffarbe." → Dealer wählt, wie beim Zauberer.
