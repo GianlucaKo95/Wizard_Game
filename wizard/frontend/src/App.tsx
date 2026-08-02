@@ -1374,6 +1374,11 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                         {t.card.type === "wizard" ? "🧙 Zauberer" : "🃏 Narr"}
                       </div>
                     )}
+                    {(t.card.specialType === "rainbow7" || t.card.specialType === "rainbow9") && t.card.suit && (
+                      <div style={{ ...cinzel, fontSize: "clamp(10px,1.5vmin,14px)", fontWeight: 700, marginTop: 2, color: SUIT_COLORS[t.card.suit as keyof typeof SUIT_COLORS] }}>
+                        {SUIT_SYMBOLS[t.card.suit as keyof typeof SUIT_SYMBOLS]}
+                      </div>
+                    )}
                   </div>
                 );
               })}

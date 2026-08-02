@@ -2,6 +2,7 @@
 import {
   trickWinner, trickWinnerWithoutBomb, calcScore, forbiddenDealerBid,
   aiBid, isAlwaysPlayable, aiChooseCard, buildDeck, aiWorstCard,
+  aiChooseRainbowSuit, cardLabel,
 } from "./logic.ts";
 
 let passed = 0, failed = 0;
@@ -126,6 +127,29 @@ test("KI gibt Nicht-Trumpf statt Trumpfkarte weiter", () => {
 test("KI gibt niedrigste Nicht-Trumpfkarte weiter", () => {
   const hand = [n("blue", 9), n("green", 2), n("red", 5)];
   eq(aiWorstCard(hand, "red"), n("green", 2));
+});
+
+console.log("── 30 Jahre: Jongleur/Wolke Farbwahl (KI) ──");
+test("KI braucht Stich → wählt Trumpffarbe", () => {
+  eq(aiChooseRainbowSuit([], "blue", null, true), "blue");
+});
+test("KI braucht Stich, kein Trumpf gesetzt → folgt Anspielfarbe", () => {
+  eq(aiChooseRainbowSuit(T(n("green", 5)), null, null, true), "green");
+});
+test("KI braucht keinen Stich mehr → meidet Trumpffarbe", () => {
+  eq(aiChooseRainbowSuit([], "blue", null, false) !== "blue", true);
+});
+test("KI braucht keinen Stich, Anspielfarbe ≠ Trumpf → folgt Anspielfarbe", () => {
+  eq(aiChooseRainbowSuit(T(n("green", 5)), "blue", null, false), "green");
+});
+test("cardLabel zeigt gewählte Farbe bei 7½", () => {
+  eq(cardLabel({ id: "rainbow7", specialType: "rainbow7", suit: "red" }), "7½ 🔴");
+});
+test("cardLabel ohne Farbe zeigt nur specialType", () => {
+  eq(cardLabel({ id: "rainbow9", specialType: "rainbow9", suit: null }), "rainbow9");
+});
+test("cardLabel zeigt Farbkreis statt Kartensymbol bei Zahlenkarten", () => {
+  eq(cardLabel(n("blue", 13)), "13 🔵");
 });
 
 console.log("── Deck ──");
