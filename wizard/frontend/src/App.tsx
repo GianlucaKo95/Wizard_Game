@@ -675,16 +675,24 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     if (actInFlight.current) return; // prevent double-submission race conditions
     actInFlight.current = true;
     setLoading(true); setError("");
-    const res = await callGameAction(roomId, action, extra);
-    if (res.error) {
-      setError(res.error);
-      // Auto-dismiss non-critical errors, keep critical ones
-      if (!res.error.includes("Verbindung") && !res.error.includes("Server")) {
-        setTimeout(() => setError(""), 4000);
+    try {
+      const res = await callGameAction(roomId, action, extra);
+      if (res.error) {
+        setError(res.error);
+        // Auto-dismiss non-critical errors, keep critical ones
+        if (!res.error.includes("Verbindung") && !res.error.includes("Server")) {
+          setTimeout(() => setError(""), 4000);
+        }
       }
+    } catch {
+      // Belt-and-suspenders: callGameAction already catches its own errors,
+      // but never let an unexpected exception here leave the UI stuck with
+      // cards permanently greyed out and no way to retry.
+      setError("Verbindung unterbrochen – bitte erneut versuchen");
+    } finally {
+      setLoading(false);
+      actInFlight.current = false;
     }
-    setLoading(false);
-    actInFlight.current = false;
   }, [roomId]);
 
   useEffect(() => {
