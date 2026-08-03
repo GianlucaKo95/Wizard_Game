@@ -626,10 +626,10 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     | { type: "rainbow7pass" | "rainbow7suit" | "rainbow9suit" | "wizardfool"; cardId: string }
     | { type: "witchGive"; takeCardId: string };
   const [specialAction, setSpecialAction] = useState<SpecialAction | null>(null);
-  const [pendingCard, setPendingCard] = useState<any>(null);
   const [passingCard, setPassingCard] = useState<string|null>(null); // for 7½
   const [passedRainbow7, setPassedRainbow7] = useState(false); // true once I've submitted my card for the current pending_rainbow7 round, until the server confirms I'm no longer pending
   const [witchSwapped, setWitchSwapped] = useState(false); // true once I've submitted my Hexe swap, until the server confirms I'm no longer pending_witch
+  const [rainbow9Adjusted, setRainbow9Adjusted] = useState(false); // true once I've submitted my 9¾ adjustment, until the server confirms I'm no longer pending_rainbow9
   const logRef = useRef<HTMLDivElement>(null);
 
   // ── Chat state ──
@@ -841,6 +841,14 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
       setWitchSwapped(false);
     }
   }, [room?.pending_witch, effectiveMyIdxEarly, witchSwapped]);
+
+  // Same fix again, for the 9¾ bid adjustment: closes the modal the instant
+  // the player submits instead of waiting on the realtime round-trip.
+  useEffect(() => {
+    if (rainbow9Adjusted && room?.pending_rainbow9 !== effectiveMyIdxEarly) {
+      setRainbow9Adjusted(false);
+    }
+  }, [room?.pending_rainbow9, effectiveMyIdxEarly, rainbow9Adjusted]);
 
   if (!room) return (
     <div style={{ ...tableStyle, justifyContent: "center" }}>
@@ -1257,6 +1265,8 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
   // !witchSwapped: room.pending_witch still shows me as pending locally until
   // the realtime update confirming the swap arrives - see witchSwapped useEffect.
   const pendingWitchForMe = room?.pending_witch === effectiveMyIdx && !witchSwapped;
+  // Same reasoning as pendingWitchForMe, for the 9¾ adjustment - see rainbow9Adjusted useEffect.
+  const pendingRainbow9ForMe = room?.pending_rainbow9 === effectiveMyIdx && !rainbow9Adjusted;
   const isPlaying = room.phase === "playing" && isMyTurn && !loading;
   const seats = getSeatPositions(players, effectiveMyIdx);
 
@@ -1599,7 +1609,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
       {(isBidding || isChoosingTrump || isChoosingWerewolf ||
         (room.phase === "bidding" && !isMyTurn) ||
         (room.phase === "choosingWerewolf" && !isMyTurn) ||
-        room?.pending_rainbow9 === effectiveMyIdx ||
+        pendingRainbow9ForMe ||
         pendingWitchForMe ||
         specialAction?.type === "witchGive" ||
         room.phase === "witchReveal") && (
@@ -1612,7 +1622,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
             ⬆ {isBidding ? "Jetzt bieten"
               : isChoosingTrump ? "Trumpf wählen"
               : isChoosingWerewolf ? "Stichfarbe wählen"
-              : room?.pending_rainbow9 === effectiveMyIdx ? "9¾ – Vorhersage anpassen"
+              : pendingRainbow9ForMe ? "9¾ – Vorhersage anpassen"
               : pendingWitchForMe ? "Hexe – Karte tauschen"
               : specialAction?.type === "witchGive" ? "Hexe – Karte abgeben"
               : room.phase === "witchReveal" ? "Tausch-Ergebnis ansehen"
@@ -1683,7 +1693,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
             )}
 
             {/* 9¾ Adjust */}
-            {room?.pending_rainbow9 === effectiveMyIdx && (() => {
+            {pendingRainbow9ForMe && (() => {
               const currentBid = me?.bid ?? 0;
               const tricksWon = me?.tricks_won ?? 0;
               const canDecrease = currentBid > 0 && tricksWon !== currentBid;
@@ -1699,12 +1709,12 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
                   </div>
                   <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
                     {canDecrease && (
-                      <button onClick={() => act("rainbow9Adjust", { adjust: -1 })}
+                      <button onClick={() => { act("rainbow9Adjust", { adjust: -1 }); setRainbow9Adjusted(true); }}
                         style={{ ...goldBtn(false), flex: 1, padding: "12px 0", fontSize: 17 }}>
                         −1 → {currentBid - 1}
                       </button>
                     )}
-                    <button onClick={() => act("rainbow9Adjust", { adjust: 1 })}
+                    <button onClick={() => { act("rainbow9Adjust", { adjust: 1 }); setRainbow9Adjusted(true); }}
                       style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 17 }}>
                       +1 → {currentBid + 1}
                     </button>

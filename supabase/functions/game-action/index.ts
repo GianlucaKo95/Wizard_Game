@@ -887,9 +887,12 @@ serve(async (req) => {
         const jcode = (body.code ?? "").toString().toUpperCase().slice(0, 8);
         const { data: jRoom } = await supabase.from("rooms").select("id, phase").eq("code", jcode).single();
         if (!jRoom) return json({ error: "Raum nicht gefunden" }, 404);
-        if (jRoom.phase !== "lobby") return json({ error: "Spiel läuft bereits" }, 400);
         const { data: existing } = await supabase.from("room_players").select("player_index, user_id").eq("room_id", jRoom.id);
-        if (existing?.some(p => p.user_id === user.id)) return json({ ok: true, roomId: jRoom.id }); // already joined
+        // Reconnect: an existing player must always be able to get back in,
+        // even mid-game - only block genuinely NEW joins once the game has
+        // started (checked below).
+        if (existing?.some(p => p.user_id === user.id)) return json({ ok: true, roomId: jRoom.id });
+        if (jRoom.phase !== "lobby") return json({ error: "Spiel läuft bereits" }, 400);
         if ((existing?.length ?? 0) >= 6) return json({ error: "Raum ist voll" }, 400);
         const uname2 = (body.username ?? "Spieler").toString().slice(0, 24);
         await upd(supabase.from("room_players").insert({ room_id: jRoom.id, user_id: user.id, player_index: existing?.length ?? 0, is_ai: false, ai_name: uname2, hand: [], score: 0, tricks_won: 0, connected: true }), "joinRoom.player");
