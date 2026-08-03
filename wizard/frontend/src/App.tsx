@@ -6,10 +6,10 @@ import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
-  midnight: "#0D1B2A",
-  deepBlue: "#162032",
-  violet: "#3D1C6E",
-  violetLight: "#5A2D99",
+  bgDark: "#10161A",
+  bgPanel: "#17201B",
+  accent: "#263029",
+  accentLight: "#3A4B40",
   gold: "#C9A84C",
   goldLight: "#E4C97A",
   ivory: "#F2E8D5",
@@ -32,23 +32,48 @@ const glass = (extra: React.CSSProperties = {}): React.CSSProperties => ({
 });
 
 const goldBtn = (active = true): React.CSSProperties => ({
-  ...cinzel,
-  background: active ? `linear-gradient(135deg, ${C.violet}, ${C.violetLight})` : "rgba(255,255,255,0.06)",
+  fontFamily: "'Inter', sans-serif",
+  background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "rgba(255,255,255,0.05)",
   color: active ? C.goldLight : C.ivoryDim,
-  border: `1px solid ${active ? C.gold : "rgba(255,255,255,0.1)"}`,
-  borderRadius: 8,
+  border: "none",
+  borderRadius: 16,
   padding: "clamp(8px,2vw,12px) clamp(12px,3vw,20px)",
   fontSize: "clamp(13px, 2vw, 15px)",
   cursor: "pointer",
-  letterSpacing: "0.05em",
+  letterSpacing: "0.02em",
   transition: "all 0.2s",
   fontWeight: 600,
+  boxShadow: active ? "0 6px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
   WebkitTapHighlightColor: "transparent",
   touchAction: "manipulation",
   minHeight: 44,
   userSelect: "none",
   WebkitUserSelect: "none",
 });
+
+// Pill-track segmented control (player count, edition, login/register toggle …)
+const segTrack: React.CSSProperties = {
+  display: "flex", gap: 2, background: "rgba(255,255,255,0.05)", borderRadius: 999, padding: 3,
+};
+const segBtn = (active: boolean): React.CSSProperties => ({
+  flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 999,
+  fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13,
+  background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "transparent",
+  color: active ? C.goldLight : C.ivoryDim,
+  border: "none", cursor: "pointer",
+  boxShadow: active ? "0 2px 8px rgba(0,0,0,0.35)" : "none",
+  WebkitTapHighlightColor: "transparent", touchAction: "manipulation", minHeight: 40,
+  userSelect: "none", WebkitUserSelect: "none",
+});
+
+// Icon-over-label tile button (Home screen secondary actions)
+const tileBtn: React.CSSProperties = {
+  flex: 1, background: "rgba(255,255,255,0.045)", border: "none", borderRadius: 16,
+  padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+  fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: C.ivoryDim, cursor: "pointer",
+  WebkitTapHighlightColor: "transparent", touchAction: "manipulation", minHeight: 44,
+  userSelect: "none", WebkitUserSelect: "none",
+};
 
 const inputStyle: React.CSSProperties = {
   background: "rgba(0,0,0,0.3)",
@@ -66,7 +91,7 @@ const inputStyle: React.CSSProperties = {
 // Applied as className to prevent selection
 const tableStyle: React.CSSProperties = {
   minHeight: "100dvh",
-  background: `radial-gradient(ellipse at 20% 0%, ${C.violet}33 0%, transparent 60%), radial-gradient(ellipse at 80% 100%, #1A3A6E33 0%, transparent 60%), ${C.midnight}`,
+  background: `radial-gradient(ellipse at 20% 0%, ${C.accent}33 0%, transparent 60%), radial-gradient(ellipse at 80% 100%, #23302a33 0%, transparent 60%), ${C.bgDark}`,
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
@@ -146,7 +171,7 @@ function AuthScreen() {
       {/* Logo */}
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "clamp(44px,12vw,64px)", marginBottom: 8 }}>🧙</div>
-        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.violet}` }}>WIZARD</div>
+        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.accent}` }}>WIZARD</div>
         <div style={{ fontSize: 12, color: C.ivoryDim, letterSpacing: 3, marginTop: 4 }}>DAS KARTENSPIEL</div>
       </div>
 
@@ -155,14 +180,9 @@ function AuthScreen() {
       {/* Name Card */}
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
         {/* Mode toggle */}
-        <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 4 }}>
+        <div style={segTrack}>
           {(["login","register"] as const).map(m => (
-            <button key={m} onClick={() => { setMode(m); setError(""); }} style={{
-              flex: 1, padding: "8px 0", borderRadius: 6, border: "none", cursor: "pointer",
-              ...cinzel, fontSize: 12, letterSpacing: 1,
-              background: mode === m ? `linear-gradient(135deg, ${C.violet}, ${C.violetLight})` : "transparent",
-              color: mode === m ? C.goldLight : C.ivoryDim,
-            }}>
+            <button key={m} onClick={() => { setMode(m); setError(""); }} style={segBtn(mode === m)}>
               {m === "login" ? "Anmelden" : "Registrieren"}
             </button>
           ))}
@@ -297,35 +317,33 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 function LobbyScreen({ session }: { session: Session }) {
   const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile">("home");
   const [reconnectRoom, setReconnectRoom] = useState<string|null>(null);
+  const [savedPlannedTotal, setSavedPlannedTotal] = useState<number | null>(null);
 
   // Check for reconnectable room on mount
   useEffect(() => {
     const savedRoom = sessionStorage.getItem("wizard_room");
     if (savedRoom) {
-      const { roomId, code } = JSON.parse(savedRoom);
+      const { roomId, code, plannedTotal } = JSON.parse(savedRoom);
       supabase.from("rooms").select("phase").eq("id", roomId).single()
         .then(({ data }) => {
-          if (data && data.phase !== "gameEnd") setReconnectRoom(code);
+          if (data && data.phase !== "gameEnd") { setReconnectRoom(code); if (plannedTotal) setSavedPlannedTotal(plannedTotal); }
           else sessionStorage.removeItem("wizard_room");
         });
     }
   }, []);
   const [codeInput, setCodeInput] = useState("");
-  const [aiCount, setAiCount] = useState(2);
+  const [totalPlayers, setTotalPlayers] = useState(3);
   const [roomId, setRoomId] = useState<string | null>(null);
-  const [humanCount, setHumanCount] = useState(1);
   const [edition, setEdition] = useState<"classic"|"anniversary">("classic");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const username = session.user.user_metadata?.username ?? "Spieler";
-  const maxAI = Math.max(0, 6 - humanCount);
-  const minAI = Math.max(0, 3 - humanCount); // minimum 3 players total
 
   async function createRoom() {
     setLoading(true); setError("");
     const res = await callGameAction("", "createRoom", { username, edition });
     if (!res?.roomId) { setError(res?.error ?? "Fehler"); setLoading(false); return; }
-    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code }));
+    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code, plannedTotal: totalPlayers }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -399,7 +417,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} aiCount={Math.min(aiCount, maxAI)} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
+  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -412,10 +430,7 @@ function LobbyScreen({ session }: { session: Session }) {
           <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <div style={{ ...glass({ padding: "6px 14px" }), ...cinzel, fontSize: 13, color: C.ivory }}>👤 {username}</div>
-        <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 12px", fontSize: 12 }}>⚙️ Profil</button>
-      </div>
+      <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>⚙️ Profil</button>
       <GoldDivider />
     </>
   );
@@ -433,16 +448,20 @@ function LobbyScreen({ session }: { session: Session }) {
           <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "min(320px, 92vw)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "min(320px, 92vw)" }}>
         <button onClick={() => setView("create")} style={{ ...goldBtn(), width: "100%", padding: "16px 0", fontSize: 15 }}>
-          ✦ Spiel erstellen
+          Spiel erstellen
         </button>
-        <button onClick={() => setView("join")} style={{ ...goldBtn(false), width: "100%", padding: "16px 0", fontSize: 15 }}>
-          ⬡ Spiel beitreten
-        </button>
-        <button onClick={() => setView("rules")} style={{ ...goldBtn(false), width: "100%", padding: "12px 0", fontSize: 13 }}>
-          📖 Regeln & Spezialkarten
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => setView("join")} style={tileBtn}>
+            <span style={{ fontSize: 18 }}>⬡</span>
+            Beitreten
+          </button>
+          <button onClick={() => setView("rules")} style={tileBtn}>
+            <span style={{ fontSize: 18 }}>📖</span>
+            Regeln
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -454,27 +473,14 @@ function LobbyScreen({ session }: { session: Session }) {
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
         <div>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>MENSCHLICHE SPIELER (inkl. dir)</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {[1,2,3,4,5,6].map(n => (
-              <button key={n} onClick={() => { setHumanCount(n); const newMax = Math.max(0, 6-n); const newMin = Math.max(0, 3-n); setAiCount(Math.min(Math.max(aiCount, newMin), newMax)); }}
-                style={{ ...goldBtn(humanCount===n), flex: 1, padding: "14px 0", fontSize: 15 }}>{n}</button>
+          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>GESAMTZAHL SPIELER</div>
+          <div style={segTrack}>
+            {[3,4,5,6].map(n => (
+              <button key={n} onClick={() => setTotalPlayers(n)}
+                style={{ ...segBtn(totalPlayers===n), fontSize: 15 }}>{n}</button>
             ))}
           </div>
-        </div>
-        <div>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>
-            KI-MITSPIELER {maxAI === 0 ? "(Raum voll)" : `(max. ${maxAI})`}
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {Array.from({ length: maxAI + 1 }, (_, n) => (
-              <button key={n} onClick={() => setAiCount(Math.max(n, minAI))}
-                disabled={n < minAI}
-                style={{ ...goldBtn(aiCount===Math.max(n,minAI) && n>=minAI), flex: 1, padding: "14px 0", fontSize: 15, opacity: n < minAI ? 0.25 : 1 }}>
-                {n===0?"–":n}
-              </button>
-            ))}
-          </div>
+          <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 6 }}>Fehlende Plätze werden beim Start automatisch mit KI aufgefüllt</div>
         </div>
         {/* Edition */}
         <div>
@@ -496,10 +502,10 @@ function LobbyScreen({ session }: { session: Session }) {
         </div>
 
         <div style={{ ...glass({ padding: "10px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
-          <span style={{ color: C.gold, ...cinzel }}>{humanCount + aiCount}</span> Spieler gesamt ·{" "}
-          {humanCount} 👤 + {aiCount} 🤖 · <span style={{ color: C.gold }}>{Math.floor(60/(humanCount+aiCount))} Runden</span>{humanCount+aiCount < 3 ? <span style={{color:"#FF8080"}}> · min. 3 Spieler</span> : ""}
+          Ziel: <span style={{ color: C.gold, ...cinzel }}>{totalPlayers}</span> Spieler ·{" "}
+          <span style={{ color: C.gold }}>{Math.floor(60/totalPlayers)} Runden</span>
         </div>
-        <button onClick={createRoom} disabled={loading || humanCount+aiCount < 3}
+        <button onClick={createRoom} disabled={loading}
           style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading?0.5:1 }}>
           {loading ? "Erstelle Raum…" : "✦ Raum erstellen"}
         </button>
@@ -594,7 +600,7 @@ async function loadPlayersSecure(roomId: string, myUserId: string) {
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
-function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: string; session: Session; aiCount: number; edition?: string; onLeave: () => void }) {
+function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId: string; session: Session; plannedTotal: number; edition?: string; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
   const aiTriggerLastKey = useRef<string>("");
   const clearTrickPending = useRef(false);
@@ -620,10 +626,10 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
     | { type: "rainbow7pass" | "rainbow7suit" | "rainbow9suit" | "wizardfool"; cardId: string }
     | { type: "witchGive"; takeCardId: string };
   const [specialAction, setSpecialAction] = useState<SpecialAction | null>(null);
-  const [pendingCard, setPendingCard] = useState<any>(null);
   const [passingCard, setPassingCard] = useState<string|null>(null); // for 7½
   const [passedRainbow7, setPassedRainbow7] = useState(false); // true once I've submitted my card for the current pending_rainbow7 round, until the server confirms I'm no longer pending
   const [witchSwapped, setWitchSwapped] = useState(false); // true once I've submitted my Hexe swap, until the server confirms I'm no longer pending_witch
+  const [rainbow9Adjusted, setRainbow9Adjusted] = useState(false); // true once I've submitted my 9¾ adjustment, until the server confirms I'm no longer pending_rainbow9
   const logRef = useRef<HTMLDivElement>(null);
 
   // ── Chat state ──
@@ -836,6 +842,14 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
     }
   }, [room?.pending_witch, effectiveMyIdxEarly, witchSwapped]);
 
+  // Same fix again, for the 9¾ bid adjustment: closes the modal the instant
+  // the player submits instead of waiting on the realtime round-trip.
+  useEffect(() => {
+    if (rainbow9Adjusted && room?.pending_rainbow9 !== effectiveMyIdxEarly) {
+      setRainbow9Adjusted(false);
+    }
+  }, [room?.pending_rainbow9, effectiveMyIdxEarly, rainbow9Adjusted]);
+
   if (!room) return (
     <div style={{ ...tableStyle, justifyContent: "center" }}>
       <div style={{ ...cinzel, fontSize: 18, color: C.gold }}>Lade…</div>
@@ -860,6 +874,9 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
+    // Shrinks automatically as real players join: the host originally planned for
+    // `plannedTotal` players total, so fewer AI are needed the more humans show up.
+    const effectiveAiCount = Math.max(0, plannedTotal - players.length);
     return (
       <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
         <div style={{ ...cinzel, fontSize: 24, color: C.gold }}>🧙 Warteraum</div>
@@ -879,8 +896,11 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           ))}
         </div>
 
+        {isHost && effectiveAiCount > 0 && (
+          <div style={{ fontSize: 11, color: C.ivoryDim }}>+ {effectiveAiCount} KI {effectiveAiCount === 1 ? "wird" : "werden"} beim Start ergänzt</div>
+        )}
         {isHost ? (
-          <button onClick={() => act("startGame", { aiCount, edition: room?.edition ?? "classic" })} disabled={loading || players.length + aiCount < 2}
+          <button onClick={() => act("startGame", { aiCount: effectiveAiCount, edition: room?.edition ?? "classic" })} disabled={loading || players.length + effectiveAiCount < 2}
             style={{ ...goldBtn(), padding: "13px 32px", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
             ✦ Spiel starten
           </button>
@@ -1148,7 +1168,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           <div style={{ overflowX: "auto" }}>
             <table className="scoresheet-table" style={{ borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ background: "rgba(61,28,110,0.4)" }}>
+                <tr style={{ background: "rgba(38,48,41,0.4)" }}>
                   <th style={{ ...cinzel, padding: "10px 12px", textAlign: "left", color: C.gold, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>RUNDE</th>
                   {players.map((p: any) => (
                     <th key={p.id} style={{ ...cinzel, padding: "10px 12px", textAlign: "center", color: p.player_index === effectiveMyIdx ? C.gold : C.ivory, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>
@@ -1187,7 +1207,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
                 {/* Current round – live bidding */}
                 {room.phase !== "gameEnd" && (
-                  <tr style={{ background: "rgba(61,28,110,0.2)", borderBottom: `1px solid ${C.glassBorder}` }}>
+                  <tr style={{ background: "rgba(38,48,41,0.2)", borderBottom: `1px solid ${C.glassBorder}` }}>
                     <td style={{ padding: "8px 12px" }}>
                       <div style={{ ...cinzel, fontSize: 11, color: C.goldLight }}>R{room.round} ▶</div>
                       <div style={{ fontSize: 10, color: C.ivoryDim }}>🎴 {players[room.dealer]?.ai_name}</div>
@@ -1245,25 +1265,44 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   // !witchSwapped: room.pending_witch still shows me as pending locally until
   // the realtime update confirming the swap arrives - see witchSwapped useEffect.
   const pendingWitchForMe = room?.pending_witch === effectiveMyIdx && !witchSwapped;
+  // Same reasoning as pendingWitchForMe, for the 9¾ adjustment - see rainbow9Adjusted useEffect.
+  const pendingRainbow9ForMe = room?.pending_rainbow9 === effectiveMyIdx && !rainbow9Adjusted;
   const isPlaying = room.phase === "playing" && isMyTurn && !loading;
   const seats = getSeatPositions(players, effectiveMyIdx);
 
   return (
     <div style={{
       height: "100dvh", width: "100%", overflow: "hidden", position: "relative" as const,
-      background: C.midnight,
+      background: C.bgDark,
     }}>
       {/* Status bar safe-area strip - matches table color */}
       <div style={{
         position: "absolute" as const, top: 0, left: 0, right: 0, height: "env(safe-area-inset-top)",
-        background: "#0d2818", zIndex: 16,
+        background: "#101713", zIndex: 16,
       }} />
 
-      {/* Green table - fills below safe area */}
+      {/* Table - fills below safe area */}
       <div style={{
         position: "absolute" as const, top: "env(safe-area-inset-top)", left: 0, right: 0, bottom: 0,
-        background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
       }}>
+
+      {/* Table surface: Mischton wood-grain (radial base + grain streaks + fine noise + vignette) */}
+      <div style={{
+        position: "absolute" as const, inset: 0, pointerEvents: "none" as const,
+        background: "radial-gradient(ellipse at 50% 35%, #3b4a41 0%, #232e28 55%, #101713 100%)",
+      }} />
+      <div style={{
+        position: "absolute" as const, inset: 0, pointerEvents: "none" as const,
+        backgroundImage: "repeating-linear-gradient(89deg, rgba(0,0,0,0.16) 0px, transparent 2px, transparent 30px, rgba(255,255,255,0.05) 33px, transparent 36px, transparent 70px), repeating-linear-gradient(91deg, rgba(0,0,0,0.10) 0px, transparent 1px, transparent 55px, rgba(255,255,255,0.03) 57px, transparent 60px, transparent 118px)",
+      }} />
+      <div style={{
+        position: "absolute" as const, inset: 0, pointerEvents: "none" as const, opacity: 0.5, mixBlendMode: "overlay" as const,
+        backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+      }} />
+      <div style={{
+        position: "absolute" as const, inset: 0, pointerEvents: "none" as const,
+        background: "radial-gradient(ellipse at 50% 40%, transparent 0%, transparent 45%, rgba(0,0,0,0.38) 100%)",
+      }} />
 
       {/* Header - floats over table */}
       <div style={{
@@ -1327,7 +1366,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 <CardView card={visibleCard} small />
               )}
               <div style={{
-                background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
+                background: isActive ? `linear-gradient(135deg, rgba(38,48,41,0.96), rgba(58,75,64,0.92))` : "rgba(5,10,20,0.88)",
                 border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
                 boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
                 borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,12vmin,150px)",
@@ -1482,7 +1521,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           return (
             <div style={{
               marginBottom: 4,
-              background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
+              background: isActive ? `linear-gradient(135deg, rgba(38,48,41,0.96), rgba(58,75,64,0.92))` : "rgba(5,10,20,0.88)",
               border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
               boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
               borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,12vmin,150px)",
@@ -1516,7 +1555,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.45)",
             letterSpacing: 1,
             padding: isPlaying ? "5px 16px" : "0",
-            background: isPlaying ? `linear-gradient(135deg, rgba(61,28,110,0.9), rgba(90,45,153,0.8))` : "transparent",
+            background: isPlaying ? `linear-gradient(135deg, rgba(38,48,41,0.9), rgba(58,75,64,0.8))` : "transparent",
             borderRadius: isPlaying ? 16 : 0,
             border: isPlaying ? `1.5px solid ${C.gold}` : "none",
             boxShadow: isPlaying ? `0 0 12px rgba(201,168,76,0.4)` : "none",
@@ -1570,7 +1609,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
       {(isBidding || isChoosingTrump || isChoosingWerewolf ||
         (room.phase === "bidding" && !isMyTurn) ||
         (room.phase === "choosingWerewolf" && !isMyTurn) ||
-        room?.pending_rainbow9 === effectiveMyIdx ||
+        pendingRainbow9ForMe ||
         pendingWitchForMe ||
         specialAction?.type === "witchGive" ||
         room.phase === "witchReveal") && (
@@ -1583,7 +1622,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             ⬆ {isBidding ? "Jetzt bieten"
               : isChoosingTrump ? "Trumpf wählen"
               : isChoosingWerewolf ? "Stichfarbe wählen"
-              : room?.pending_rainbow9 === effectiveMyIdx ? "9¾ – Vorhersage anpassen"
+              : pendingRainbow9ForMe ? "9¾ – Vorhersage anpassen"
               : pendingWitchForMe ? "Hexe – Karte tauschen"
               : specialAction?.type === "witchGive" ? "Hexe – Karte abgeben"
               : room.phase === "witchReveal" ? "Tausch-Ergebnis ansehen"
@@ -1654,7 +1693,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             )}
 
             {/* 9¾ Adjust */}
-            {room?.pending_rainbow9 === effectiveMyIdx && (() => {
+            {pendingRainbow9ForMe && (() => {
               const currentBid = me?.bid ?? 0;
               const tricksWon = me?.tricks_won ?? 0;
               const canDecrease = currentBid > 0 && tricksWon !== currentBid;
@@ -1670,12 +1709,12 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                   </div>
                   <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
                     {canDecrease && (
-                      <button onClick={() => act("rainbow9Adjust", { adjust: -1 })}
+                      <button onClick={() => { act("rainbow9Adjust", { adjust: -1 }); setRainbow9Adjusted(true); }}
                         style={{ ...goldBtn(false), flex: 1, padding: "12px 0", fontSize: 17 }}>
                         −1 → {currentBid - 1}
                       </button>
                     )}
-                    <button onClick={() => act("rainbow9Adjust", { adjust: 1 })}
+                    <button onClick={() => { act("rainbow9Adjust", { adjust: 1 }); setRainbow9Adjusted(true); }}
                       style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 17 }}>
                       +1 → {currentBid + 1}
                     </button>
@@ -1822,7 +1861,7 @@ export default function App() {
   }, []);
 
   if (loading) return (
-    <div style={{ minHeight: "100vh", background: C.midnight, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+    <div style={{ minHeight: "100vh", background: C.bgDark, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <div style={{ ...cinzel, fontSize: 48, color: C.gold }}>🧙</div>
       <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, letterSpacing: 3 }}>WIZARD</div>
     </div>

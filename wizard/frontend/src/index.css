@@ -7,10 +7,10 @@
 }
 
 :root {
-  --midnight: #0D1B2A;
-  --deep-blue: #162032;
-  --violet: #3D1C6E;
-  --violet-light: #5A2D99;
+  --bg-dark: #10161A;
+  --bg-panel: #17201B;
+  --accent: #263029;
+  --accent-light: #3A4B40;
   --gold: #C9A84C;
   --gold-light: #E4C97A;
   --ivory: #F2E8D5;
@@ -43,7 +43,7 @@ html {
 
 body {
   height: 100%;
-  background: var(--midnight);
+  background: var(--bg-dark);
   font-family: 'Inter', sans-serif;
   color: var(--ivory);
   -webkit-font-smoothing: antialiased;
