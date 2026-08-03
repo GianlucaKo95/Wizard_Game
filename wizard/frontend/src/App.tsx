@@ -332,21 +332,18 @@ function LobbyScreen({ session }: { session: Session }) {
     }
   }, []);
   const [codeInput, setCodeInput] = useState("");
-  const [aiCount, setAiCount] = useState(2);
+  const [totalPlayers, setTotalPlayers] = useState(3);
   const [roomId, setRoomId] = useState<string | null>(null);
-  const [humanCount, setHumanCount] = useState(1);
   const [edition, setEdition] = useState<"classic"|"anniversary">("classic");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const username = session.user.user_metadata?.username ?? "Spieler";
-  const maxAI = Math.max(0, 6 - humanCount);
-  const minAI = Math.max(0, 3 - humanCount); // minimum 3 players total
 
   async function createRoom() {
     setLoading(true); setError("");
     const res = await callGameAction("", "createRoom", { username, edition });
     if (!res?.roomId) { setError(res?.error ?? "Fehler"); setLoading(false); return; }
-    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code, plannedTotal: humanCount + aiCount }));
+    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code, plannedTotal: totalPlayers }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -420,7 +417,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? (humanCount + Math.min(aiCount, maxAI))} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
+  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -476,27 +473,14 @@ function LobbyScreen({ session }: { session: Session }) {
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
         <div>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>MENSCHLICHE SPIELER (inkl. dir)</div>
+          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>GESAMTZAHL SPIELER</div>
           <div style={segTrack}>
-            {[1,2,3,4,5,6].map(n => (
-              <button key={n} onClick={() => { setHumanCount(n); const newMax = Math.max(0, 6-n); const newMin = Math.max(0, 3-n); setAiCount(Math.min(Math.max(aiCount, newMin), newMax)); }}
-                style={{ ...segBtn(humanCount===n), fontSize: 15 }}>{n}</button>
+            {[3,4,5,6].map(n => (
+              <button key={n} onClick={() => setTotalPlayers(n)}
+                style={{ ...segBtn(totalPlayers===n), fontSize: 15 }}>{n}</button>
             ))}
           </div>
-        </div>
-        <div>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>
-            KI-MITSPIELER {maxAI === 0 ? "(Raum voll)" : `(max. ${maxAI})`}
-          </div>
-          <div style={segTrack}>
-            {Array.from({ length: maxAI + 1 }, (_, n) => (
-              <button key={n} onClick={() => setAiCount(Math.max(n, minAI))}
-                disabled={n < minAI}
-                style={{ ...segBtn(aiCount===Math.max(n,minAI) && n>=minAI), fontSize: 15, opacity: n < minAI ? 0.25 : 1 }}>
-                {n===0?"–":n}
-              </button>
-            ))}
-          </div>
+          <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 6 }}>Fehlende Plätze werden beim Start automatisch mit KI aufgefüllt</div>
         </div>
         {/* Edition */}
         <div>
@@ -518,10 +502,10 @@ function LobbyScreen({ session }: { session: Session }) {
         </div>
 
         <div style={{ ...glass({ padding: "10px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
-          <span style={{ color: C.gold, ...cinzel }}>{humanCount + aiCount}</span> Spieler gesamt ·{" "}
-          {humanCount} 👤 + {aiCount} 🤖 · <span style={{ color: C.gold }}>{Math.floor(60/(humanCount+aiCount))} Runden</span>{humanCount+aiCount < 3 ? <span style={{color:"#FF8080"}}> · min. 3 Spieler</span> : ""}
+          Ziel: <span style={{ color: C.gold, ...cinzel }}>{totalPlayers}</span> Spieler ·{" "}
+          <span style={{ color: C.gold }}>{Math.floor(60/totalPlayers)} Runden</span>
         </div>
-        <button onClick={createRoom} disabled={loading || humanCount+aiCount < 3}
+        <button onClick={createRoom} disabled={loading}
           style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading?0.5:1 }}>
           {loading ? "Erstelle Raum…" : "✦ Raum erstellen"}
         </button>
