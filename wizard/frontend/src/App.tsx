@@ -32,23 +32,48 @@ const glass = (extra: React.CSSProperties = {}): React.CSSProperties => ({
 });
 
 const goldBtn = (active = true): React.CSSProperties => ({
-  ...cinzel,
-  background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "rgba(255,255,255,0.06)",
+  fontFamily: "'Inter', sans-serif",
+  background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "rgba(255,255,255,0.05)",
   color: active ? C.goldLight : C.ivoryDim,
-  border: `1px solid ${active ? C.gold : "rgba(255,255,255,0.1)"}`,
-  borderRadius: 8,
+  border: "none",
+  borderRadius: 16,
   padding: "clamp(8px,2vw,12px) clamp(12px,3vw,20px)",
   fontSize: "clamp(13px, 2vw, 15px)",
   cursor: "pointer",
-  letterSpacing: "0.05em",
+  letterSpacing: "0.02em",
   transition: "all 0.2s",
   fontWeight: 600,
+  boxShadow: active ? "0 6px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)" : "none",
   WebkitTapHighlightColor: "transparent",
   touchAction: "manipulation",
   minHeight: 44,
   userSelect: "none",
   WebkitUserSelect: "none",
 });
+
+// Pill-track segmented control (player count, edition, login/register toggle …)
+const segTrack: React.CSSProperties = {
+  display: "flex", gap: 2, background: "rgba(255,255,255,0.05)", borderRadius: 999, padding: 3,
+};
+const segBtn = (active: boolean): React.CSSProperties => ({
+  flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 999,
+  fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13,
+  background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "transparent",
+  color: active ? C.goldLight : C.ivoryDim,
+  border: "none", cursor: "pointer",
+  boxShadow: active ? "0 2px 8px rgba(0,0,0,0.35)" : "none",
+  WebkitTapHighlightColor: "transparent", touchAction: "manipulation", minHeight: 40,
+  userSelect: "none", WebkitUserSelect: "none",
+});
+
+// Icon-over-label tile button (Home screen secondary actions)
+const tileBtn: React.CSSProperties = {
+  flex: 1, background: "rgba(255,255,255,0.045)", border: "none", borderRadius: 16,
+  padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+  fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: C.ivoryDim, cursor: "pointer",
+  WebkitTapHighlightColor: "transparent", touchAction: "manipulation", minHeight: 44,
+  userSelect: "none", WebkitUserSelect: "none",
+};
 
 const inputStyle: React.CSSProperties = {
   background: "rgba(0,0,0,0.3)",
@@ -155,14 +180,9 @@ function AuthScreen() {
       {/* Name Card */}
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
         {/* Mode toggle */}
-        <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.3)", borderRadius: 8, padding: 4 }}>
+        <div style={segTrack}>
           {(["login","register"] as const).map(m => (
-            <button key={m} onClick={() => { setMode(m); setError(""); }} style={{
-              flex: 1, padding: "8px 0", borderRadius: 6, border: "none", cursor: "pointer",
-              ...cinzel, fontSize: 12, letterSpacing: 1,
-              background: mode === m ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "transparent",
-              color: mode === m ? C.goldLight : C.ivoryDim,
-            }}>
+            <button key={m} onClick={() => { setMode(m); setError(""); }} style={segBtn(mode === m)}>
               {m === "login" ? "Anmelden" : "Registrieren"}
             </button>
           ))}
@@ -412,10 +432,7 @@ function LobbyScreen({ session }: { session: Session }) {
           <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <div style={{ ...glass({ padding: "6px 14px" }), ...cinzel, fontSize: 13, color: C.ivory }}>👤 {username}</div>
-        <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 12px", fontSize: 12 }}>⚙️ Profil</button>
-      </div>
+      <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>⚙️ Profil</button>
       <GoldDivider />
     </>
   );
@@ -433,16 +450,20 @@ function LobbyScreen({ session }: { session: Session }) {
           <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "min(320px, 92vw)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "min(320px, 92vw)" }}>
         <button onClick={() => setView("create")} style={{ ...goldBtn(), width: "100%", padding: "16px 0", fontSize: 15 }}>
-          ✦ Spiel erstellen
+          Spiel erstellen
         </button>
-        <button onClick={() => setView("join")} style={{ ...goldBtn(false), width: "100%", padding: "16px 0", fontSize: 15 }}>
-          ⬡ Spiel beitreten
-        </button>
-        <button onClick={() => setView("rules")} style={{ ...goldBtn(false), width: "100%", padding: "12px 0", fontSize: 13 }}>
-          📖 Regeln & Spezialkarten
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => setView("join")} style={tileBtn}>
+            <span style={{ fontSize: 18 }}>⬡</span>
+            Beitreten
+          </button>
+          <button onClick={() => setView("rules")} style={tileBtn}>
+            <span style={{ fontSize: 18 }}>📖</span>
+            Regeln
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -455,10 +476,10 @@ function LobbyScreen({ session }: { session: Session }) {
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
         <div>
           <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>MENSCHLICHE SPIELER (inkl. dir)</div>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={segTrack}>
             {[1,2,3,4,5,6].map(n => (
               <button key={n} onClick={() => { setHumanCount(n); const newMax = Math.max(0, 6-n); const newMin = Math.max(0, 3-n); setAiCount(Math.min(Math.max(aiCount, newMin), newMax)); }}
-                style={{ ...goldBtn(humanCount===n), flex: 1, padding: "14px 0", fontSize: 15 }}>{n}</button>
+                style={{ ...segBtn(humanCount===n), fontSize: 15 }}>{n}</button>
             ))}
           </div>
         </div>
@@ -466,11 +487,11 @@ function LobbyScreen({ session }: { session: Session }) {
           <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>
             KI-MITSPIELER {maxAI === 0 ? "(Raum voll)" : `(max. ${maxAI})`}
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={segTrack}>
             {Array.from({ length: maxAI + 1 }, (_, n) => (
               <button key={n} onClick={() => setAiCount(Math.max(n, minAI))}
                 disabled={n < minAI}
-                style={{ ...goldBtn(aiCount===Math.max(n,minAI) && n>=minAI), flex: 1, padding: "14px 0", fontSize: 15, opacity: n < minAI ? 0.25 : 1 }}>
+                style={{ ...segBtn(aiCount===Math.max(n,minAI) && n>=minAI), fontSize: 15, opacity: n < minAI ? 0.25 : 1 }}>
                 {n===0?"–":n}
               </button>
             ))}
