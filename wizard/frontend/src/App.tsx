@@ -521,11 +521,11 @@ function LobbyScreen({ session }: { session: Session }) {
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Spiel beitreten</div>
         <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
-          placeholder="XXXX" maxLength={4}
+          placeholder="XXXXX" maxLength={5}
           style={{ ...inputStyle, textAlign: "center", letterSpacing: 8, fontSize: 22, ...cinzel }}
           onKeyDown={e => e.key==="Enter" && joinRoom()} autoFocus />
-        <button onClick={joinRoom} disabled={loading || codeInput.length < 4}
-          style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading||codeInput.length<4?0.5:1 }}>
+        <button onClick={joinRoom} disabled={loading || codeInput.length < 5}
+          style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading||codeInput.length<5?0.5:1 }}>
           {loading ? "Suche Raum…" : "⬡ Beitreten"}
         </button>
         {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
