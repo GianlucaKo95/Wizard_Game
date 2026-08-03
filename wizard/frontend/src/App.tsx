@@ -317,15 +317,16 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 function LobbyScreen({ session }: { session: Session }) {
   const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile">("home");
   const [reconnectRoom, setReconnectRoom] = useState<string|null>(null);
+  const [savedPlannedTotal, setSavedPlannedTotal] = useState<number | null>(null);
 
   // Check for reconnectable room on mount
   useEffect(() => {
     const savedRoom = sessionStorage.getItem("wizard_room");
     if (savedRoom) {
-      const { roomId, code } = JSON.parse(savedRoom);
+      const { roomId, code, plannedTotal } = JSON.parse(savedRoom);
       supabase.from("rooms").select("phase").eq("id", roomId).single()
         .then(({ data }) => {
-          if (data && data.phase !== "gameEnd") setReconnectRoom(code);
+          if (data && data.phase !== "gameEnd") { setReconnectRoom(code); if (plannedTotal) setSavedPlannedTotal(plannedTotal); }
           else sessionStorage.removeItem("wizard_room");
         });
     }
@@ -345,7 +346,7 @@ function LobbyScreen({ session }: { session: Session }) {
     setLoading(true); setError("");
     const res = await callGameAction("", "createRoom", { username, edition });
     if (!res?.roomId) { setError(res?.error ?? "Fehler"); setLoading(false); return; }
-    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code }));
+    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code, plannedTotal: humanCount + aiCount }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -419,7 +420,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} aiCount={Math.min(aiCount, maxAI)} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
+  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? (humanCount + Math.min(aiCount, maxAI))} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -615,7 +616,7 @@ async function loadPlayersSecure(roomId: string, myUserId: string) {
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
-function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: string; session: Session; aiCount: number; edition?: string; onLeave: () => void }) {
+function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId: string; session: Session; plannedTotal: number; edition?: string; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
   const aiTriggerLastKey = useRef<string>("");
   const clearTrickPending = useRef(false);
@@ -881,6 +882,9 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
+    // Shrinks automatically as real players join: the host originally planned for
+    // `plannedTotal` players total, so fewer AI are needed the more humans show up.
+    const effectiveAiCount = Math.max(0, plannedTotal - players.length);
     return (
       <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
         <div style={{ ...cinzel, fontSize: 24, color: C.gold }}>🧙 Warteraum</div>
@@ -900,8 +904,11 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           ))}
         </div>
 
+        {isHost && effectiveAiCount > 0 && (
+          <div style={{ fontSize: 11, color: C.ivoryDim }}>+ {effectiveAiCount} KI {effectiveAiCount === 1 ? "wird" : "werden"} beim Start ergänzt</div>
+        )}
         {isHost ? (
-          <button onClick={() => act("startGame", { aiCount, edition: room?.edition ?? "classic" })} disabled={loading || players.length + aiCount < 2}
+          <button onClick={() => act("startGame", { aiCount: effectiveAiCount, edition: room?.edition ?? "classic" })} disabled={loading || players.length + effectiveAiCount < 2}
             style={{ ...goldBtn(), padding: "13px 32px", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
             ✦ Spiel starten
           </button>
