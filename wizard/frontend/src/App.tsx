@@ -193,12 +193,42 @@ function AuthScreen() {
   );
 }
 
-// ─── Stats Screen ─────────────────────────────────────────────────────────────
-function StatsScreen({ userId, onBack }: { userId: string; onBack: () => void }) {
+// ─── Profile Screen ───────────────────────────────────────────────────────────
+function ProfileScreen({ session, onBack }: { session: Session; onBack: () => void }) {
+  const username = session.user.user_metadata?.username ?? "Spieler";
+  const [nameInput, setNameInput] = useState(username);
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameMsg, setNameMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
   const [stats, setStats] = useState<any>(null);
   useEffect(() => {
-    supabase.from("user_stats").select("*").eq("id", userId).single().then(({ data }) => setStats(data));
-  }, [userId]);
+    supabase.from("user_stats").select("*").eq("id", session.user.id).single().then(({ data }) => setStats(data));
+  }, [session.user.id]);
+
+  async function saveName() {
+    const n = nameInput.trim();
+    if (!n || n === username) return;
+    setNameSaving(true); setNameMsg(null);
+    const { error } = await supabase.auth.updateUser({ data: { username: n } });
+    setNameSaving(false);
+    setNameMsg(error ? { text: "Fehler beim Speichern", ok: false } : { text: "Name gespeichert ✓", ok: true });
+  }
+
+  async function savePassword() {
+    setPwMsg(null);
+    if (pw1.length < 6) { setPwMsg({ text: "Mindestens 6 Zeichen", ok: false }); return; }
+    if (pw1 !== pw2) { setPwMsg({ text: "Passwörter stimmen nicht überein", ok: false }); return; }
+    setPwSaving(true);
+    const { error } = await supabase.auth.updateUser({ password: pw1 });
+    setPwSaving(false);
+    if (error) setPwMsg({ text: error.message, ok: false });
+    else { setPwMsg({ text: "Passwort geändert ✓", ok: true }); setPw1(""); setPw2(""); }
+  }
 
   const statItems = stats ? [
     { label: "Spiele", value: stats.games_played ?? 0, icon: "🎮" },
@@ -210,29 +240,62 @@ function StatsScreen({ userId, onBack }: { userId: string; onBack: () => void })
   ] : [];
 
   return (
-    <div style={{ ...glass({ padding: 20 }), width: "min(380px, 92vw)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>📊 Statistiken</div>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 20 }}>✕</button>
+    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
+        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>👤 Profil</div>
+        <button onClick={onBack} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>← Zurück</button>
       </div>
-      {!stats ? <div style={{ textAlign: "center", padding: 24, color: C.ivoryDim }}>Lade…</div> : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-          {statItems.map(({ label, value, icon }) => (
-            <div key={label} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center" }}>
-              <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
-              <div style={{ ...cinzel, fontSize: 18, fontWeight: 700, color: C.gold }}>{value}</div>
-              <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 2 }}>{label}</div>
-            </div>
-          ))}
-        </div>
-      )}
+
+      {/* Name */}
+      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>NAME</div>
+        <input value={nameInput} onChange={e => { setNameInput(e.target.value); setNameMsg(null); }}
+          placeholder="Dein Name" style={inputStyle} maxLength={24}
+          onKeyDown={e => e.key === "Enter" && saveName()} />
+        <button onClick={saveName} disabled={nameSaving || !nameInput.trim() || nameInput.trim() === username}
+          style={{ ...goldBtn(), padding: "10px 0", fontSize: 13, opacity: (nameSaving || !nameInput.trim() || nameInput.trim() === username) ? 0.5 : 1 }}>
+          {nameSaving ? "…" : "Namen speichern"}
+        </button>
+        {nameMsg && <div style={{ fontSize: 12, color: nameMsg.ok ? C.success : "#FF8080", textAlign: "center" }}>{nameMsg.text}</div>}
+      </div>
+
+      {/* Password */}
+      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>PASSWORT ÄNDERN</div>
+        <input value={pw1} onChange={e => { setPw1(e.target.value); setPwMsg(null); }}
+          placeholder="Neues Passwort" type="password" style={inputStyle} autoComplete="new-password" />
+        <input value={pw2} onChange={e => { setPw2(e.target.value); setPwMsg(null); }}
+          placeholder="Passwort bestätigen" type="password" style={inputStyle} autoComplete="new-password"
+          onKeyDown={e => e.key === "Enter" && savePassword()} />
+        <button onClick={savePassword} disabled={pwSaving || !pw1 || !pw2}
+          style={{ ...goldBtn(), padding: "10px 0", fontSize: 13, opacity: (pwSaving || !pw1 || !pw2) ? 0.5 : 1 }}>
+          {pwSaving ? "…" : "Passwort speichern"}
+        </button>
+        {pwMsg && <div style={{ fontSize: 12, color: pwMsg.ok ? C.success : "#FF8080", textAlign: "center" }}>{pwMsg.text}</div>}
+      </div>
+
+      {/* Stats */}
+      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)" }}>
+        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>📊 STATISTIKEN</div>
+        {!stats ? <div style={{ textAlign: "center", padding: 24, color: C.ivoryDim }}>Lade…</div> : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {statItems.map(({ label, value, icon }) => (
+              <div key={label} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center" }}>
+                <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
+                <div style={{ ...cinzel, fontSize: 18, fontWeight: 700, color: C.gold }}>{value}</div>
+                <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 2 }}>{label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // ─── Lobby ────────────────────────────────────────────────────────────────────
 function LobbyScreen({ session }: { session: Session }) {
-  const [view, setView] = useState<"home" | "create" | "join" | "rules">("home");
+  const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile">("home");
   const [reconnectRoom, setReconnectRoom] = useState<string|null>(null);
 
   // Check for reconnectable room on mount
@@ -254,9 +317,6 @@ function LobbyScreen({ session }: { session: Session }) {
   const [edition, setEdition] = useState<"classic"|"anniversary">("classic");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [newNameInput, setNewNameInput] = useState("");
   const username = session.user.user_metadata?.username ?? "Spieler";
   const maxAI = Math.max(0, 6 - humanCount);
   const minAI = Math.max(0, 3 - humanCount); // minimum 3 players total
@@ -337,6 +397,8 @@ function LobbyScreen({ session }: { session: Session }) {
     </div>
   );
 
+  if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
+
   if (roomId) return <GameRoom roomId={roomId} session={session} aiCount={Math.min(aiCount, maxAI)} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
@@ -352,27 +414,8 @@ function LobbyScreen({ session }: { session: Session }) {
       )}
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ ...glass({ padding: "6px 14px" }), ...cinzel, fontSize: 13, color: C.ivory }}>👤 {username}</div>
-        <button onClick={() => setShowStats(s => !s)} style={{ ...goldBtn(false), padding: "6px 12px" }}>📊</button>
-        <button onClick={() => { setNewNameInput(username); setEditingName(true); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12 }}>✏️ Name ändern</button>
+        <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 12px", fontSize: 12 }}>⚙️ Profil</button>
       </div>
-      {editingName && (
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" as const }}>
-          <input
-            value={newNameInput}
-            onChange={e => setNewNameInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === "Enter") { const n = newNameInput.trim(); if (n) supabase.auth.updateUser({ data: { username: n } }).then(() => setEditingName(false)); }
-              if (e.key === "Escape") setEditingName(false);
-            }}
-            placeholder="Neuer Name"
-            autoFocus
-            style={{ ...cinzel, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(201,168,76,0.4)", borderRadius: 8, color: "#fff", padding: "6px 12px", fontSize: 13, outline: "none", width: 140 }}
-          />
-          <button onClick={() => { const n = newNameInput.trim(); if (n) supabase.auth.updateUser({ data: { username: n } }).then(() => setEditingName(false)); }} style={{ ...goldBtn(), padding: "6px 14px", fontSize: 12 }}>✓</button>
-          <button onClick={() => setEditingName(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12 }}>✕</button>
-        </div>
-      )}
-      {showStats && <StatsScreen userId={session.user.id} onBack={() => setShowStats(false)} />}
       <GoldDivider />
     </>
   );
