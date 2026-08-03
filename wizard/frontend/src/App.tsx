@@ -6,10 +6,10 @@ import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
-  midnight: "#0D1B2A",
-  deepBlue: "#162032",
-  violet: "#3D1C6E",
-  violetLight: "#5A2D99",
+  bgDark: "#10161A",
+  bgPanel: "#17201B",
+  accent: "#263029",
+  accentLight: "#3A4B40",
   gold: "#C9A84C",
   goldLight: "#E4C97A",
   ivory: "#F2E8D5",
@@ -33,7 +33,7 @@ const glass = (extra: React.CSSProperties = {}): React.CSSProperties => ({
 
 const goldBtn = (active = true): React.CSSProperties => ({
   ...cinzel,
-  background: active ? `linear-gradient(135deg, ${C.violet}, ${C.violetLight})` : "rgba(255,255,255,0.06)",
+  background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "rgba(255,255,255,0.06)",
   color: active ? C.goldLight : C.ivoryDim,
   border: `1px solid ${active ? C.gold : "rgba(255,255,255,0.1)"}`,
   borderRadius: 8,
@@ -66,7 +66,7 @@ const inputStyle: React.CSSProperties = {
 // Applied as className to prevent selection
 const tableStyle: React.CSSProperties = {
   minHeight: "100dvh",
-  background: `radial-gradient(ellipse at 20% 0%, ${C.violet}33 0%, transparent 60%), radial-gradient(ellipse at 80% 100%, #1A3A6E33 0%, transparent 60%), ${C.midnight}`,
+  background: `radial-gradient(ellipse at 20% 0%, ${C.accent}33 0%, transparent 60%), radial-gradient(ellipse at 80% 100%, #23302a33 0%, transparent 60%), ${C.bgDark}`,
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
@@ -146,7 +146,7 @@ function AuthScreen() {
       {/* Logo */}
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "clamp(44px,12vw,64px)", marginBottom: 8 }}>🧙</div>
-        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.violet}` }}>WIZARD</div>
+        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.accent}` }}>WIZARD</div>
         <div style={{ fontSize: 12, color: C.ivoryDim, letterSpacing: 3, marginTop: 4 }}>DAS KARTENSPIEL</div>
       </div>
 
@@ -160,7 +160,7 @@ function AuthScreen() {
             <button key={m} onClick={() => { setMode(m); setError(""); }} style={{
               flex: 1, padding: "8px 0", borderRadius: 6, border: "none", cursor: "pointer",
               ...cinzel, fontSize: 12, letterSpacing: 1,
-              background: mode === m ? `linear-gradient(135deg, ${C.violet}, ${C.violetLight})` : "transparent",
+              background: mode === m ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "transparent",
               color: mode === m ? C.goldLight : C.ivoryDim,
             }}>
               {m === "login" ? "Anmelden" : "Registrieren"}
@@ -1148,7 +1148,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           <div style={{ overflowX: "auto" }}>
             <table className="scoresheet-table" style={{ borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ background: "rgba(61,28,110,0.4)" }}>
+                <tr style={{ background: "rgba(38,48,41,0.4)" }}>
                   <th style={{ ...cinzel, padding: "10px 12px", textAlign: "left", color: C.gold, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>RUNDE</th>
                   {players.map((p: any) => (
                     <th key={p.id} style={{ ...cinzel, padding: "10px 12px", textAlign: "center", color: p.player_index === effectiveMyIdx ? C.gold : C.ivory, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>
@@ -1187,7 +1187,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
 
                 {/* Current round – live bidding */}
                 {room.phase !== "gameEnd" && (
-                  <tr style={{ background: "rgba(61,28,110,0.2)", borderBottom: `1px solid ${C.glassBorder}` }}>
+                  <tr style={{ background: "rgba(38,48,41,0.2)", borderBottom: `1px solid ${C.glassBorder}` }}>
                     <td style={{ padding: "8px 12px" }}>
                       <div style={{ ...cinzel, fontSize: 11, color: C.goldLight }}>R{room.round} ▶</div>
                       <div style={{ fontSize: 10, color: C.ivoryDim }}>🎴 {players[room.dealer]?.ai_name}</div>
@@ -1251,19 +1251,36 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
   return (
     <div style={{
       height: "100dvh", width: "100%", overflow: "hidden", position: "relative" as const,
-      background: C.midnight,
+      background: C.bgDark,
     }}>
       {/* Status bar safe-area strip - matches table color */}
       <div style={{
         position: "absolute" as const, top: 0, left: 0, right: 0, height: "env(safe-area-inset-top)",
-        background: "#0d2818", zIndex: 16,
+        background: "#101713", zIndex: 16,
       }} />
 
-      {/* Green table - fills below safe area */}
+      {/* Table - fills below safe area */}
       <div style={{
         position: "absolute" as const, top: "env(safe-area-inset-top)", left: 0, right: 0, bottom: 0,
-        background: "radial-gradient(ellipse at center, #1e5c3a 0%, #0d2818 55%, #061408 100%)",
       }}>
+
+      {/* Table surface: Mischton wood-grain (radial base + grain streaks + fine noise + vignette) */}
+      <div style={{
+        position: "absolute" as const, inset: 0, pointerEvents: "none" as const,
+        background: "radial-gradient(ellipse at 50% 35%, #3b4a41 0%, #232e28 55%, #101713 100%)",
+      }} />
+      <div style={{
+        position: "absolute" as const, inset: 0, pointerEvents: "none" as const,
+        backgroundImage: "repeating-linear-gradient(89deg, rgba(0,0,0,0.16) 0px, transparent 2px, transparent 30px, rgba(255,255,255,0.05) 33px, transparent 36px, transparent 70px), repeating-linear-gradient(91deg, rgba(0,0,0,0.10) 0px, transparent 1px, transparent 55px, rgba(255,255,255,0.03) 57px, transparent 60px, transparent 118px)",
+      }} />
+      <div style={{
+        position: "absolute" as const, inset: 0, pointerEvents: "none" as const, opacity: 0.5, mixBlendMode: "overlay" as const,
+        backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+      }} />
+      <div style={{
+        position: "absolute" as const, inset: 0, pointerEvents: "none" as const,
+        background: "radial-gradient(ellipse at 50% 40%, transparent 0%, transparent 45%, rgba(0,0,0,0.38) 100%)",
+      }} />
 
       {/* Header - floats over table */}
       <div style={{
@@ -1327,7 +1344,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
                 <CardView card={visibleCard} small />
               )}
               <div style={{
-                background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
+                background: isActive ? `linear-gradient(135deg, rgba(38,48,41,0.96), rgba(58,75,64,0.92))` : "rgba(5,10,20,0.88)",
                 border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
                 boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
                 borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,12vmin,150px)",
@@ -1482,7 +1499,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
           return (
             <div style={{
               marginBottom: 4,
-              background: isActive ? `linear-gradient(135deg, rgba(61,28,110,0.96), rgba(90,45,153,0.92))` : "rgba(5,10,20,0.88)",
+              background: isActive ? `linear-gradient(135deg, rgba(38,48,41,0.96), rgba(58,75,64,0.92))` : "rgba(5,10,20,0.88)",
               border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
               boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
               borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,12vmin,150px)",
@@ -1516,7 +1533,7 @@ function GameRoom({ roomId, session, aiCount, edition, onLeave }: { roomId: stri
             color: isPlaying ? "#FFE566" : "rgba(255,255,255,0.45)",
             letterSpacing: 1,
             padding: isPlaying ? "5px 16px" : "0",
-            background: isPlaying ? `linear-gradient(135deg, rgba(61,28,110,0.9), rgba(90,45,153,0.8))` : "transparent",
+            background: isPlaying ? `linear-gradient(135deg, rgba(38,48,41,0.9), rgba(58,75,64,0.8))` : "transparent",
             borderRadius: isPlaying ? 16 : 0,
             border: isPlaying ? `1.5px solid ${C.gold}` : "none",
             boxShadow: isPlaying ? `0 0 12px rgba(201,168,76,0.4)` : "none",
@@ -1822,7 +1839,7 @@ export default function App() {
   }, []);
 
   if (loading) return (
-    <div style={{ minHeight: "100vh", background: C.midnight, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+    <div style={{ minHeight: "100vh", background: C.bgDark, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <div style={{ ...cinzel, fontSize: 48, color: C.gold }}>🧙</div>
       <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, letterSpacing: 3 }}>WIZARD</div>
     </div>
