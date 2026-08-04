@@ -396,15 +396,15 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>⚡ 30 JAHRE EDITION – SPEZIALKARTEN</div>
         {[
-          ["🐉 Seidenschnabel", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
+          ["🐉 Drache", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
           ["✦ Fee", "Verliert immer – außer wenn der Drache gespielt wurde. Dann gewinnt die Fee."],
-          ["🧹 Bellatrix (Hexe)", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
-          ["🐺 Lupin (Werwolf)", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
-          ["🧛 Quirrell (Vampir)", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
-          ["💥 Elderstab (Bombe)", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
-          ["😄 George Weasley (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
-          ["🚂 Gleis 9¾ (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
-          ["❓ Ron Weasley (Zauberernarr)", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
+          ["🧹 Hexe", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
+          ["🐺 Werwolf", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
+          ["🧛 Vampir", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
+          ["💥 Bombe", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
+          ["😄 Jongleur (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
+          ["🚂 Wolke (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
+          ["❓ Zauberernarr", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
         ].map(([title, desc]) => (
           <div key={title as string} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
             <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 120 }}>{title}</div>
@@ -1511,12 +1511,19 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         );
       })()}
 
-      {/* Bottom UI stack - my seat, turn indicator, hand - all in one flex flow, never overlapping */}
+      {/* My seat + turn indicator - anchored just above the actual hand-card
+          height (kept in sync with CardView's non-small clamp: 36px covers
+          the hand row's own bottom padding + the turn-indicator's height),
+          instead of being driven by shared flex-flow like before. That
+          decoupling avoided the old bug where resizing the cards pushed this
+          badge upward as a side effect, but a *fixed* offset would itself
+          get overtaken by the cards on larger screens (tablets etc., where
+          the card height clamp grows past its floor) - referencing the same
+          clamp() here keeps the two in lockstep at every viewport size. */}
       <div style={{
-        position: "absolute" as const, bottom: 0, left: 0, right: 0, zIndex: 10,
+        position: "absolute" as const, bottom: "calc(clamp(114px, 15.75vmin, 192px) + 36px + max(8px, env(safe-area-inset-bottom)))",
+        left: "50%", transform: "translateX(-50%)", zIndex: 10,
         display: "flex", flexDirection: "column" as const, alignItems: "center",
-        paddingBottom: "max(8px, env(safe-area-inset-bottom))",
-        background: "transparent",
       }}>
         {/* My seat pill - standalone markup, not absolutely positioned */}
         {(() => {
@@ -1571,7 +1578,14 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
             {isPlaying ? "✦ DU BIST DRAN ✦" : room.phase === "playing" ? `⏳ ${players[room.current_player]?.ai_name} ist dran` : ""}
           </span>
         </div>
+      </div>
 
+      {/* Hand cards - pinned flush to the true bottom edge, sized and
+          positioned independently of the seat/turn-indicator group above. */}
+      <div style={{
+        position: "absolute" as const, bottom: "max(8px, env(safe-area-inset-bottom))", left: 0, right: 0, zIndex: 10,
+        display: "flex", flexDirection: "column" as const, alignItems: "center",
+      }}>
         <div style={{ display: "flex", gap: "clamp(3px,1vw,6px)", flexWrap: "nowrap", justifyContent: myHand.length > 6 ? "flex-start" : "center", overflowX: "auto", alignSelf: "stretch", width: "100%", maxWidth: "100vw", minWidth: 0, boxSizing: "border-box" as const, padding: "0 8px 8px", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
           {myHand.map((card: any) => (
             <CardView key={card.id} card={card}
@@ -1666,7 +1680,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
               )}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, justifyContent: "center" }}>
                 {Array.from({ length: room.round + 1 }, (_, i) => (
-                  <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
+                  <button key={i} onClick={() => { act("bid", { bid: i }); setModalMinimized(true); }} disabled={i === dealerForbidden}
                     style={{ ...goldBtn(i !== dealerForbidden), padding: "12px 18px", fontSize: 19, opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 50 }}>
                     {i}
                   </button>

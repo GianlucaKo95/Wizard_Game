@@ -17,8 +17,8 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
   // Responsive sizing: vmin scales relative to the smaller viewport dimension,
   // so cards are proportional on both mobile (portrait) and desktop (landscape).
   // clamp(min, preferred, max) keeps cards usable on all screen sizes.
-  const w = small ? "clamp(36px, 5vmin, 56px)" : "clamp(60px, 9vmin, 110px)";
-  const h = small ? "clamp(54px, 7.5vmin, 84px)" : "clamp(90px, 13.5vmin, 165px)";
+  const w = small ? "clamp(36px, 5vmin, 56px)" : "clamp(76px, 10.5vmin, 128px)";
+  const h = small ? "clamp(54px, 7.5vmin, 84px)" : "clamp(114px, 15.75vmin, 192px)";
 
   const base: React.CSSProperties = {
     width: w, height: h,
@@ -101,7 +101,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
 
   // Special card config
   const specialConfigs: Record<string, { label: string; color: string }> = {
-    dragon:     { label: "🐉", color: "#A8C0E8" },
+    dragon:     { label: "D", color: "#A8C0E8" },
     fairy:      { label: "✦", color: "#D2B4DE" },
     witch:      { label: "H", color: "#C0392B" },  // H = Hexe, keeps witch art
     werewolf:   { label: "W", color: "#F7DC6F" },
