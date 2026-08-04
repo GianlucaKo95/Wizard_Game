@@ -167,7 +167,7 @@ function AuthScreen() {
   }
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 24 }}>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 24 }} className="fade-in">
       {/* Logo */}
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "clamp(44px,12vw,64px)", marginBottom: 8 }}>🧙</div>
@@ -260,7 +260,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   ] : [];
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }}>
+    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
         <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>👤 Profil</div>
         <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>← Zurück</button>
@@ -297,7 +297,17 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
       {/* Stats */}
       <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)" }}>
         <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>📊 STATISTIKEN</div>
-        {!stats ? <div style={{ textAlign: "center", padding: 24, color: C.ivoryDim }}>Lade…</div> : (
+        {!stats ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                <div className="skeleton" style={{ width: 18, height: 18, borderRadius: 5 }} />
+                <div className="skeleton" style={{ width: 28, height: 16, borderRadius: 4 }} />
+                <div className="skeleton" style={{ width: 40, height: 8, borderRadius: 4 }} />
+              </div>
+            ))}
+          </div>
+        ) : (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             {statItems.map(({ label, value, icon }) => (
               <div key={label} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center" }}>
@@ -367,7 +377,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   // ── Rules ──
   if (view === "rules") return (
-    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }}>
+    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(680px,96vw)" }}>
         <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>← Zurück</button>
@@ -436,7 +446,7 @@ function LobbyScreen({ session }: { session: Session }) {
   );
 
   if (view === "home") return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
       <HeaderBlock />
       {reconnectRoom && (
         <div style={{ ...glass({ padding: "12px 16px" }), width: "min(320px,92vw)", display: "flex", alignItems: "center", gap: 12 }}>
@@ -467,7 +477,7 @@ function LobbyScreen({ session }: { session: Session }) {
   );
 
   if (view === "create") return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
       <HeaderBlock compact showProfile={false} />
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
@@ -515,7 +525,7 @@ function LobbyScreen({ session }: { session: Session }) {
   );
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
       <HeaderBlock compact showProfile={false} />
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
@@ -886,7 +896,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     // `plannedTotal` players total, so fewer AI are needed the more humans show up.
     const effectiveAiCount = Math.max(0, plannedTotal - players.length);
     return (
-      <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+      <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
         <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) onLeave(); }}
           style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>
           ← Zurück
@@ -1278,7 +1288,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
   const seats = getSeatPositions(players, effectiveMyIdx);
 
   return (
-    <div style={{
+    <div className="fade-in" style={{
       height: "100dvh", width: "100%", overflow: "hidden", position: "relative" as const,
       background: C.bgDark,
     }}>
