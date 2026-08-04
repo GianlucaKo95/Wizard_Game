@@ -323,9 +323,169 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   );
 }
 
+// ─── Friends Screen ───────────────────────────────────────────────────────────
+function FriendsScreen({ session, onBack }: { session: Session; onBack: () => void }) {
+  const uid = session.user.id;
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<{ id: string; username: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    supabase.from("friends").select("*").or(`requester_id.eq.${uid},addressee_id.eq.${uid}`)
+      .then(async ({ data }) => {
+        const list = data ?? [];
+        setRows(list);
+        const otherIds = Array.from(new Set(list.map((f: any) => f.requester_id === uid ? f.addressee_id : f.requester_id)));
+        if (otherIds.length) {
+          const { data: profs } = await supabase.from("profiles").select("id, username").in("id", otherIds);
+          const map: Record<string, string> = {};
+          (profs ?? []).forEach((p: any) => { map[p.id] = p.username; });
+          setNames(map);
+        }
+      });
+  }, [uid]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const accepted = (rows ?? []).filter((f: any) => f.status === "accepted");
+  const incoming = (rows ?? []).filter((f: any) => f.status === "pending" && f.addressee_id === uid);
+  const outgoing = (rows ?? []).filter((f: any) => f.status === "pending" && f.requester_id === uid);
+
+  async function search() {
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); return; }
+    setSearching(true);
+    const { data } = await supabase.from("profiles").select("id, username").ilike("username", `%${q}%`).neq("id", uid).limit(8);
+    setSearching(false);
+    setResults(data ?? []);
+  }
+
+  function statusFor(id: string): "friend" | "incoming" | "outgoing" | "none" {
+    if (accepted.some((f: any) => f.requester_id === id || f.addressee_id === id)) return "friend";
+    if (incoming.some((f: any) => f.requester_id === id)) return "incoming";
+    if (outgoing.some((f: any) => f.addressee_id === id)) return "outgoing";
+    return "none";
+  }
+
+  async function sendRequest(id: string) {
+    setBusyId(id); setMsg(null);
+    const { error } = await supabase.from("friends").insert({ requester_id: uid, addressee_id: id, status: "pending" });
+    setBusyId(null);
+    if (error) setMsg({ text: "Anfrage konnte nicht gesendet werden", ok: false });
+    else { setMsg({ text: "Anfrage gesendet ✓", ok: true }); load(); }
+  }
+
+  async function accept(rowId: string) {
+    setBusyId(rowId);
+    await supabase.from("friends").update({ status: "accepted" }).eq("id", rowId);
+    setBusyId(null);
+    load();
+  }
+
+  async function remove(rowId: string) {
+    setBusyId(rowId);
+    await supabase.from("friends").delete().eq("id", rowId);
+    setBusyId(null);
+    load();
+  }
+
+  return (
+    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
+        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>👥 Freunde</div>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>← Zurück</button>
+      </div>
+
+      {/* Search / add */}
+      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>FREUND HINZUFÜGEN</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Username suchen"
+            style={inputStyle} onKeyDown={e => e.key === "Enter" && search()} />
+          <button onClick={search} disabled={searching || query.trim().length < 2}
+            style={{ ...goldBtn(), padding: "0 18px", fontSize: 13, opacity: searching || query.trim().length < 2 ? 0.5 : 1 }}>
+            Suchen
+          </button>
+        </div>
+        {results.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {results.map(r => {
+              const st = statusFor(r.id);
+              return (
+                <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8 }}>
+                  <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{r.username}</div>
+                  {st === "friend" && <span style={{ fontSize: 11, color: C.ivoryDim }}>Schon Freunde</span>}
+                  {st === "incoming" && <span style={{ fontSize: 11, color: C.ivoryDim }}>Hat dich angefragt</span>}
+                  {st === "outgoing" && <span style={{ fontSize: 11, color: C.ivoryDim }}>Anfrage gesendet</span>}
+                  {st === "none" && (
+                    <button onClick={() => sendRequest(r.id)} disabled={busyId === r.id}
+                      style={{ ...goldBtn(), padding: "5px 12px", fontSize: 11, opacity: busyId === r.id ? 0.5 : 1 }}>
+                      Anfragen
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {msg && <div style={{ fontSize: 12, color: msg.ok ? C.success : C.error, textAlign: "center" }}>{msg.text}</div>}
+      </div>
+
+      {/* Incoming requests */}
+      {incoming.length > 0 && (
+        <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>ANFRAGEN ({incoming.length})</div>
+          {incoming.map((f: any) => (
+            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[f.requester_id] ?? "…"}</div>
+              <button onClick={() => accept(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(), padding: "5px 12px", fontSize: 11 }}>Annehmen</button>
+              <button onClick={() => remove(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(false), padding: "5px 12px", fontSize: 11 }}>Ablehnen</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Friends list */}
+      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>MEINE FREUNDE ({accepted.length})</div>
+        {rows === null ? (
+          <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center", padding: 8 }}>Lade…</div>
+        ) : accepted.length === 0 ? (
+          <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center", padding: 8 }}>Noch keine Freunde – oben nach Usernamen suchen</div>
+        ) : accepted.map((f: any) => {
+          const otherId = f.requester_id === uid ? f.addressee_id : f.requester_id;
+          return (
+            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.10)" }}>
+              <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[otherId] ?? "…"}</div>
+              <button onClick={() => remove(f.id)} disabled={busyId === f.id}
+                style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 11 }}>Entfernen</button>
+            </div>
+          );
+        })}
+        {outgoing.length > 0 && (
+          <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 10, color: C.ivoryDim, letterSpacing: 1 }}>AUSSTEHEND</div>
+            {outgoing.map((f: any) => (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ fontSize: 12, color: C.ivoryDim, flex: 1 }}>{names[f.addressee_id] ?? "…"}</div>
+                <button onClick={() => remove(f.id)} disabled={busyId === f.id}
+                  style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 11 }}>Zurückziehen</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Lobby ────────────────────────────────────────────────────────────────────
 function LobbyScreen({ session }: { session: Session }) {
-  const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile">("home");
+  const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile" | "friends">("home");
   const [reconnectRoom, setReconnectRoom] = useState<string|null>(null);
   const [savedPlannedTotal, setSavedPlannedTotal] = useState<number | null>(null);
 
@@ -349,6 +509,37 @@ function LobbyScreen({ session }: { session: Session }) {
   const [loading, setLoading] = useState(false);
   const username = session.user.user_metadata?.username ?? "Spieler";
 
+  // Pending friend requests (badge) + incoming room invites (popup): initial
+  // fetch, then live via realtime so they arrive even while sitting idle.
+  const [pendingFriendCount, setPendingFriendCount] = useState(0);
+  const [incomingInvite, setIncomingInvite] = useState<{ id: string; room_code: string; from_username: string } | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
+
+  useEffect(() => {
+    const uid = session.user.id;
+    const refreshPendingCount = () => {
+      supabase.from("friends").select("id", { count: "exact", head: true })
+        .eq("addressee_id", uid).eq("status", "pending")
+        .then(({ count }) => setPendingFriendCount(count ?? 0));
+    };
+    refreshPendingCount();
+    supabase.from("room_invites").select("id, room_code, from_username").eq("to_user_id", uid)
+      .order("created_at", { ascending: false }).limit(1)
+      .then(({ data }) => { if (data && data[0]) setIncomingInvite(data[0]); });
+
+    const ch = supabase.channel(`social:${uid}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "friends", filter: `addressee_id=eq.${uid}` }, refreshPendingCount)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_invites", filter: `to_user_id=eq.${uid}` }, payload => {
+        setIncomingInvite(payload.new as any);
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "room_invites", filter: `to_user_id=eq.${uid}` }, payload => {
+        setIncomingInvite(prev => prev?.id === (payload.old as any).id ? null : prev);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [session.user.id]);
+
   async function createRoom() {
     setLoading(true); setError("");
     const res = await callGameAction("", "createRoom", { username, edition });
@@ -358,11 +549,12 @@ function LobbyScreen({ session }: { session: Session }) {
     setLoading(false);
   }
 
-  async function joinRoom() {
+  async function joinRoom(codeArg?: string) {
+    const code = (codeArg ?? codeInput).toUpperCase();
     setLoading(true); setError("");
-    const res = await callGameAction("", "joinRoom", { username, code: codeInput.toUpperCase() });
+    const res = await callGameAction("", "joinRoom", { username, code });
     if (!res?.roomId) { setError(res?.error ?? "Raum nicht gefunden"); setLoading(false); return; }
-    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: codeInput.toUpperCase() }));
+    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -374,7 +566,21 @@ function LobbyScreen({ session }: { session: Session }) {
     await joinRoom();
   }
 
+  async function respondToInvite(accept: boolean) {
+    if (!incomingInvite) return;
+    const invite = incomingInvite;
+    setInviteBusy(true);
+    await supabase.from("room_invites").delete().eq("id", invite.id);
+    setIncomingInvite(null);
+    setInviteBusy(false);
+    if (accept) {
+      if (roomId && !confirm("Aktuelles Spiel verlassen und dem neuen Raum beitreten?")) return;
+      await joinRoom(invite.room_code);
+    }
+  }
 
+
+  const screen = (() => {
   // ── Rules ──
   if (view === "rules") return (
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
@@ -427,6 +633,8 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
+  if (view === "friends") return <FriendsScreen session={session} onBack={() => setView("home")} />;
+
   if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
@@ -440,7 +648,19 @@ function LobbyScreen({ session }: { session: Session }) {
           <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
         </div>
       )}
-      {showProfile && <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>⚙️ Profil</button>}
+      {showProfile && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setView("friends")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, position: "relative" }}>
+            👥 Freunde
+            {pendingFriendCount > 0 && (
+              <span style={{ position: "absolute", top: -4, right: -4, background: C.error, color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 999, minWidth: 15, height: 15, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+                {pendingFriendCount}
+              </span>
+            )}
+          </button>
+          <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>⚙️ Profil</button>
+        </div>
+      )}
       <GoldDivider />
     </>
   );
@@ -534,13 +754,33 @@ function LobbyScreen({ session }: { session: Session }) {
           placeholder="XXXXX" maxLength={5}
           style={{ ...inputStyle, textAlign: "center", letterSpacing: 8, fontSize: 22, ...cinzel }}
           onKeyDown={e => e.key==="Enter" && joinRoom()} autoFocus />
-        <button onClick={joinRoom} disabled={loading || codeInput.length < 5}
+        <button onClick={() => joinRoom()} disabled={loading || codeInput.length < 5}
           style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading||codeInput.length<5?0.5:1 }}>
           {loading ? "Suche Raum…" : "⬡ Beitreten"}
         </button>
         {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
       </div>
     </div>
+  );
+  })();
+
+  return (
+    <>
+      {incomingInvite && (
+        <div style={{ position: "fixed", top: "max(16px, env(safe-area-inset-top))", left: 0, right: 0, margin: "0 auto", zIndex: 200, width: "min(360px, 92vw)" }} className="fade-in">
+          <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 13, color: C.ivory }}>
+              <span style={{ ...cinzel, color: C.gold }}>{incomingInvite.from_username}</span> lädt dich zu einer Partie ein
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => respondToInvite(true)} disabled={inviteBusy} style={{ ...goldBtn(), flex: 1, padding: "9px 0", fontSize: 13, opacity: inviteBusy ? 0.5 : 1 }}>Beitreten</button>
+              <button onClick={() => respondToInvite(false)} disabled={inviteBusy} style={{ ...goldBtn(false), flex: 1, padding: "9px 0", fontSize: 13, opacity: inviteBusy ? 0.5 : 1 }}>Ablehnen</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {screen}
+    </>
   );
 }
 
@@ -623,6 +863,37 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showScoresheet, setShowScoresheet] = useState(false);
+
+  // Invite a friend into the Warteraum: fetched on demand, not on mount.
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteFriends, setInviteFriends] = useState<{ id: string; username: string }[] | null>(null);
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+  const [inviteSending, setInviteSending] = useState<string | null>(null);
+
+  async function openInvitePicker() {
+    setShowInvite(true);
+    if (inviteFriends !== null) return;
+    const uid = session.user.id;
+    const { data } = await supabase.from("friends").select("*").eq("status", "accepted")
+      .or(`requester_id.eq.${uid},addressee_id.eq.${uid}`);
+    const otherIds = Array.from(new Set((data ?? []).map((f: any) => f.requester_id === uid ? f.addressee_id : f.requester_id)));
+    let list: { id: string; username: string }[] = [];
+    if (otherIds.length) {
+      const { data: profs } = await supabase.from("profiles").select("id, username").in("id", otherIds);
+      list = profs ?? [];
+    }
+    setInviteFriends(list);
+  }
+
+  async function inviteFriend(friendId: string) {
+    setInviteSending(friendId);
+    const { error } = await supabase.from("room_invites").insert({
+      room_id: room.id, room_code: room.code, from_user_id: session.user.id,
+      from_username: session.user.user_metadata?.username ?? "Spieler", to_user_id: friendId,
+    });
+    setInviteSending(null);
+    if (!error || error.code === "23505") setInvitedIds(prev => new Set(prev).add(friendId));
+  }
 
   // Reload round history when scoresheet opens
   useEffect(() => {
@@ -907,6 +1178,30 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim }}>
           {room?.edition === "anniversary" ? "⚡ 30 Jahre Edition" : "🧙 Classic Edition"}
         </div>
+
+        {!showInvite ? (
+          <button onClick={openInvitePicker} style={{ ...goldBtn(false), padding: "7px 16px", fontSize: 12 }}>👥 Freund einladen</button>
+        ) : (
+          <div style={{ ...glass({ padding: 14 }), width: "min(320px, 92vw)", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 1 }}>FREUND EINLADEN</div>
+              <button onClick={() => setShowInvite(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 14 }}>✕</button>
+            </div>
+            {inviteFriends === null ? (
+              <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Lade…</div>
+            ) : inviteFriends.length === 0 ? (
+              <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Noch keine Freunde hinzugefügt</div>
+            ) : inviteFriends.map(f => (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ fontSize: 13, color: C.ivory, flex: 1 }}>{f.username}</div>
+                <button onClick={() => inviteFriend(f.id)} disabled={invitedIds.has(f.id) || inviteSending === f.id}
+                  style={{ ...goldBtn(!invitedIds.has(f.id)), padding: "5px 12px", fontSize: 11, opacity: invitedIds.has(f.id) ? 0.5 : 1 }}>
+                  {invitedIds.has(f.id) ? "Eingeladen ✓" : "Einladen"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div style={{ ...glass({ padding: 16 }), width: "min(320px, 92vw)" }}>
           {players.map((p: any) => (
