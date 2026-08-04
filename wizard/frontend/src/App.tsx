@@ -1478,12 +1478,25 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
                   else if (offset===4) pos = { top: "0%",    left: "75%", transform: "translateX(-50%)" };
                   else                 pos = { top: "50%",   right: "0%", transform: "translateY(-50%)" };
                 }
+                const isWinner = room.phase === "trickEnd" && room.last_trick_winner === t.playerIndex;
+                const isBombed = room.phase === "trickEnd" && t.card.specialType === "bomb";
                 return (
                   <div key={t.playerIndex} style={{ position: "absolute" as const, textAlign: "center", ...pos }}>
                     <div style={{ fontSize: 8, color: isMe ? C.gold : "rgba(255,255,255,0.6)", marginBottom: 2, ...cinzel }}>
                       {isMe ? "Du" : players[t.playerIndex]?.ai_name}
                     </div>
-                    <CardView card={t.card} />
+                    <div style={{ position: "relative" as const, animation: isBombed ? "bombShake 0.5s ease-in-out 2" : undefined }}>
+                      <CardView card={t.card} winner={isWinner} />
+                      {isBombed && (
+                        <div style={{ position: "absolute" as const, inset: 0, pointerEvents: "none" as const, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 6 }}>
+                          <div style={{
+                            width: "160%", height: "160%", borderRadius: "50%",
+                            background: "radial-gradient(circle, rgba(255,225,140,0.95) 0%, rgba(255,140,40,0.85) 35%, rgba(220,40,20,0.6) 60%, transparent 75%)",
+                            animation: "bombBurst 0.7s ease-out forwards",
+                          }} />
+                        </div>
+                      )}
+                    </div>
                     {t.card.specialType === "wizardfool" && (
                       <div style={{ ...cinzel, fontSize: 7, marginTop: 2, color: t.card.type === "wizard" ? C.gold : "#95A5A6" }}>
                         {t.card.type === "wizard" ? "🧙 Zauberer" : "🃏 Narr"}
@@ -1497,14 +1510,6 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
                   </div>
                 );
               })}
-
-              {room.phase === "trickEnd" && room.last_trick_winner !== null && (
-                <div style={{ position: "absolute" as const, bottom: -28, left: 0, right: 0, display: "flex", justifyContent: "center" }}>
-                  <div style={{ ...cinzel, fontSize: 11, color: C.gold, background: "rgba(0,0,0,0.75)", padding: "3px 10px", borderRadius: 8, textShadow: `0 0 10px ${C.gold}`, whiteSpace: "nowrap" as const }}>
-                    ✓ {players[room.last_trick_winner]?.ai_name} gewinnt!
-                  </div>
-                </div>
-              )}
             </div>
 
           </>
@@ -1592,7 +1597,24 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
               selected={selected === card.id}
               disabled={!isPlaying}
               faceDown={room.round === 1}
-              onClick={isPlaying ? () => setSelected(card.id === selected ? null : card.id) : undefined}
+              onClick={isPlaying ? () => {
+                if (selected !== card.id) {
+                  // First tap: just lift the card, don't play it yet.
+                  setSelected(card.id);
+                  return;
+                }
+                // Second tap on the already-lifted card: confirm and play it.
+                if (card.specialType === "wizardfool") {
+                  setSpecialAction({ type: "wizardfool", cardId: card.id });
+                } else if (card.specialType === "rainbow7") {
+                  setSpecialAction({ type: "rainbow7suit", cardId: card.id });
+                } else if (card.specialType === "rainbow9") {
+                  setSpecialAction({ type: "rainbow9suit", cardId: card.id });
+                } else {
+                  act("playCard", { cardId: card.id });
+                }
+                setSelected(null);
+              } : undefined}
             />
           ))}
         </div>
@@ -1605,24 +1627,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         )}
         {isPlaying && selected && (
           <div style={{ textAlign: "center", marginTop: 6 }}>
-            <button onClick={() => {
-              const card = myHand.find((c:any) => c.id === selected);
-              if (card?.specialType === "wizardfool") {
-                setSpecialAction({ type: "wizardfool", cardId: selected });
-                setSelected(null);
-              } else if (card?.specialType === "rainbow7") {
-                setSpecialAction({ type: "rainbow7suit", cardId: selected });
-                setSelected(null);
-              } else if (card?.specialType === "rainbow9") {
-                setSpecialAction({ type: "rainbow9suit", cardId: selected });
-                setSelected(null);
-              } else {
-                act("playCard", { cardId: selected });
-                setSelected(null);
-              }
-            }} style={{ ...goldBtn(), padding: "9px 28px", fontSize: 13 }}>
-              Karte ausspielen
-            </button>
+            <span style={{ ...cinzel, fontSize: 11, color: "rgba(255,255,255,0.45)" }}>
+              Nochmal tippen zum Ausspielen
+            </span>
           </div>
         )}
       </div>
