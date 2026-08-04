@@ -887,6 +887,10 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     const effectiveAiCount = Math.max(0, plannedTotal - players.length);
     return (
       <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+        <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) onLeave(); }}
+          style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>
+          ← Zurück
+        </button>
         <div style={{ ...cinzel, fontSize: 24, color: C.gold }}>🧙 Warteraum</div>
         <div style={{ ...glass({ padding: "8px 24px" }), ...cinzel, fontSize: 20, letterSpacing: 6, color: C.goldLight }}>{room.code}</div>
         <div style={{ fontSize: 11, color: C.ivoryDim }}>Code mit Freunden teilen</div>
