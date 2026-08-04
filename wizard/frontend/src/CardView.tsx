@@ -17,8 +17,8 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
   // Responsive sizing: vmin scales relative to the smaller viewport dimension,
   // so cards are proportional on both mobile (portrait) and desktop (landscape).
   // clamp(min, preferred, max) keeps cards usable on all screen sizes.
-  const w = small ? "clamp(36px, 5vmin, 56px)" : "clamp(72px, 10vmin, 120px)";
-  const h = small ? "clamp(54px, 7.5vmin, 84px)" : "clamp(108px, 15vmin, 180px)";
+  const w = small ? "clamp(36px, 5vmin, 56px)" : "clamp(76px, 10.5vmin, 128px)";
+  const h = small ? "clamp(54px, 7.5vmin, 84px)" : "clamp(114px, 15.75vmin, 192px)";
 
   const base: React.CSSProperties = {
     width: w, height: h,

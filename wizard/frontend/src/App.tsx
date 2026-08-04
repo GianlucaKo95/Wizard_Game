@@ -1511,12 +1511,14 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         );
       })()}
 
-      {/* Bottom UI stack - my seat, turn indicator, hand - all in one flex flow, never overlapping */}
+      {/* My seat + turn indicator - anchored at a fixed distance from the
+          bottom (based on the original hand-card height), independent of
+          the actual hand-card size, so resizing the cards can never push
+          this badge upward. */}
       <div style={{
-        position: "absolute" as const, bottom: 0, left: 0, right: 0, zIndex: 10,
+        position: "absolute" as const, bottom: "calc(126px + max(8px, env(safe-area-inset-bottom)))",
+        left: "50%", transform: "translateX(-50%)", zIndex: 10,
         display: "flex", flexDirection: "column" as const, alignItems: "center",
-        paddingBottom: "max(8px, env(safe-area-inset-bottom))",
-        background: "transparent",
       }}>
         {/* My seat pill - standalone markup, not absolutely positioned */}
         {(() => {
@@ -1571,7 +1573,14 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
             {isPlaying ? "✦ DU BIST DRAN ✦" : room.phase === "playing" ? `⏳ ${players[room.current_player]?.ai_name} ist dran` : ""}
           </span>
         </div>
+      </div>
 
+      {/* Hand cards - pinned flush to the true bottom edge, sized and
+          positioned independently of the seat/turn-indicator group above. */}
+      <div style={{
+        position: "absolute" as const, bottom: "max(8px, env(safe-area-inset-bottom))", left: 0, right: 0, zIndex: 10,
+        display: "flex", flexDirection: "column" as const, alignItems: "center",
+      }}>
         <div style={{ display: "flex", gap: "clamp(3px,1vw,6px)", flexWrap: "nowrap", justifyContent: myHand.length > 6 ? "flex-start" : "center", overflowX: "auto", alignSelf: "stretch", width: "100%", maxWidth: "100vw", minWidth: 0, boxSizing: "border-box" as const, padding: "0 8px 8px", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
           {myHand.map((card: any) => (
             <CardView key={card.id} card={card}
