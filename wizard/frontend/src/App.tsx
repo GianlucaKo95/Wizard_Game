@@ -396,15 +396,15 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>⚡ 30 JAHRE EDITION – SPEZIALKARTEN</div>
         {[
-          ["🐉 Seidenschnabel", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
+          ["🐉 Drache", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
           ["✦ Fee", "Verliert immer – außer wenn der Drache gespielt wurde. Dann gewinnt die Fee."],
-          ["🧹 Bellatrix (Hexe)", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
-          ["🐺 Lupin (Werwolf)", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
-          ["🧛 Quirrell (Vampir)", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
-          ["💥 Elderstab (Bombe)", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
-          ["😄 George Weasley (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
-          ["🚂 Gleis 9¾ (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
-          ["❓ Ron Weasley (Zauberernarr)", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
+          ["🧹 Hexe", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
+          ["🐺 Werwolf", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
+          ["🧛 Vampir", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
+          ["💥 Bombe", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
+          ["😄 Jongleur (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
+          ["🚂 Wolke (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
+          ["❓ Zauberernarr", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
         ].map(([title, desc]) => (
           <div key={title as string} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
             <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 120 }}>{title}</div>
