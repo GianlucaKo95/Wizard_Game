@@ -263,7 +263,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
         <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>👤 Profil</div>
-        <button onClick={onBack} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>← Zurück</button>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>← Zurück</button>
       </div>
 
       {/* Name */}
@@ -370,7 +370,7 @@ function LobbyScreen({ session }: { session: Session }) {
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(680px,96vw)" }}>
         <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
-        <button onClick={() => setView("home")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>← Zurück</button>
+        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>← Zurück</button>
       </div>
 
       {/* Basic rules */}
