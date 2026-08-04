@@ -29,7 +29,9 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
     cursor: onClick && !disabled ? "pointer" : "default",
     userSelect: "none",
     WebkitUserSelect: "none",
-    transition: "transform 0.15s ease, box-shadow 0.15s ease",
+    // Skip the transition while the glow animation owns box-shadow - having
+    // both target the same property at once was a likely source of jank.
+    transition: winner ? "transform 0.15s ease" : "transform 0.15s ease, box-shadow 0.15s ease",
     position: "relative",
     flexShrink: 0,
     opacity: disabled ? 0.4 : 1,
@@ -37,7 +39,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
       ? "0 14px 26px rgba(0,0,0,0.6), 0 0 18px rgba(201,168,76,0.7)"
       : "0 3px 10px rgba(0,0,0,0.6)",
     animation: winner ? "cardGlow 1.1s ease-in-out infinite" : undefined,
-    willChange: onClick ? "transform" : "auto",
+    willChange: winner ? "box-shadow" : onClick ? "transform" : "auto",
     // Selecting a card lifts it out of the hand row (first tap); tapping the
     // already-lifted card again is what actually plays it.
     transform: selected ? "translateY(-16px) scale(1.05) translateZ(0)" : "translateZ(0)",
