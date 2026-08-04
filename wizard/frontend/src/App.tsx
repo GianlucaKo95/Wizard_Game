@@ -1486,7 +1486,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
                       {isMe ? "Du" : players[t.playerIndex]?.ai_name}
                     </div>
                     <div style={{ position: "relative" as const, animation: isBombed ? "bombShake 0.5s ease-in-out 2" : undefined }}>
-                      <CardView card={t.card} winner={isWinner} />
+                      <CardView card={t.card} winner={isWinner} small />
                       {isBombed && (
                         <div style={{ position: "absolute" as const, inset: 0, pointerEvents: "none" as const, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 6 }}>
                           <div style={{
@@ -1517,16 +1517,19 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
       })()}
 
       {/* My seat + turn indicator - anchored just above the actual hand-card
-          height (kept in sync with CardView's non-small clamp: 36px covers
-          the hand row's own bottom padding + the turn-indicator's height),
-          instead of being driven by shared flex-flow like before. That
-          decoupling avoided the old bug where resizing the cards pushed this
-          badge upward as a side effect, but a *fixed* offset would itself
-          get overtaken by the cards on larger screens (tablets etc., where
-          the card height clamp grows past its floor) - referencing the same
-          clamp() here keeps the two in lockstep at every viewport size. */}
+          height (kept in sync with CardView's non-small clamp), instead of
+          being driven by shared flex-flow like before. That decoupling
+          avoided the old bug where resizing the cards pushed this badge
+          upward as a side effect, but a *fixed* offset would itself get
+          overtaken by the cards on larger screens (tablets etc., where the
+          card height clamp grows past its floor) - referencing the same
+          clamp() here keeps the two in lockstep at every viewport size.
+          60px covers: the hand row's own bottom padding (8px) + a selected
+          card's upward lift (translateY(-16px) + ~2.5% of its own height
+          from scale(1.05)) + enough clearance that the gold glow around a
+          lifted card doesn't visually reach the badge either. */}
       <div style={{
-        position: "absolute" as const, bottom: "calc(clamp(114px, 15.75vmin, 192px) + 36px + max(8px, env(safe-area-inset-bottom)))",
+        position: "absolute" as const, bottom: "calc(clamp(114px, 15.75vmin, 192px) + 60px + max(8px, env(safe-area-inset-bottom)))",
         left: "50%", transform: "translateX(-50%)", zIndex: 10,
         display: "flex", flexDirection: "column" as const, alignItems: "center",
       }}>
