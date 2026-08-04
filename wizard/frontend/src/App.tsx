@@ -939,10 +939,10 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
             <table style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" as const }}>
               <thead>
                 <tr>
-                  <th style={{ textAlign: "left", padding: "0 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Spieler</th>
-                  <th style={{ textAlign: "right", padding: "0 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Ansage</th>
-                  <th style={{ textAlign: "right", padding: "0 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Erg.</th>
-                  <th style={{ textAlign: "right", padding: "0 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Punkte</th>
+                  <th style={{ textAlign: "left", padding: "6px 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Spieler</th>
+                  <th style={{ textAlign: "right", padding: "6px 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Ansage</th>
+                  <th style={{ textAlign: "right", padding: "6px 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Erg.</th>
+                  <th style={{ textAlign: "right", padding: "6px 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Punkte</th>
                 </tr>
               </thead>
               <tbody>
@@ -1183,9 +1183,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
             <table className="scoresheet-table" style={{ borderCollapse: "collapse", width: "100%", fontVariantNumeric: "tabular-nums" as const }}>
               <thead>
                 <tr>
-                  <th style={{ padding: "0 16px 10px", textAlign: "left", color: C.ivoryDim, borderBottom: `1px solid rgba(201,168,76,0.12)`, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, whiteSpace: "nowrap" }}>Runde</th>
+                  <th style={{ padding: "14px 16px 10px", textAlign: "left", color: C.ivoryDim, borderBottom: `1px solid rgba(201,168,76,0.12)`, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, whiteSpace: "nowrap" }}>Runde</th>
                   {players.map((p: any) => (
-                    <th key={p.id} style={{ padding: "0 16px 10px", textAlign: "right", color: C.ivoryDim, borderBottom: `1px solid rgba(201,168,76,0.12)`, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, whiteSpace: "nowrap" }}>
+                    <th key={p.id} style={{ padding: "14px 16px 10px", textAlign: "right", color: C.ivoryDim, borderBottom: `1px solid rgba(201,168,76,0.12)`, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, whiteSpace: "nowrap" }}>
                       {p.ai_name}
                     </th>
                   ))}
