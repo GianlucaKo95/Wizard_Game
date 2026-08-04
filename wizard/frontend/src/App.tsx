@@ -1511,12 +1511,17 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         );
       })()}
 
-      {/* My seat + turn indicator - anchored at a fixed distance from the
-          bottom (based on the original hand-card height), independent of
-          the actual hand-card size, so resizing the cards can never push
-          this badge upward. */}
+      {/* My seat + turn indicator - anchored just above the actual hand-card
+          height (kept in sync with CardView's non-small clamp: 36px covers
+          the hand row's own bottom padding + the turn-indicator's height),
+          instead of being driven by shared flex-flow like before. That
+          decoupling avoided the old bug where resizing the cards pushed this
+          badge upward as a side effect, but a *fixed* offset would itself
+          get overtaken by the cards on larger screens (tablets etc., where
+          the card height clamp grows past its floor) - referencing the same
+          clamp() here keeps the two in lockstep at every viewport size. */}
       <div style={{
-        position: "absolute" as const, bottom: "calc(126px + max(8px, env(safe-area-inset-bottom)))",
+        position: "absolute" as const, bottom: "calc(clamp(114px, 15.75vmin, 192px) + 36px + max(8px, env(safe-area-inset-bottom)))",
         left: "50%", transform: "translateX(-50%)", zIndex: 10,
         display: "flex", flexDirection: "column" as const, alignItems: "center",
       }}>
