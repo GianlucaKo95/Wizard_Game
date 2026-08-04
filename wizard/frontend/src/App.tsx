@@ -888,7 +888,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     return (
       <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
         <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) onLeave(); }}
-          style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>
+          style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>
           ← Zurück
         </button>
         <div style={{ ...cinzel, fontSize: 24, color: C.gold }}>🧙 Warteraum</div>
