@@ -3,6 +3,7 @@ import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
+import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory } from "./Icons";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -124,7 +125,7 @@ function InstallBanner() {
         <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Wizard direkt vom Homescreen starten</div>
       </div>
       <button onClick={() => { prompt?.prompt(); setShow(false); }} style={{ ...goldBtn(), padding: "7px 14px", fontSize: 12 }}>Installieren</button>
-      <button onClick={() => setShow(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 18, padding: 4 }}>✕</button>
+      <button onClick={() => setShow(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", padding: 4, display: "flex" }}><IconX size={18} /></button>
     </div>
   );
 }
@@ -262,8 +263,8 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   return (
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
-        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>👤 Profil</div>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>← Zurück</button>
+        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconSettings size={17} /> Profil</div>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
       </div>
 
       {/* Name */}
@@ -396,8 +397,8 @@ function FriendsScreen({ session, onBack }: { session: Session; onBack: () => vo
   return (
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
-        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>👥 Freunde</div>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>← Zurück</button>
+        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconUsers size={18} /> Freunde</div>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
       </div>
 
       {/* Search / add */}
@@ -586,7 +587,7 @@ function LobbyScreen({ session }: { session: Session }) {
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(680px,96vw)" }}>
         <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
-        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0 }}>← Zurück</button>
+        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
       </div>
 
       {/* Basic rules */}
@@ -650,15 +651,15 @@ function LobbyScreen({ session }: { session: Session }) {
       )}
       {showProfile && (
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setView("friends")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, position: "relative" }}>
-            👥 Freunde
+          <button onClick={() => setView("friends")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <IconUsers size={14} /> Freunde
             {pendingFriendCount > 0 && (
               <span style={{ position: "absolute", top: -4, right: -4, background: C.error, color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 999, minWidth: 15, height: 15, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
                 {pendingFriendCount}
               </span>
             )}
           </button>
-          <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>⚙️ Profil</button>
+          <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><IconSettings size={14} /> Profil</button>
         </div>
       )}
       <GoldDivider />
@@ -675,7 +676,7 @@ function LobbyScreen({ session }: { session: Session }) {
             <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Raum: {reconnectRoom}</div>
           </div>
           <button onClick={reconnect} style={{ ...goldBtn(), padding: "8px 14px", fontSize: 12 }}>Zurück</button>
-          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 16 }}>✕</button>
+          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={16} /></button>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "min(320px, 92vw)" }}>
@@ -700,7 +701,7 @@ function LobbyScreen({ session }: { session: Session }) {
     <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
       <HeaderBlock compact showProfile={false} />
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
-        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
+        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
         <div>
           <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>GESAMTZAHL SPIELER</div>
@@ -748,7 +749,7 @@ function LobbyScreen({ session }: { session: Session }) {
     <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
       <HeaderBlock compact showProfile={false} />
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
+        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Spiel beitreten</div>
         <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
           placeholder="XXXXX" maxLength={5}
@@ -893,6 +894,15 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     });
     setInviteSending(null);
     if (!error || error.code === "23505") setInvitedIds(prev => new Set(prev).add(friendId));
+  }
+
+  // Add a fellow room player as a friend directly (no username search needed -
+  // we already know their user_id from the players list).
+  const [friendReqState, setFriendReqState] = useState<Record<string, "sending" | "sent" | "exists" | "error">>({});
+  async function addFriendFromRoom(targetUserId: string) {
+    setFriendReqState(prev => ({ ...prev, [targetUserId]: "sending" }));
+    const { error } = await supabase.from("friends").insert({ requester_id: session.user.id, addressee_id: targetUserId, status: "pending" });
+    setFriendReqState(prev => ({ ...prev, [targetUserId]: !error ? "sent" : error.code === "23505" ? "exists" : "error" }));
   }
 
   // Reload round history when scoresheet opens
@@ -1169,8 +1179,8 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     return (
       <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
         <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) onLeave(); }}
-          style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>
-          ← Zurück
+          style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <IconArrowLeft size={13} /> Zurück
         </button>
         <div style={{ ...cinzel, fontSize: 24, color: C.gold }}>🧙 Warteraum</div>
         <div style={{ ...glass({ padding: "8px 24px" }), ...cinzel, fontSize: 20, letterSpacing: 6, color: C.goldLight }}>{room.code}</div>
@@ -1180,12 +1190,12 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         </div>
 
         {!showInvite ? (
-          <button onClick={openInvitePicker} style={{ ...goldBtn(false), padding: "7px 16px", fontSize: 12 }}>👥 Freund einladen</button>
+          <button onClick={openInvitePicker} style={{ ...goldBtn(false), padding: "7px 16px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><IconUsers size={13} /> Freund einladen</button>
         ) : (
           <div style={{ ...glass({ padding: 14 }), width: "min(320px, 92vw)", display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 1 }}>FREUND EINLADEN</div>
-              <button onClick={() => setShowInvite(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 14 }}>✕</button>
+              <button onClick={() => setShowInvite(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
             </div>
             {inviteFriends === null ? (
               <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Lade…</div>
@@ -1204,13 +1214,24 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         )}
 
         <div style={{ ...glass({ padding: 16 }), width: "min(320px, 92vw)" }}>
-          {players.map((p: any) => (
-            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
-              <div style={{ fontSize: 18 }}>{p.player_index === 0 ? "👑" : "👤"}</div>
-              <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>{p.ai_name}</div>
-              {p.user_id === session.user.id && <div style={{ fontSize: 10, color: C.ivoryDim, marginLeft: "auto" }}>Du</div>}
-            </div>
-          ))}
+          {players.map((p: any) => {
+            const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id;
+            const st = friendReqState[p.user_id];
+            return (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
+                <div style={{ fontSize: 18 }}>{p.player_index === 0 ? "👑" : "👤"}</div>
+                <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>{p.ai_name}</div>
+                {p.user_id === session.user.id && <div style={{ fontSize: 10, color: C.ivoryDim, marginLeft: "auto" }}>Du</div>}
+                {canFriend && (
+                  <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending" || st === "sent" || st === "exists"}
+                    title={st === "sent" ? "Anfrage gesendet" : st === "exists" ? "Schon verbunden" : "Als Freund hinzufügen"}
+                    style={{ marginLeft: "auto", background: "none", border: "none", color: st === "sent" || st === "exists" ? C.success : C.ivoryDim, cursor: st ? "default" : "pointer", display: "flex", padding: 4, opacity: st === "sending" ? 0.5 : 1 }}>
+                    <IconUserPlus size={16} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {isHost && effectiveAiCount > 0 && (
@@ -1273,15 +1294,28 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         {/* Ranking */}
         <div style={{ ...glass({ padding: 14 }), width: "min(360px, 96vw)" }}>
           <div style={{ ...cinzel, fontSize: "var(--text-xs)", color: C.ivoryDim, letterSpacing: 2, marginBottom: 8, textTransform: "uppercase" as const }}>Gesamtranking</div>
-          {sorted.map((p: any, i: number) => (
-            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "10px 0", borderTop: i > 0 ? "1px solid rgba(201,168,76,0.10)" : "none" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: i === 0 ? C.gold : C.ivoryDim, width: 14, display: "inline-block" }}>{i + 1}</span>
-                <span style={{ ...cinzel, fontSize: "clamp(13px,3.5vw,15px)", fontWeight: i === 0 ? 600 : 400, color: i === 0 ? C.gold : C.ivory }}>{p.ai_name}</span>
+          {sorted.map((p: any, i: number) => {
+            const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id;
+            const st = friendReqState[p.user_id];
+            return (
+              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: i > 0 ? "1px solid rgba(201,168,76,0.10)" : "none" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: i === 0 ? C.gold : C.ivoryDim, width: 14, display: "inline-block" }}>{i + 1}</span>
+                  <span style={{ ...cinzel, fontSize: "clamp(13px,3.5vw,15px)", fontWeight: i === 0 ? 600 : 400, color: i === 0 ? C.gold : C.ivory }}>{p.ai_name}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ ...cinzel, fontWeight: 700, fontSize: "clamp(14px,4vw,17px)", fontVariantNumeric: "tabular-nums" as const, color: i === 0 ? C.gold : C.ivory }}>{p.score}</span>
+                  {canFriend && (
+                    <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending" || st === "sent" || st === "exists"}
+                      title={st === "sent" ? "Anfrage gesendet" : st === "exists" ? "Schon verbunden" : "Als Freund hinzufügen"}
+                      style={{ background: "none", border: "none", color: st === "sent" || st === "exists" ? C.success : C.ivoryDim, cursor: st ? "default" : "pointer", display: "flex", padding: 2, opacity: st === "sending" ? 0.5 : 1 }}>
+                      <IconUserPlus size={15} />
+                    </button>
+                  )}
+                </div>
               </div>
-              <span style={{ ...cinzel, fontWeight: 700, fontSize: "clamp(14px,4vw,17px)", fontVariantNumeric: "tabular-nums" as const, color: i === 0 ? C.gold : C.ivory }}>{p.score}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
@@ -1290,7 +1324,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
               {loading ? "…" : `Weiter → Runde ${room.round + 1}`}
             </button>
           )}
-          <button onClick={onLeave} style={{ ...goldBtn(false), padding: "8px 20px", fontSize: 13 }}>🏠 Zurück zur Startseite</button>
+          <button onClick={onLeave} style={{ ...goldBtn(false), padding: "8px 20px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}><IconHome size={14} /> Zurück zur Startseite</button>
           {isHost && room.phase === "gameEnd" && (
             <button onClick={() => act("newGame")} style={{ ...goldBtn(), padding: "12px 28px" }}>Nochmal spielen</button>
           )}
@@ -1416,8 +1450,8 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
-        <div style={{ ...cinzel, fontSize: 14, color: C.gold }}>💬 Chat</div>
-        <button onClick={() => setShowChat(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 20 }}>✕</button>
+        <div style={{ ...cinzel, fontSize: 14, color: C.gold, display: "flex", alignItems: "center", gap: 6 }}><IconMessageCircle size={15} /> Chat</div>
+        <button onClick={() => setShowChat(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
       </div>
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto" as const, padding: "10px 12px", display: "flex", flexDirection: "column" as const, gap: 8 }}>
@@ -1479,7 +1513,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
           <div style={{ padding: "16px 20px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <div style={{ ...cinzel, fontSize: 10, letterSpacing: 2.5, color: C.ivoryDim, textTransform: "uppercase" as const }}>Runde {room.round}/{room.max_rounds}</div>
-              <button onClick={() => setShowScoresheet(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 18 }}>✕</button>
+              <button onClick={() => setShowScoresheet(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
             </div>
             <div style={{ ...cinzel, fontSize: 18, fontWeight: 600, color: C.ivory }}>Spielblatt</div>
           </div>
@@ -1626,9 +1660,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         <div style={{ ...cinzel, fontSize: "clamp(10px,1.8vmin,18px)", color: "rgba(255,255,255,0.65)" }}>RUNDE {room.round}/{room.max_rounds}</div>
         <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vmin,22px)", color: C.gold, letterSpacing: "clamp(2px,0.5vmin,6px)" }}>🧙 WIZARD</div>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-          <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", fontSize: 11 }} title="Log">📜</button>
-          <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", fontSize: 11, position: "relative" as const }} title="Chat">
-            💬
+          <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
+          <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", position: "relative" as const, display: "flex" }} title="Chat">
+            <IconMessageCircle size={15} />
             {unreadCount > 0 && (
               <span style={{
                 position: "absolute" as const, top: -6, right: -6,
@@ -1637,8 +1671,8 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
               }}>{unreadCount > 9 ? "9+" : unreadCount}</span>
             )}
           </button>
-          <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 7px", fontSize: 11 }} title="Spielblatt">📋</button>
-          <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 11, padding: "4px 7px", borderRadius: 6 }}>✕</button>
+          <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 7px", display: "flex" }} title="Spielblatt"><IconClipboardList size={15} /></button>
+          <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: "4px 7px", borderRadius: 6, display: "flex" }} title="Verlassen"><IconX size={15} /></button>
         </div>
       </div>
 
@@ -2141,7 +2175,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
       {/* Error Toast */}
       {error && (
         <div onClick={() => setError("")} style={{ position: "absolute" as const, top: "max(50px, env(safe-area-inset-top))", left: "50%", transform: "translateX(-50%)", background: `${C.error}EE`, color: "#fff", padding: "10px 18px", borderRadius: 8, fontSize: 13, zIndex: 100, ...cinzel, cursor: "pointer", whiteSpace: "nowrap" as const, maxWidth: "90vw", textAlign: "center" }}>
-          {error} <span style={{ opacity: 0.7, fontSize: 11 }}>✕</span>
+          {error} <IconX size={11} style={{ opacity: 0.7, verticalAlign: "-1px" }} />
         </div>
       )}
 
