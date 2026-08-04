@@ -1666,7 +1666,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
               )}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, justifyContent: "center" }}>
                 {Array.from({ length: room.round + 1 }, (_, i) => (
-                  <button key={i} onClick={() => act("bid", { bid: i })} disabled={i === dealerForbidden}
+                  <button key={i} onClick={() => { act("bid", { bid: i }); setModalMinimized(true); }} disabled={i === dealerForbidden}
                     style={{ ...goldBtn(i !== dealerForbidden), padding: "12px 18px", fontSize: 19, opacity: i === dealerForbidden ? 0.2 : 1, minWidth: 50 }}>
                     {i}
                   </button>
