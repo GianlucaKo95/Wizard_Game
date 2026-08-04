@@ -11,9 +11,10 @@ interface Props {
   faceDown?: boolean;
   disabled?: boolean;
   werewolfSuit?: string; // for coloring werewolf trump card
+  winner?: boolean; // trick-end: pulsing glow instead of a "X gewinnt!" banner
 }
 
-export const CardView = memo(function CardView({ card, onClick, selected, small, faceDown, disabled, werewolfSuit }: Props) {
+export const CardView = memo(function CardView({ card, onClick, selected, small, faceDown, disabled, werewolfSuit, winner }: Props) {
   // Responsive sizing: vmin scales relative to the smaller viewport dimension,
   // so cards are proportional on both mobile (portrait) and desktop (landscape).
   // clamp(min, preferred, max) keeps cards usable on all screen sizes.
@@ -24,7 +25,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
     width: w, height: h,
     borderRadius: small ? 5 : 8,
     overflow: "hidden",
-    border: selected ? "2px solid #C9A84C" : "1px solid rgba(201,168,76,0.2)",
+    border: winner ? "2px solid #FFD24C" : selected ? "2px solid #C9A84C" : "1px solid rgba(201,168,76,0.2)",
     cursor: onClick && !disabled ? "pointer" : "default",
     userSelect: "none",
     WebkitUserSelect: "none",
@@ -35,6 +36,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
     boxShadow: selected
       ? "0 14px 26px rgba(0,0,0,0.6), 0 0 18px rgba(201,168,76,0.7)"
       : "0 3px 10px rgba(0,0,0,0.6)",
+    animation: winner ? "cardGlow 1.1s ease-in-out infinite" : undefined,
     willChange: onClick ? "transform" : "auto",
     // Selecting a card lifts it out of the hand row (first tap); tapping the
     // already-lifted card again is what actually plays it.

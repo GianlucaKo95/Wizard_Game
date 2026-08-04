@@ -143,6 +143,18 @@ input, select, textarea {
   0%, 100% { box-shadow: 0 0 10px rgba(201,168,76,0.3); }
   50%       { box-shadow: 0 0 22px rgba(201,168,76,0.7); }
 }
+@keyframes bombBurst {
+  0%   { transform: scale(0.2); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes bombShake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  20%  { transform: translate(-3px, 2px) rotate(-3deg); }
+  40%  { transform: translate(3px, -2px) rotate(3deg); }
+  60%  { transform: translate(-2px, 1px) rotate(-2deg); }
+  80%  { transform: translate(2px, -1px) rotate(2deg); }
+}
 
 .fade-in { animation: fadeIn 0.25s ease forwards; }
 
