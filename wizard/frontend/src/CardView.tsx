@@ -33,10 +33,13 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
     flexShrink: 0,
     opacity: disabled ? 0.4 : 1,
     boxShadow: selected
-      ? "0 0 18px rgba(201,168,76,0.7), 0 4px 14px rgba(0,0,0,0.6)"
+      ? "0 14px 26px rgba(0,0,0,0.6), 0 0 18px rgba(201,168,76,0.7)"
       : "0 3px 10px rgba(0,0,0,0.6)",
     willChange: onClick ? "transform" : "auto",
-    transform: "translateZ(0)",
+    // Selecting a card lifts it out of the hand row (first tap); tapping the
+    // already-lifted card again is what actually plays it.
+    transform: selected ? "translateY(-16px) scale(1.05) translateZ(0)" : "translateZ(0)",
+    zIndex: selected ? 5 : undefined,
     WebkitTapHighlightColor: "transparent",
     touchAction: "manipulation",
   };
@@ -142,9 +145,9 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
       }}
       onPointerLeave={e => {
         if (e.pointerType !== "touch") {
-          (e.currentTarget as HTMLElement).style.transform = "translateZ(0)";
-          (e.currentTarget as HTMLElement).style.boxShadow = selected ? "0 0 18px rgba(201,168,76,0.7)" : "0 3px 10px rgba(0,0,0,0.6)";
-          (e.currentTarget as HTMLElement).style.zIndex = "";
+          (e.currentTarget as HTMLElement).style.transform = selected ? "translateY(-16px) scale(1.05) translateZ(0)" : "translateZ(0)";
+          (e.currentTarget as HTMLElement).style.boxShadow = selected ? "0 14px 26px rgba(0,0,0,0.6), 0 0 18px rgba(201,168,76,0.7)" : "0 3px 10px rgba(0,0,0,0.6)";
+          (e.currentTarget as HTMLElement).style.zIndex = selected ? "5" : "";
         }
       }}
     >

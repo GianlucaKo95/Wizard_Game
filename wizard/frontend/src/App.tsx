@@ -1592,7 +1592,24 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
               selected={selected === card.id}
               disabled={!isPlaying}
               faceDown={room.round === 1}
-              onClick={isPlaying ? () => setSelected(card.id === selected ? null : card.id) : undefined}
+              onClick={isPlaying ? () => {
+                if (selected !== card.id) {
+                  // First tap: just lift the card, don't play it yet.
+                  setSelected(card.id);
+                  return;
+                }
+                // Second tap on the already-lifted card: confirm and play it.
+                if (card.specialType === "wizardfool") {
+                  setSpecialAction({ type: "wizardfool", cardId: card.id });
+                } else if (card.specialType === "rainbow7") {
+                  setSpecialAction({ type: "rainbow7suit", cardId: card.id });
+                } else if (card.specialType === "rainbow9") {
+                  setSpecialAction({ type: "rainbow9suit", cardId: card.id });
+                } else {
+                  act("playCard", { cardId: card.id });
+                }
+                setSelected(null);
+              } : undefined}
             />
           ))}
         </div>
@@ -1605,24 +1622,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         )}
         {isPlaying && selected && (
           <div style={{ textAlign: "center", marginTop: 6 }}>
-            <button onClick={() => {
-              const card = myHand.find((c:any) => c.id === selected);
-              if (card?.specialType === "wizardfool") {
-                setSpecialAction({ type: "wizardfool", cardId: selected });
-                setSelected(null);
-              } else if (card?.specialType === "rainbow7") {
-                setSpecialAction({ type: "rainbow7suit", cardId: selected });
-                setSelected(null);
-              } else if (card?.specialType === "rainbow9") {
-                setSpecialAction({ type: "rainbow9suit", cardId: selected });
-                setSelected(null);
-              } else {
-                act("playCard", { cardId: selected });
-                setSelected(null);
-              }
-            }} style={{ ...goldBtn(), padding: "9px 28px", fontSize: 13 }}>
-              Karte ausspielen
-            </button>
+            <span style={{ ...cinzel, fontSize: 11, color: "rgba(255,255,255,0.45)" }}>
+              Nochmal tippen zum Ausspielen
+            </span>
           </div>
         )}
       </div>
