@@ -101,7 +101,7 @@ export const CardView = memo(function CardView({ card, onClick, selected, small,
 
   // Special card config
   const specialConfigs: Record<string, { label: string; color: string }> = {
-    dragon:     { label: "🐉", color: "#A8C0E8" },
+    dragon:     { label: "D", color: "#A8C0E8" },
     fairy:      { label: "✦", color: "#D2B4DE" },
     witch:      { label: "H", color: "#C0392B" },  // H = Hexe, keeps witch art
     werewolf:   { label: "W", color: "#F7DC6F" },
