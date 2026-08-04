@@ -1167,16 +1167,16 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         onClick={() => setShowScoresheet(false)}>
         <div style={{
           ...glass({ padding: 0 }), width: "min(700px, 96vw)", maxHeight: "85vh", overflow: "auto", borderRadius: 16,
-          boxShadow: "0 20px 50px rgba(0,0,0,0.5), 0 0 40px rgba(201,168,76,0.15)",
+          boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
         }}
           onClick={e => e.stopPropagation()}>
           {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: `1px solid ${C.glassBorder}` }}>
-            <div style={{ ...cinzel, fontSize: 15, color: C.gold }}>📋 Spielblatt</div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <div style={{ fontSize: 11, color: C.ivoryDim }}>Runde {room.round}/{room.max_rounds}</div>
-              <button onClick={() => setShowScoresheet(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 20 }}>✕</button>
+          <div style={{ padding: "16px 20px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ ...cinzel, fontSize: 10, letterSpacing: 2.5, color: C.ivoryDim, textTransform: "uppercase" as const }}>Runde {room.round}/{room.max_rounds}</div>
+              <button onClick={() => setShowScoresheet(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 18 }}>✕</button>
             </div>
+            <div style={{ ...cinzel, fontSize: 18, fontWeight: 600, color: C.ivory }}>Spielblatt</div>
           </div>
 
           <div style={{ overflowX: "auto" }}>
