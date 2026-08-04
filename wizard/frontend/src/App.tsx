@@ -1108,7 +1108,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     <div style={{
       position: "fixed" as const, right: 0, top: 0, bottom: 0, zIndex: 150,
       width: "min(340px, 92vw)",
-      background: "rgba(10, 30, 18, 0.97)", borderLeft: `1px solid ${C.glassBorder}`,
+      background: "rgba(16,22,26,0.97)", borderLeft: `1px solid ${C.glassBorder}`,
       display: "flex", flexDirection: "column" as const,
       paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)",
     }}>
@@ -1159,17 +1159,22 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
 
   // ── Scoresheet Modal ──
   const Scoresheet = () => {
-    // Bietreihenfolge: immer rechts vom Dealer (= dealer+1, dealer+2, ...)
-    const bidOrder = Array.from({ length: players.length }, (_, i) => (room.dealer + 1 + i) % players.length);
     const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
+    // Crown the current leader, but only once scores have actually diverged
+    // from the 0-0 starting tie.
+    const maxScore = Math.max(0, ...players.map((p: any) => p.score));
+    const isLeader = (p: any) => maxScore > 0 && p.score === maxScore;
 
     return (
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}
         onClick={() => setShowScoresheet(false)}>
-        <div style={{ ...glass({ padding: 0 }), width: "min(700px, 96vw)", maxHeight: "85vh", overflow: "auto", borderRadius: 12 }}
+        <div style={{
+          ...glass({ padding: 0 }), width: "min(700px, 96vw)", maxHeight: "85vh", overflow: "auto", borderRadius: 16,
+          boxShadow: "0 20px 50px rgba(0,0,0,0.5), 0 0 40px rgba(201,168,76,0.15)",
+        }}
           onClick={e => e.stopPropagation()}>
           {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: `1px solid ${C.glassBorder}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: `1px solid ${C.glassBorder}` }}>
             <div style={{ ...cinzel, fontSize: 15, color: C.gold }}>📋 Spielblatt</div>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               <div style={{ fontSize: 11, color: C.ivoryDim }}>Runde {room.round}/{room.max_rounds}</div>
@@ -1181,10 +1186,10 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
             <table className="scoresheet-table" style={{ borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "rgba(38,48,41,0.4)" }}>
-                  <th style={{ ...cinzel, padding: "10px 12px", textAlign: "left", color: C.gold, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>RUNDE</th>
+                  <th style={{ ...cinzel, padding: "12px 14px", textAlign: "left", color: C.gold, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>RUNDE</th>
                   {players.map((p: any) => (
-                    <th key={p.id} style={{ ...cinzel, padding: "10px 12px", textAlign: "center", color: p.player_index === effectiveMyIdx ? C.gold : C.ivory, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>
-                      {p.ai_name}{p.player_index === effectiveMyIdx ? " ★" : ""}
+                    <th key={p.id} style={{ ...cinzel, padding: "12px 14px", textAlign: "center", color: p.player_index === effectiveMyIdx ? C.gold : C.ivory, borderBottom: `1px solid ${C.glassBorder}`, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>
+                      {isLeader(p) && "👑 "}{p.ai_name}{p.player_index === effectiveMyIdx ? " ★" : ""}
                     </th>
                   ))}
                 </tr>
@@ -1224,9 +1229,8 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
                       <div style={{ ...cinzel, fontSize: 11, color: C.goldLight }}>R{room.round} ▶</div>
                       <div style={{ fontSize: 10, color: C.ivoryDim }}>🎴 {players[room.dealer]?.ai_name}</div>
                     </td>
-                    {bidOrder.map((pi: number) => {
-                      const p = players[pi];
-                      if (!p) return null;
+                    {players.map((p: any) => {
+                      const pi = p.player_index;
                       const bid = p.bid;
                       const isCurrent = room.phase === "bidding" && room.current_player === pi;
                       const isDealer = room.dealer === pi;
@@ -1237,7 +1241,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
                             ...cinzel, fontSize: 14, fontWeight: 700,
                             color: bid !== null ? C.goldLight : isCurrent ? C.gold : C.ivoryDim,
                             background: isCurrent ? "rgba(201,168,76,0.15)" : "transparent",
-                            borderRadius: 6, padding: "4px 6px",
+                            borderRadius: 10, padding: "4px 8px",
                             border: isCurrent ? `1px solid ${C.gold}55` : "1px solid transparent",
                             animation: isCurrent ? "pulse 1.5s infinite" : "none",
                           }}>
@@ -1256,10 +1260,16 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
                 )}
 
                 {/* Total row */}
-                <tr style={{ background: "rgba(201,168,76,0.08)" }}>
-                  <td style={{ padding: "8px 12px", ...cinzel, fontSize: 11, color: C.gold }}>GESAMT</td>
+                <tr style={{ background: "rgba(201,168,76,0.1)", borderTop: `2px solid ${C.glassBorder}` }}>
+                  <td style={{ padding: "10px 14px", ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 1 }}>GESAMT</td>
                   {players.map((p: any) => (
-                    <td key={p.id} style={{ padding: "8px 12px", textAlign: "center", ...cinzel, fontSize: 15, fontWeight: 700, color: C.gold }}>{p.score}</td>
+                    <td key={p.id} style={{ padding: "10px 14px", textAlign: "center" }}>
+                      <span style={{
+                        ...cinzel, fontSize: 15, fontWeight: 700, color: isLeader(p) ? "#10161A" : C.gold,
+                        background: isLeader(p) ? `linear-gradient(135deg, ${C.gold}, ${C.goldLight})` : "transparent",
+                        borderRadius: 10, padding: isLeader(p) ? "3px 10px" : "3px 0",
+                      }}>{p.score}</span>
+                    </td>
                   ))}
                 </tr>
               </tbody>
