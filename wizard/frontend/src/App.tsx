@@ -870,13 +870,16 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
   const [inviteFriends, setInviteFriends] = useState<{ id: string; username: string }[] | null>(null);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
   const [inviteSending, setInviteSending] = useState<string | null>(null);
+  const inviteInFlight = useRef<Set<string>>(new Set());
 
   async function openInvitePicker() {
     setShowInvite(true);
     if (inviteFriends !== null) return;
     const uid = session.user.id;
-    const { data } = await supabase.from("friends").select("*").eq("status", "accepted")
-      .or(`requester_id.eq.${uid},addressee_id.eq.${uid}`);
+    const [{ data }, { data: pending }] = await Promise.all([
+      supabase.from("friends").select("*").eq("status", "accepted").or(`requester_id.eq.${uid},addressee_id.eq.${uid}`),
+      supabase.from("room_invites").select("to_user_id").eq("room_id", room.id).eq("from_user_id", uid),
+    ]);
     const otherIds = Array.from(new Set((data ?? []).map((f: any) => f.requester_id === uid ? f.addressee_id : f.requester_id)));
     let list: { id: string; username: string }[] = [];
     if (otherIds.length) {
@@ -884,14 +887,22 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
       list = profs ?? [];
     }
     setInviteFriends(list);
+    // Pre-mark anyone we already have a pending invite out to for this room,
+    // so "Einladen" doesn't sit there re-clickable for no reason.
+    if (pending?.length) setInvitedIds(prev => { const next = new Set(prev); pending.forEach((r: any) => next.add(r.to_user_id)); return next; });
   }
 
   async function inviteFriend(friendId: string) {
+    // Synchronous guard (not just the `disabled` prop, which only updates on
+    // the next render) - a rapid double-click can't fire this twice.
+    if (inviteInFlight.current.has(friendId) || invitedIds.has(friendId)) return;
+    inviteInFlight.current.add(friendId);
     setInviteSending(friendId);
     const { error } = await supabase.from("room_invites").insert({
       room_id: room.id, room_code: room.code, from_user_id: session.user.id,
       from_username: session.user.user_metadata?.username ?? "Spieler", to_user_id: friendId,
     });
+    inviteInFlight.current.delete(friendId);
     setInviteSending(null);
     if (!error || error.code === "23505") setInvitedIds(prev => new Set(prev).add(friendId));
   }
@@ -899,9 +910,37 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
   // Add a fellow room player as a friend directly (no username search needed -
   // we already know their user_id from the players list).
   const [friendReqState, setFriendReqState] = useState<Record<string, "sending" | "sent" | "exists" | "error">>({});
+  const friendReqInFlight = useRef<Set<string>>(new Set());
+
+  // Pre-check: mark co-players we're already friends with (or already have a
+  // pending request with, in either direction) as "exists" up front, instead
+  // of only finding out after a wasted insert attempt.
+  const otherPlayerIds = players.filter((p: any) => !p.is_ai && p.user_id && p.user_id !== session.user.id).map((p: any) => p.user_id).sort().join(",");
+  useEffect(() => {
+    if (!otherPlayerIds) return;
+    const uid = session.user.id;
+    supabase.from("friends").select("requester_id, addressee_id").or(`requester_id.eq.${uid},addressee_id.eq.${uid}`)
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const ids = new Set(otherPlayerIds.split(","));
+        const connected = data.map((f: any) => f.requester_id === uid ? f.addressee_id : f.requester_id).filter((id: string) => ids.has(id));
+        if (!connected.length) return;
+        setFriendReqState(prev => {
+          const next = { ...prev };
+          connected.forEach((id: string) => { if (!next[id]) next[id] = "exists"; });
+          return next;
+        });
+      });
+  }, [otherPlayerIds]);
+
   async function addFriendFromRoom(targetUserId: string) {
+    if (friendReqInFlight.current.has(targetUserId)) return;
+    const st = friendReqState[targetUserId];
+    if (st === "sending" || st === "sent" || st === "exists") return;
+    friendReqInFlight.current.add(targetUserId);
     setFriendReqState(prev => ({ ...prev, [targetUserId]: "sending" }));
     const { error } = await supabase.from("friends").insert({ requester_id: session.user.id, addressee_id: targetUserId, status: "pending" });
+    friendReqInFlight.current.delete(targetUserId);
     setFriendReqState(prev => ({ ...prev, [targetUserId]: !error ? "sent" : error.code === "23505" ? "exists" : "error" }));
   }
 
