@@ -4,6 +4,7 @@ import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
 import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory } from "./Icons";
+import { WizardArt } from "./CardArt";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -104,6 +105,22 @@ function GoldDivider() {
   return <div style={{ width: "100%", maxWidth: 680, height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />;
 }
 
+// Reuses the same hand-drawn portrait used for the Wizard playing card as the
+// app's mascot/logo, instead of the 🧙 emoji (renders inconsistently across
+// platforms). Keeps the art's native 100:140 aspect ratio - no cropping.
+function WizardMascot({ size = 48, style }: { size?: number; style?: React.CSSProperties }) {
+  return (
+    <div style={{
+      width: size, height: size * 1.4, borderRadius: size * 0.16,
+      overflow: "hidden", flexShrink: 0,
+      boxShadow: `0 0 0 1.5px ${C.glassBorder}, 0 4px 14px rgba(0,0,0,0.4)`,
+      ...style,
+    }}>
+      <WizardArt index={0} />
+    </div>
+  );
+}
+
 // ─── Install Banner ───────────────────────────────────────────────────────────
 function InstallBanner() {
   const [prompt, setPrompt] = useState<any>(null);
@@ -119,7 +136,7 @@ function InstallBanner() {
 
   return (
     <div style={{ ...glass(), position: "fixed", bottom: "max(16px, env(safe-area-inset-bottom))", left: "max(16px, env(safe-area-inset-left))", right: "max(16px, env(safe-area-inset-right))", padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, zIndex: 1000 }}>
-      <div style={{ fontSize: 28 }}>🧙</div>
+      <WizardMascot size={30} />
       <div style={{ flex: 1 }}>
         <div style={{ ...cinzel, fontSize: 13, color: C.gold }}>Als App installieren</div>
         <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Wizard direkt vom Homescreen starten</div>
@@ -171,7 +188,7 @@ function AuthScreen() {
     <div style={{ ...tableStyle, justifyContent: "center", gap: 24 }} className="fade-in">
       {/* Logo */}
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "clamp(44px,12vw,64px)", marginBottom: 8 }}>🧙</div>
+        <WizardMascot size={56} style={{ margin: "0 auto 10px" }} />
         <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.accent}` }}>WIZARD</div>
         <div style={{ fontSize: 12, color: C.ivoryDim, letterSpacing: 3, marginTop: 4 }}>DAS KARTENSPIEL</div>
       </div>
@@ -675,7 +692,7 @@ function LobbyScreen({ session }: { session: Session }) {
     <>
       {!compact && (
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "clamp(36px,10vw,52px)" }}>🧙</div>
+          <WizardMascot size={42} style={{ margin: "0 auto 8px" }} />
           <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
         </div>
       )}
@@ -1221,7 +1238,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
 
   if (!room) return (
     <div style={{ ...tableStyle, justifyContent: "center", gap: 10 }}>
-      <div style={{ fontSize: 36, animation: "pulse 1.5s infinite" }}>🧙</div>
+      <WizardMascot size={34} style={{ animation: "pulse 1.5s infinite" }} />
       <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, animation: "pulse 1.5s infinite" }}>Lade…</div>
     </div>
   );
@@ -2312,7 +2329,7 @@ export default function App() {
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: C.bgDark, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-      <div style={{ ...cinzel, fontSize: 48, color: C.gold }}>🧙</div>
+      <WizardMascot size={50} />
       <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, letterSpacing: 3 }}>WIZARD</div>
     </div>
   );
