@@ -1,7 +1,7 @@
-name: Wizard
+name: Wizzo
 version: "3.0.2"
 slug: wizard
-description: "Wizard Kartenspiel – Online Multiplayer für 2–6 Spieler"
+description: "Wizzo Kartenspiel – Online Multiplayer für 2–6 Spieler"
 url: "https://github.com/GianlucaKo95/Wizard_Game"
 homeassistant: "2024.1.0"
 startup: application
@@ -12,7 +12,7 @@ ingress: false
 ports:
   3043/tcp: 3043
 ports_description:
-  3043/tcp: "Wizard Web UI"
+  3043/tcp: "Wizzo Web UI"
 arch:
   - amd64
   - aarch64

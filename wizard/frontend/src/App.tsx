@@ -150,7 +150,7 @@ function InstallBanner() {
       <WizardMascot size={30} />
       <div style={{ flex: 1 }}>
         <div style={{ ...cinzel, fontSize: 13, color: C.gold }}>Als App installieren</div>
-        <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Wizard direkt vom Homescreen starten</div>
+        <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Wizzo direkt vom Homescreen starten</div>
       </div>
       <button onClick={() => { prompt?.prompt(); setShow(false); }} style={{ ...goldBtn(), padding: "7px 14px", fontSize: 12 }}>Installieren</button>
       <button onClick={() => setShow(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", padding: 4, display: "flex" }}><IconX size={18} /></button>
@@ -200,7 +200,7 @@ function AuthScreen() {
       {/* Logo */}
       <div style={{ textAlign: "center" }}>
         <WizardMascot size={56} style={{ margin: "0 auto 10px" }} />
-        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.accent}` }}>WIZARD</div>
+        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.accent}` }}>WIZZO</div>
         <div style={{ fontSize: 12, color: C.ivoryDim, letterSpacing: 3, marginTop: 4 }}>DAS KARTENSPIEL</div>
       </div>
 
@@ -705,7 +705,7 @@ function LobbyScreen({ session }: { session: Session }) {
       {!compact && (
         <div style={{ textAlign: "center" }}>
           <WizardMascot size={42} style={{ margin: "0 auto 8px" }} />
-          <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
+          <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZZO</div>
         </div>
       )}
       {showProfile && (
@@ -1771,7 +1771,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
       }}>
         <div style={{ ...cinzel, fontSize: "clamp(10px,1.8vmin,18px)", color: "rgba(255,255,255,0.65)" }}>RUNDE {room.round}/{room.max_rounds}</div>
         <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vmin,22px)", color: C.gold, letterSpacing: "clamp(2px,0.5vmin,6px)", display: "flex", alignItems: "center", gap: 6 }}>
-          <CardIcon size={14}><WizardArt index={0} /></CardIcon> WIZARD
+          <CardIcon size={14}><WizardArt index={0} /></CardIcon> WIZZO
         </div>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
           <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
@@ -2347,7 +2347,7 @@ export default function App() {
   if (loading) return (
     <div style={{ minHeight: "100vh", background: C.bgDark, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <WizardMascot size={50} />
-      <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, letterSpacing: 3 }}>WIZARD</div>
+      <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, letterSpacing: 3 }}>WIZZO</div>
     </div>
   );
 
