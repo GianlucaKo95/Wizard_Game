@@ -262,10 +262,8 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 
   return (
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
-        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconSettings size={17} /> Profil</div>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-      </div>
+      <button onClick={onBack} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
+      <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconSettings size={17} /> Profil</div>
 
       {/* Name */}
       <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -621,10 +619,8 @@ function LobbyScreen({ session }: { session: Session }) {
   // ── Rules ──
   if (view === "rules") return (
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(680px,96vw)" }}>
-        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
-        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-      </div>
+      <button onClick={() => setView("home")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
+      <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
 
       {/* Basic rules */}
       <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
