@@ -1228,7 +1228,13 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
       loadPlayersSecure(roomId, session.user.id).then(data => { if (data) setPlayers(data); });
     };
 
-    const ch = supabase.channel(`room:${roomId}`)
+    const ch = supabase.channel(`room:${roomId}`, { config: { presence: { key: session.user.id } } })
+      // Reports who's actually got this room open right now, so the server
+      // can tell "everyone left mid-game" apart from "someone's still
+      // thinking" (see cleanup_stale_rooms() / syncPresence action).
+      .on("presence", { event: "sync" }, () => {
+        callGameAction(roomId, "syncPresence", { presentUserIds: Object.keys(ch.presenceState()) });
+      })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => {
         const newRoom = payload.new;
         setRoom(newRoom);
@@ -1281,12 +1287,22 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
           refreshState();
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") ch.track({ at: new Date().toISOString() });
+      });
 
     // Poll every 5 seconds as fallback for missed realtime events (read-only, no AI trigger)
     const poll = setInterval(refreshState, 5000);
 
-    return () => { supabase.removeChannel(ch); clearInterval(poll); };
+    return () => {
+      // Report our own departure immediately instead of waiting for the
+      // Realtime server to notice the socket close and tell everyone else -
+      // covers the common "clicked Verlassen" path, not just a killed app.
+      const stillPresent = Object.keys(ch.presenceState()).filter(id => id !== session.user.id);
+      callGameAction(roomId, "syncPresence", { presentUserIds: stillPresent });
+      supabase.removeChannel(ch);
+      clearInterval(poll);
+    };
   }, [roomId]);
 
   // ── Watchdogs: state-based fallbacks in case a realtime event was missed ──

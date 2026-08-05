@@ -933,6 +933,22 @@ serve(async (req) => {
       return json({ ok: true });
     }
 
+    case "syncPresence": {
+      // Reports which human players currently have this room open, driven by
+      // the client's realtime presence channel. `room_players.connected` is
+      // the persisted mirror of that - Postgres has no visibility into the
+      // Realtime server's in-memory presence state on its own, so this is
+      // what lets cleanup_stale_rooms() (006_room_presence_cleanup.sql)
+      // tell "everyone left mid-game" apart from "someone's still thinking".
+      if (callerIdx < 0) return json({ error: "Nicht in diesem Raum" }, 400);
+      const present = new Set((Array.isArray(body.presentUserIds) ? body.presentUserIds : []).map(String));
+      const humans = players.filter(p => !p.is_ai);
+      await Promise.all(humans
+        .filter(p => p.connected !== present.has(p.user_id))
+        .map(p => upd(supabase.from("room_players").update({ connected: present.has(p.user_id) }).eq("id", p.id), "syncPresence.player")));
+      return json({ ok: true });
+    }
+
     case "clearTrick": return await handleClearTrick(supabase, roomId, room);
 
     case "witchRevealDone": return await handleWitchRevealDone(supabase, roomId, room);
