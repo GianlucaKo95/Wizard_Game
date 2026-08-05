@@ -1254,17 +1254,19 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
 
         <div style={{ ...glass({ padding: 16 }), width: "min(320px, 92vw)" }}>
           {players.map((p: any) => {
-            const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id;
             const st = friendReqState[p.user_id];
+            // Hidden once sent/already connected - nothing left to do here
+            // regardless of whether the other side later accepts or declines.
+            const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
             return (
               <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
                 <div style={{ fontSize: 18 }}>{p.player_index === 0 ? "👑" : "👤"}</div>
                 <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>{p.ai_name}</div>
                 {p.user_id === session.user.id && <div style={{ fontSize: 10, color: C.ivoryDim, marginLeft: "auto" }}>Du</div>}
                 {canFriend && (
-                  <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending" || st === "sent" || st === "exists"}
-                    title={st === "sent" ? "Anfrage gesendet" : st === "exists" ? "Schon verbunden" : "Als Freund hinzufügen"}
-                    style={{ marginLeft: "auto", background: "none", border: "none", color: st === "sent" || st === "exists" ? C.success : C.ivoryDim, cursor: st ? "default" : "pointer", display: "flex", padding: 4, opacity: st === "sending" ? 0.5 : 1 }}>
+                  <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending"}
+                    title="Als Freund hinzufügen"
+                    style={{ marginLeft: "auto", background: "none", border: "none", color: C.ivoryDim, cursor: st === "sending" ? "default" : "pointer", display: "flex", padding: 4, opacity: st === "sending" ? 0.5 : 1 }}>
                     <IconUserPlus size={16} />
                   </button>
                 )}
@@ -1334,8 +1336,8 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         <div style={{ ...glass({ padding: 14 }), width: "min(360px, 96vw)" }}>
           <div style={{ ...cinzel, fontSize: "var(--text-xs)", color: C.ivoryDim, letterSpacing: 2, marginBottom: 8, textTransform: "uppercase" as const }}>Gesamtranking</div>
           {sorted.map((p: any, i: number) => {
-            const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id;
             const st = friendReqState[p.user_id];
+            const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
             return (
               <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: i > 0 ? "1px solid rgba(201,168,76,0.10)" : "none" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
@@ -1345,9 +1347,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ ...cinzel, fontWeight: 700, fontSize: "clamp(14px,4vw,17px)", fontVariantNumeric: "tabular-nums" as const, color: i === 0 ? C.gold : C.ivory }}>{p.score}</span>
                   {canFriend && (
-                    <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending" || st === "sent" || st === "exists"}
-                      title={st === "sent" ? "Anfrage gesendet" : st === "exists" ? "Schon verbunden" : "Als Freund hinzufügen"}
-                      style={{ background: "none", border: "none", color: st === "sent" || st === "exists" ? C.success : C.ivoryDim, cursor: st ? "default" : "pointer", display: "flex", padding: 2, opacity: st === "sending" ? 0.5 : 1 }}>
+                    <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending"}
+                      title="Als Freund hinzufügen"
+                      style={{ background: "none", border: "none", color: C.ivoryDim, cursor: st === "sending" ? "default" : "pointer", display: "flex", padding: 2, opacity: st === "sending" ? 0.5 : 1 }}>
                       <IconUserPlus size={15} />
                     </button>
                   )}
