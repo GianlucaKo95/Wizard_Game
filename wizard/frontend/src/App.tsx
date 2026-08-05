@@ -132,6 +132,34 @@ function WizardMascot({ size = 48, style }: { size?: number; style?: React.CSSPr
   return <CardIcon size={size} style={style}><WizardArt index={0} /></CardIcon>;
 }
 
+// Deterministic color per user/name so the same person always gets the same
+// fallback color, without needing to store or coordinate anything.
+function avatarColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  return `hsl(${Math.abs(hash) % 360}, 42%, 32%)`;
+}
+
+// Uploaded profile picture, or a generated initial-on-a-color-circle fallback
+// when none is set (also covers AI players, who never have one).
+function Avatar({ userId, username, avatarUrl, size = 28 }: { userId: string; username: string; avatarUrl?: string | null; size?: number }) {
+  const ring = { boxShadow: `0 0 0 1.5px ${C.glassBorder}`, flexShrink: 0 as const };
+  if (avatarUrl) {
+    return <img src={avatarUrl} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", ...ring }} />;
+  }
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: avatarColor(userId || username), color: "rgba(255,255,255,0.9)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "'Cinzel', serif", fontWeight: 700, fontSize: size * 0.42,
+      ...ring,
+    }}>
+      {(username || "?").trim().charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
 // ─── Install Banner ───────────────────────────────────────────────────────────
 function InstallBanner() {
   const [prompt, setPrompt] = useState<any>(null);
@@ -254,6 +282,56 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarMsg, setAvatarMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    supabase.from("profiles").select("avatar_url").eq("id", session.user.id).single()
+      .then(({ data }) => setAvatarUrl(data?.avatar_url ?? null));
+  }, [session.user.id]);
+
+  async function processAvatarImage(file: File): Promise<Blob> {
+    const img = await createImageBitmap(file);
+    const size = Math.min(img.width, img.height);
+    const sx = (img.width - size) / 2, sy = (img.height - size) / 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(img, sx, sy, size, size, 0, 0, 256, 256);
+    return new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error("toBlob failed")), "image/jpeg", 0.85));
+  }
+
+  async function uploadAvatar(file: File) {
+    if (!file.type.startsWith("image/")) { setAvatarMsg({ text: "Bitte ein Bild auswählen", ok: false }); return; }
+    setAvatarUploading(true); setAvatarMsg(null);
+    try {
+      const blob = await processAvatarImage(file);
+      const path = `${session.user.id}/avatar.jpg`;
+      const { error: upErr } = await supabase.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      // Cache-bust so the new image shows immediately instead of the old one cached at the same URL.
+      const bustedUrl = `${pub.publicUrl}?t=${Date.now()}`;
+      const { error: dbErr } = await supabase.from("profiles").update({ avatar_url: bustedUrl }).eq("id", session.user.id);
+      if (dbErr) throw dbErr;
+      setAvatarUrl(bustedUrl);
+      setAvatarMsg({ text: "Profilbild gespeichert ✓", ok: true });
+    } catch {
+      setAvatarMsg({ text: "Upload fehlgeschlagen", ok: false });
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  async function removeAvatar() {
+    setAvatarUploading(true); setAvatarMsg(null);
+    await supabase.from("profiles").update({ avatar_url: null }).eq("id", session.user.id);
+    setAvatarUrl(null);
+    setAvatarUploading(false);
+  }
+
   const [stats, setStats] = useState<any>(null);
   useEffect(() => {
     supabase.from("user_stats").select("*").eq("id", session.user.id).single().then(({ data }) => setStats(data));
@@ -292,6 +370,27 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
       <button onClick={onBack} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
       <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconSettings size={17} /> Profil</div>
+
+      {/* Avatar */}
+      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, alignSelf: "flex-start" }}>PROFILBILD</div>
+        <Avatar userId={session.user.id} username={username} avatarUrl={avatarUrl} size={72} />
+        <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); e.target.value = ""; }} />
+        <div style={{ display: "flex", gap: 8, width: "100%" }}>
+          <button onClick={() => avatarInputRef.current?.click()} disabled={avatarUploading}
+            style={{ ...goldBtn(), flex: 1, padding: "10px 0", fontSize: 13, opacity: avatarUploading ? 0.5 : 1 }}>
+            {avatarUploading ? "…" : "Bild hochladen"}
+          </button>
+          {avatarUrl && (
+            <button onClick={removeAvatar} disabled={avatarUploading}
+              style={{ ...goldBtn(false), padding: "10px 16px", fontSize: 13, opacity: avatarUploading ? 0.5 : 1 }}>
+              Entfernen
+            </button>
+          )}
+        </div>
+        {avatarMsg && <div style={{ fontSize: 12, color: avatarMsg.ok ? C.success : C.error, textAlign: "center" }}>{avatarMsg.text}</div>}
+      </div>
 
       {/* Name */}
       <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -355,6 +454,7 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
   const uid = session.user.id;
   const [rows, setRows] = useState<any[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
+  const [avatars, setAvatars] = useState<Record<string, string | null>>({});
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ id: string; username: string }[]>([]);
   const [searching, setSearching] = useState(false);
@@ -368,10 +468,12 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
         setRows(list);
         const otherIds = Array.from(new Set(list.map((f: any) => f.requester_id === uid ? f.addressee_id : f.requester_id)));
         if (otherIds.length) {
-          const { data: profs } = await supabase.from("profiles").select("id, username").in("id", otherIds);
+          const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", otherIds);
           const map: Record<string, string> = {};
-          (profs ?? []).forEach((p: any) => { map[p.id] = p.username; });
+          const avMap: Record<string, string | null> = {};
+          (profs ?? []).forEach((p: any) => { map[p.id] = p.username; avMap[p.id] = p.avatar_url; });
           setNames(map);
+          setAvatars(avMap);
         }
       });
   }, [uid]);
@@ -477,6 +579,7 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
             <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>ANFRAGEN ({incoming.length})</div>
             {incoming.map((f: any) => (
               <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
+                <Avatar userId={f.requester_id} username={names[f.requester_id] ?? "?"} avatarUrl={avatars[f.requester_id]} size={24} />
                 <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[f.requester_id] ?? "…"}</div>
                 <button onClick={() => accept(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(), padding: "4px 10px", fontSize: 10 }}>Annehmen</button>
                 <button onClick={() => remove(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(false), padding: "4px 10px", fontSize: 10 }}>Ablehnen</button>
@@ -503,7 +606,10 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
             const otherId = f.requester_id === uid ? f.addressee_id : f.requester_id;
             return (
               <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.10)" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: onlineUserIds.has(otherId) ? C.success : "rgba(255,255,255,0.15)", flexShrink: 0 }} title={onlineUserIds.has(otherId) ? "Online" : "Offline"} />
+                <div style={{ position: "relative" as const }}>
+                  <Avatar userId={otherId} username={names[otherId] ?? "?"} avatarUrl={avatars[otherId]} size={26} />
+                  <span style={{ position: "absolute" as const, bottom: -1, right: -1, width: 8, height: 8, borderRadius: "50%", background: onlineUserIds.has(otherId) ? C.success : "rgba(255,255,255,0.25)", boxShadow: `0 0 0 2px ${C.bgDark}` }} title={onlineUserIds.has(otherId) ? "Online" : "Offline"} />
+                </div>
                 <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[otherId] ?? "…"}</div>
                 <button onClick={() => remove(f.id)} disabled={busyId === f.id}
                   style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10 }}>Entfernen</button>
@@ -927,7 +1033,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
 
   // Invite a friend into the Warteraum: fetched on demand, not on mount.
   const [showInvite, setShowInvite] = useState(false);
-  const [inviteFriends, setInviteFriends] = useState<{ id: string; username: string }[] | null>(null);
+  const [inviteFriends, setInviteFriends] = useState<{ id: string; username: string; avatar_url: string | null }[] | null>(null);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
   const [inviteSending, setInviteSending] = useState<string | null>(null);
   const inviteInFlight = useRef<Set<string>>(new Set());
@@ -941,9 +1047,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
       supabase.from("room_invites").select("to_user_id").eq("room_id", room.id).eq("from_user_id", uid),
     ]);
     const otherIds = Array.from(new Set((data ?? []).map((f: any) => f.requester_id === uid ? f.addressee_id : f.requester_id)));
-    let list: { id: string; username: string }[] = [];
+    let list: { id: string; username: string; avatar_url: string | null }[] = [];
     if (otherIds.length) {
-      const { data: profs } = await supabase.from("profiles").select("id, username").in("id", otherIds);
+      const { data: profs } = await supabase.from("profiles").select("id, username, avatar_url").in("id", otherIds);
       list = profs ?? [];
     }
     setInviteFriends(list);
@@ -992,6 +1098,20 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
         });
       });
   }, [otherPlayerIds]);
+
+  // Avatars for every real (non-AI) player currently in the room, including self.
+  const [avatars, setAvatars] = useState<Record<string, string | null>>({});
+  const allPlayerIds = players.filter((p: any) => !p.is_ai && p.user_id).map((p: any) => p.user_id).sort().join(",");
+  useEffect(() => {
+    if (!allPlayerIds) return;
+    supabase.from("profiles").select("id, avatar_url").in("id", allPlayerIds.split(","))
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, string | null> = {};
+        data.forEach((p: any) => { map[p.id] = p.avatar_url; });
+        setAvatars(map);
+      });
+  }, [allPlayerIds]);
 
   async function addFriendFromRoom(targetUserId: string) {
     if (friendReqInFlight.current.has(targetUserId)) return;
@@ -1312,7 +1432,10 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
               <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Noch keine Freunde hinzugefügt</div>
             ) : inviteFriends.map(f => (
               <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: onlineUserIds.has(f.id) ? C.success : "rgba(255,255,255,0.15)", flexShrink: 0 }} title={onlineUserIds.has(f.id) ? "Online" : "Offline"} />
+                <div style={{ position: "relative" as const }}>
+                  <Avatar userId={f.id} username={f.username} avatarUrl={f.avatar_url} size={24} />
+                  <span style={{ position: "absolute" as const, bottom: -1, right: -1, width: 8, height: 8, borderRadius: "50%", background: onlineUserIds.has(f.id) ? C.success : "rgba(255,255,255,0.25)", boxShadow: `0 0 0 2px ${C.bgDark}` }} title={onlineUserIds.has(f.id) ? "Online" : "Offline"} />
+                </div>
                 <div style={{ fontSize: 13, color: C.ivory, flex: 1 }}>{f.username}</div>
                 <button onClick={() => inviteFriend(f.id)} disabled={invitedIds.has(f.id) || inviteSending === f.id}
                   style={{ ...goldBtn(!invitedIds.has(f.id)), padding: "5px 12px", fontSize: 11, opacity: invitedIds.has(f.id) ? 0.5 : 1 }}>
@@ -1331,8 +1454,11 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
             const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
             return (
               <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
-                <div style={{ fontSize: 18 }}>{p.player_index === 0 ? "👑" : "👤"}</div>
-                <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>{p.ai_name}</div>
+                <Avatar userId={p.user_id} username={p.ai_name} avatarUrl={avatars[p.user_id]} size={26} />
+                <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>
+                  {p.ai_name}
+                  {p.player_index === 0 && <span style={{ color: C.ivoryDim, fontWeight: 400 }}> (Host)</span>}
+                </div>
                 {p.user_id === session.user.id && <div style={{ fontSize: 10, color: C.ivoryDim, marginLeft: "auto" }}>Du</div>}
                 {canFriend && (
                   <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending"}
@@ -1411,8 +1537,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
             const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
             return (
               <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: i > 0 ? "1px solid rgba(201,168,76,0.10)" : "none" }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: i === 0 ? C.gold : C.ivoryDim, width: 14, display: "inline-block" }}>{i + 1}</span>
+                  <Avatar userId={p.user_id} username={p.ai_name} avatarUrl={avatars[p.user_id]} size={22} />
                   <span style={{ ...cinzel, fontSize: "clamp(13px,3.5vw,15px)", fontWeight: i === 0 ? 600 : 400, color: i === 0 ? C.gold : C.ivory }}>{p.ai_name}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
