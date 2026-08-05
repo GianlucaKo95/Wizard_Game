@@ -641,18 +641,37 @@ function LobbyScreen({ session }: { session: Session }) {
   const [reconnectRoom, setReconnectRoom] = useState<string|null>(null);
   const [savedPlannedTotal, setSavedPlannedTotal] = useState<number | null>(null);
 
-  // Check for reconnectable room on mount
-  useEffect(() => {
+  // Check for reconnectable room - on mount, and again whenever another tab
+  // touches "wizard_room" (localStorage is shared across tabs of the same
+  // origin, so without this a stale tab keeps showing whatever room *it*
+  // last wrote, not the one most recently created/joined anywhere).
+  const checkReconnect = useCallback(() => {
     const savedRoom = localStorage.getItem("wizard_room");
-    if (savedRoom) {
-      const { roomId, code, plannedTotal } = JSON.parse(savedRoom);
-      supabase.from("rooms").select("phase").eq("id", roomId).single()
-        .then(({ data }) => {
-          if (data && data.phase !== "gameEnd") { setReconnectRoom(code); if (plannedTotal) setSavedPlannedTotal(plannedTotal); }
-          else localStorage.removeItem("wizard_room");
-        });
+    if (!savedRoom) { setReconnectRoom(null); return; }
+    const { roomId, code, plannedTotal, savedAt } = JSON.parse(savedRoom);
+    // Stay a hair under the server's 180-minute cleanup window (see
+    // 004_room_cleanup.sql) so an obviously-expired entry is discarded
+    // locally instead of wasting a round trip on a room that's already gone.
+    if (savedAt && (Date.now() - savedAt) / 60000 > 175) {
+      localStorage.removeItem("wizard_room");
+      setReconnectRoom(null);
+      return;
     }
+    supabase.from("rooms").select("phase").eq("id", roomId).single()
+      .then(({ data }) => {
+        if (data && data.phase !== "gameEnd") { setReconnectRoom(code); if (plannedTotal) setSavedPlannedTotal(plannedTotal); }
+        else { localStorage.removeItem("wizard_room"); setReconnectRoom(null); }
+      });
   }, []);
+
+  useEffect(() => {
+    checkReconnect();
+    // Fires in every OTHER tab when one tab changes localStorage - never in
+    // the tab that made the change itself.
+    const onStorage = (e: StorageEvent) => { if (e.key === "wizard_room" || e.key === null) checkReconnect(); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [checkReconnect]);
   const [codeInput, setCodeInput] = useState("");
   const [totalPlayers, setTotalPlayers] = useState(3);
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -713,7 +732,7 @@ function LobbyScreen({ session }: { session: Session }) {
     setLoading(true); setError("");
     const res = await callGameAction("", "createRoom", { username, edition });
     if (!res?.roomId) { setError(res?.error ?? "Fehler"); setLoading(false); return; }
-    localStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code, plannedTotal: totalPlayers }));
+    localStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code, plannedTotal: totalPlayers, savedAt: Date.now() }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -723,7 +742,7 @@ function LobbyScreen({ session }: { session: Session }) {
     setLoading(true); setError("");
     const res = await callGameAction("", "joinRoom", { username, code });
     if (!res?.roomId) { setError(res?.error ?? "Raum nicht gefunden"); setLoading(false); return; }
-    localStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code }));
+    localStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code, savedAt: Date.now() }));
     setRoomId(res.roomId);
     setLoading(false);
   }
