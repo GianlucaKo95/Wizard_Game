@@ -163,6 +163,12 @@ input:focus, select:focus, textarea:focus {
 
 .fade-in { animation: fadeIn 0.25s ease forwards; }
 
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.slide-in-right { animation: slideInRight 0.22s ease-out; }
+
 @keyframes shimmer {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }

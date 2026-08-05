@@ -325,7 +325,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 }
 
 // ─── Friends Screen ───────────────────────────────────────────────────────────
-function FriendsScreen({ session, onBack, onlineUserIds }: { session: Session; onBack: () => void; onlineUserIds: Set<string> }) {
+function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; onClose: () => void; onlineUserIds: Set<string> }) {
   const uid = session.user.id;
   const [rows, setRows] = useState<any[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -395,98 +395,108 @@ function FriendsScreen({ session, onBack, onlineUserIds }: { session: Session; o
   }
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
-        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconUsers size={18} /> Freunde</div>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
+    <div style={{
+      position: "fixed" as const, right: 0, top: 0, bottom: 0, zIndex: 150,
+      width: "min(300px, 88vw)",
+      background: "rgba(16,22,26,0.97)", borderLeft: `1px solid ${C.glassBorder}`,
+      display: "flex", flexDirection: "column" as const,
+      paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)",
+    }} className="slide-in-right">
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
+        <div style={{ ...cinzel, fontSize: 14, color: C.gold, display: "flex", alignItems: "center", gap: 6 }}><IconUsers size={15} /> Freunde</div>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
       </div>
 
-      {/* Search / add */}
-      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>FREUND HINZUFÜGEN</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Username suchen"
-            style={inputStyle} onKeyDown={e => e.key === "Enter" && search()} />
-          <button onClick={search} disabled={searching || query.trim().length < 2}
-            style={{ ...goldBtn(), padding: "0 18px", fontSize: 13, opacity: searching || query.trim().length < 2 ? 0.5 : 1 }}>
-            Suchen
-          </button>
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: "auto" as const, padding: "14px", display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* Search / add */}
+        <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>FREUND HINZUFÜGEN</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Username suchen"
+              style={{ ...inputStyle, fontSize: 13, padding: "8px 10px" }} onKeyDown={e => e.key === "Enter" && search()} />
+            <button onClick={search} disabled={searching || query.trim().length < 2}
+              style={{ ...goldBtn(), padding: "0 14px", fontSize: 12, opacity: searching || query.trim().length < 2 ? 0.5 : 1 }}>
+              Suchen
+            </button>
+          </div>
+          {results.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {results.map(r => {
+                const st = statusFor(r.id);
+                return (
+                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, flexWrap: "wrap" as const }}>
+                    <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{r.username}</div>
+                    {st === "friend" && <span style={{ fontSize: 10, color: C.ivoryDim }}>Schon Freunde</span>}
+                    {st === "incoming" && <span style={{ fontSize: 10, color: C.ivoryDim }}>Hat dich angefragt</span>}
+                    {st === "outgoing" && <span style={{ fontSize: 10, color: C.ivoryDim }}>Gesendet</span>}
+                    {st === "none" && (
+                      <button onClick={() => sendRequest(r.id)} disabled={busyId === r.id}
+                        style={{ ...goldBtn(), padding: "4px 10px", fontSize: 10, opacity: busyId === r.id ? 0.5 : 1 }}>
+                        Anfragen
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {msg && <div style={{ fontSize: 11, color: msg.ok ? C.success : C.error, textAlign: "center" }}>{msg.text}</div>}
         </div>
-        {results.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {results.map(r => {
-              const st = statusFor(r.id);
-              return (
-                <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8 }}>
-                  <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{r.username}</div>
-                  {st === "friend" && <span style={{ fontSize: 11, color: C.ivoryDim }}>Schon Freunde</span>}
-                  {st === "incoming" && <span style={{ fontSize: 11, color: C.ivoryDim }}>Hat dich angefragt</span>}
-                  {st === "outgoing" && <span style={{ fontSize: 11, color: C.ivoryDim }}>Anfrage gesendet</span>}
-                  {st === "none" && (
-                    <button onClick={() => sendRequest(r.id)} disabled={busyId === r.id}
-                      style={{ ...goldBtn(), padding: "5px 12px", fontSize: 11, opacity: busyId === r.id ? 0.5 : 1 }}>
-                      Anfragen
-                    </button>
-                  )}
+
+        {/* Incoming requests */}
+        {incoming.length > 0 && (
+          <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>ANFRAGEN ({incoming.length})</div>
+            {incoming.map((f: any) => (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
+                <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[f.requester_id] ?? "…"}</div>
+                <button onClick={() => accept(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(), padding: "4px 10px", fontSize: 10 }}>Annehmen</button>
+                <button onClick={() => remove(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(false), padding: "4px 10px", fontSize: 10 }}>Ablehnen</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Friends list */}
+        <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>MEINE FREUNDE ({accepted.length})</div>
+          {rows === null ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
+                  <div className="skeleton" style={{ width: 7, height: 7, borderRadius: "50%" }} />
+                  <div className="skeleton" style={{ width: `${90 - i * 18}px`, height: 13, borderRadius: 4, flex: "none" }} />
                 </div>
-              );
-            })}
-          </div>
-        )}
-        {msg && <div style={{ fontSize: 12, color: msg.ok ? C.success : C.error, textAlign: "center" }}>{msg.text}</div>}
-      </div>
-
-      {/* Incoming requests */}
-      {incoming.length > 0 && (
-        <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>ANFRAGEN ({incoming.length})</div>
-          {incoming.map((f: any) => (
-            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[f.requester_id] ?? "…"}</div>
-              <button onClick={() => accept(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(), padding: "5px 12px", fontSize: 11 }}>Annehmen</button>
-              <button onClick={() => remove(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(false), padding: "5px 12px", fontSize: 11 }}>Ablehnen</button>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Friends list */}
-      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>MEINE FREUNDE ({accepted.length})</div>
-        {rows === null ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {[0, 1, 2].map(i => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
-                <div className="skeleton" style={{ width: 7, height: 7, borderRadius: "50%" }} />
-                <div className="skeleton" style={{ width: `${90 - i * 18}px`, height: 13, borderRadius: 4, flex: "none" }} />
-              </div>
-            ))}
-          </div>
-        ) : accepted.length === 0 ? (
-          <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center", padding: 8 }}>Noch keine Freunde – oben nach Usernamen suchen</div>
-        ) : accepted.map((f: any) => {
-          const otherId = f.requester_id === uid ? f.addressee_id : f.requester_id;
-          return (
-            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.10)" }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: onlineUserIds.has(otherId) ? C.success : "rgba(255,255,255,0.15)", flexShrink: 0 }} title={onlineUserIds.has(otherId) ? "Online" : "Offline"} />
-              <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[otherId] ?? "…"}</div>
-              <button onClick={() => remove(f.id)} disabled={busyId === f.id}
-                style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 11 }}>Entfernen</button>
-            </div>
-          );
-        })}
-        {outgoing.length > 0 && (
-          <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ fontSize: 10, color: C.ivoryDim, letterSpacing: 1 }}>AUSSTEHEND</div>
-            {outgoing.map((f: any) => (
-              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ fontSize: 12, color: C.ivoryDim, flex: 1 }}>{names[f.addressee_id] ?? "…"}</div>
+          ) : accepted.length === 0 ? (
+            <div style={{ fontSize: 11, color: C.ivoryDim, textAlign: "center", padding: 8 }}>Noch keine Freunde – oben nach Usernamen suchen</div>
+          ) : accepted.map((f: any) => {
+            const otherId = f.requester_id === uid ? f.addressee_id : f.requester_id;
+            return (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.10)" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: onlineUserIds.has(otherId) ? C.success : "rgba(255,255,255,0.15)", flexShrink: 0 }} title={onlineUserIds.has(otherId) ? "Online" : "Offline"} />
+                <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[otherId] ?? "…"}</div>
                 <button onClick={() => remove(f.id)} disabled={busyId === f.id}
-                  style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 11 }}>Zurückziehen</button>
+                  style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10 }}>Entfernen</button>
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+          {outgoing.length > 0 && (
+            <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>AUSSTEHEND</div>
+              {outgoing.map((f: any) => (
+                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 12, color: C.ivoryDim, flex: 1 }}>{names[f.addressee_id] ?? "…"}</div>
+                  <button onClick={() => remove(f.id)} disabled={busyId === f.id}
+                    style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10 }}>Zurückziehen</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -494,7 +504,8 @@ function FriendsScreen({ session, onBack, onlineUserIds }: { session: Session; o
 
 // ─── Lobby ────────────────────────────────────────────────────────────────────
 function LobbyScreen({ session }: { session: Session }) {
-  const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile" | "friends">("home");
+  const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile">("home");
+  const [showFriendsPanel, setShowFriendsPanel] = useState(false);
   const [reconnectRoom, setReconnectRoom] = useState<string|null>(null);
   const [savedPlannedTotal, setSavedPlannedTotal] = useState<number | null>(null);
 
@@ -659,8 +670,6 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (view === "friends") return <FriendsScreen session={session} onBack={() => setView("home")} onlineUserIds={onlineUserIds} />;
-
   if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
@@ -676,7 +685,7 @@ function LobbyScreen({ session }: { session: Session }) {
       )}
       {showProfile && (
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setView("friends")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <button onClick={() => setShowFriendsPanel(true)} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
             <IconUsers size={14} /> Freunde
             {pendingFriendCount > 0 && (
               <span style={{ position: "absolute", top: -4, right: -4, background: C.error, color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 999, minWidth: 15, height: 15, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
@@ -805,6 +814,7 @@ function LobbyScreen({ session }: { session: Session }) {
           </div>
         </div>
       )}
+      {showFriendsPanel && <FriendsScreen session={session} onClose={() => setShowFriendsPanel(false)} onlineUserIds={onlineUserIds} />}
       {screen}
     </>
   );
@@ -1514,7 +1524,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
       background: "rgba(16,22,26,0.97)", borderLeft: `1px solid ${C.glassBorder}`,
       display: "flex", flexDirection: "column" as const,
       paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)",
-    }}>
+    }} className="slide-in-right">
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
         <div style={{ ...cinzel, fontSize: 14, color: C.gold, display: "flex", alignItems: "center", gap: 6 }}><IconMessageCircle size={15} /> Chat</div>
