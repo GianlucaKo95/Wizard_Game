@@ -3,7 +3,7 @@ import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
-import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory } from "./Icons";
+import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart } from "./Icons";
 import { WizardArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -22,6 +22,11 @@ const C = {
   success: "#2D9E5F",
 };
 
+// Corner-radius scale - every rounded element in the app draws from this
+// instead of a one-off number, so "how rounded" stays a handful of
+// deliberate choices rather than per-component guesswork.
+const RADIUS = { sm: 8, md: 12, lg: 16, pill: 999 };
+
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 const cinzel: React.CSSProperties = { fontFamily: "'Cinzel', serif" };
 
@@ -29,7 +34,7 @@ const glass = (extra: React.CSSProperties = {}): React.CSSProperties => ({
   background: "rgba(10,16,28,0.92)",
   backdropFilter: "blur(12px)",
   border: `1px solid rgba(201,168,76,0.35)`,
-  borderRadius: 12,
+  borderRadius: RADIUS.md,
   ...extra,
 });
 
@@ -38,7 +43,7 @@ const goldBtn = (active = true): React.CSSProperties => ({
   background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "rgba(255,255,255,0.05)",
   color: active ? C.goldLight : C.ivoryDim,
   border: "none",
-  borderRadius: 16,
+  borderRadius: RADIUS.lg,
   padding: "clamp(8px,2vw,12px) clamp(12px,3vw,20px)",
   fontSize: "clamp(13px, 2vw, 15px)",
   cursor: "pointer",
@@ -55,10 +60,10 @@ const goldBtn = (active = true): React.CSSProperties => ({
 
 // Pill-track segmented control (player count, edition, login/register toggle …)
 const segTrack: React.CSSProperties = {
-  display: "flex", gap: 2, background: "rgba(255,255,255,0.05)", borderRadius: 999, padding: 3,
+  display: "flex", gap: 2, background: "rgba(255,255,255,0.05)", borderRadius: RADIUS.pill, padding: 3,
 };
 const segBtn = (active: boolean): React.CSSProperties => ({
-  flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 999,
+  flex: 1, textAlign: "center", padding: "10px 0", borderRadius: RADIUS.pill,
   fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13,
   background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "transparent",
   color: active ? C.goldLight : C.ivoryDim,
@@ -70,7 +75,7 @@ const segBtn = (active: boolean): React.CSSProperties => ({
 
 // Icon-over-label tile button (Home screen secondary actions)
 const tileBtn: React.CSSProperties = {
-  flex: 1, background: "rgba(255,255,255,0.045)", border: "none", borderRadius: 16,
+  flex: 1, background: "rgba(255,255,255,0.045)", border: "none", borderRadius: RADIUS.lg,
   padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
   fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: C.ivoryDim, cursor: "pointer",
   WebkitTapHighlightColor: "transparent", touchAction: "manipulation", minHeight: 44,
@@ -80,7 +85,7 @@ const tileBtn: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   background: "rgba(0,0,0,0.3)",
   border: `1px solid ${C.glassBorder}`,
-  borderRadius: 8,
+  borderRadius: RADIUS.sm,
   color: C.ivory,
   padding: "clamp(10px,2vw,14px) clamp(12px,3vw,18px)",
   fontSize: 16, // must be 16px+ to prevent iOS zoom
@@ -275,12 +280,12 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   }
 
   const statItems = stats ? [
-    { label: "Spiele", value: stats.games_played ?? 0, icon: "🎮" },
-    { label: "Siege", value: stats.games_won ?? 0, icon: "🏆" },
-    { label: "Ø Punkte", value: stats.avg_score ?? 0, icon: "⭐" },
-    { label: "Ø Platz", value: stats.avg_placement ?? "–", icon: "🎯" },
-    { label: "Trefferquote", value: `${stats.bid_accuracy_pct ?? 0}%`, icon: "🎪" },
-    { label: "Stiche geboten", value: stats.total_bid ?? 0, icon: "🃏" },
+    { label: "Spiele", value: stats.games_played ?? 0, icon: <IconCards size={18} /> },
+    { label: "Siege", value: stats.games_won ?? 0, icon: <IconTrophy size={18} /> },
+    { label: "Ø Punkte", value: stats.avg_score ?? 0, icon: <IconStar size={16} /> },
+    { label: "Ø Platz", value: stats.avg_placement ?? "–", icon: <IconTarget size={18} /> },
+    { label: "Trefferquote", value: `${stats.bid_accuracy_pct ?? 0}%`, icon: <IconPercent size={18} /> },
+    { label: "Stiche geboten", value: stats.total_bid ?? 0, icon: <IconLayers size={18} /> },
   ] : [];
 
   return (
@@ -318,7 +323,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 
       {/* Stats */}
       <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)" }}>
-        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>📊 STATISTIKEN</div>
+        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}><IconBarChart size={13} /> STATISTIKEN</div>
         {!stats ? (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             {Array.from({ length: 6 }).map((_, i) => (
@@ -333,7 +338,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             {statItems.map(({ label, value, icon }) => (
               <div key={label} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center" }}>
-                <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
+                <div style={{ display: "flex", justifyContent: "center", color: C.gold, marginBottom: 4 }}>{icon}</div>
                 <div style={{ ...cinzel, fontSize: 18, fontWeight: 700, color: C.gold }}>{value}</div>
                 <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 2 }}>{label}</div>
               </div>
@@ -773,7 +778,7 @@ function LobbyScreen({ session }: { session: Session }) {
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setEdition("classic")}
               style={{ ...goldBtn(edition === "classic"), flex: 1, padding: "10px 0", fontSize: 12, flexDirection: "column", display: "flex", alignItems: "center", gap: 2 }}>
-              <span style={{ fontSize: 16 }}>🧙</span>
+              <CardIcon size={16}><WizardArt index={0} /></CardIcon>
               <span>Classic</span>
               <span style={{ fontSize: 9, opacity: 0.7 }}>60 Karten</span>
             </button>
@@ -1277,11 +1282,14 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
           style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
           <IconArrowLeft size={13} /> Zurück
         </button>
-        <div style={{ ...cinzel, fontSize: 24, color: C.gold }}>🧙 Warteraum</div>
+        <div style={{ ...cinzel, fontSize: 24, color: C.gold, display: "flex", alignItems: "center", gap: 10 }}>
+          <WizardMascot size={20} />
+          Warteraum
+        </div>
         <div style={{ ...glass({ padding: "8px 24px" }), ...cinzel, fontSize: 20, letterSpacing: 6, color: C.goldLight }}>{room.code}</div>
         <div style={{ fontSize: 11, color: C.ivoryDim }}>Code mit Freunden teilen</div>
-        <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim }}>
-          {room?.edition === "anniversary" ? "⚡ 30 Jahre Edition" : "🧙 Classic Edition"}
+        <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim, display: "flex", alignItems: "center", gap: 6 }}>
+          {room?.edition === "anniversary" ? <>⚡ 30 Jahre Edition</> : <><CardIcon size={11}><WizardArt index={0} /></CardIcon> Classic Edition</>}
         </div>
 
         {!showInvite ? (
@@ -1762,7 +1770,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
         background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%)",
       }}>
         <div style={{ ...cinzel, fontSize: "clamp(10px,1.8vmin,18px)", color: "rgba(255,255,255,0.65)" }}>RUNDE {room.round}/{room.max_rounds}</div>
-        <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vmin,22px)", color: C.gold, letterSpacing: "clamp(2px,0.5vmin,6px)" }}>🧙 WIZARD</div>
+        <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vmin,22px)", color: C.gold, letterSpacing: "clamp(2px,0.5vmin,6px)", display: "flex", alignItems: "center", gap: 6 }}>
+          <CardIcon size={14}><WizardArt index={0} /></CardIcon> WIZARD
+        </div>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
           <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
           <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", position: "relative" as const, display: "flex" }} title="Chat">
