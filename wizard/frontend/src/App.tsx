@@ -3,6 +3,7 @@ import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
+import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory } from "./Icons";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -124,7 +125,7 @@ function InstallBanner() {
         <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Wizard direkt vom Homescreen starten</div>
       </div>
       <button onClick={() => { prompt?.prompt(); setShow(false); }} style={{ ...goldBtn(), padding: "7px 14px", fontSize: 12 }}>Installieren</button>
-      <button onClick={() => setShow(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 18, padding: 4 }}>✕</button>
+      <button onClick={() => setShow(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", padding: 4, display: "flex" }}><IconX size={18} /></button>
     </div>
   );
 }
@@ -167,7 +168,7 @@ function AuthScreen() {
   }
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 24 }}>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 24 }} className="fade-in">
       {/* Logo */}
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "clamp(44px,12vw,64px)", marginBottom: 8 }}>🧙</div>
@@ -260,10 +261,10 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   ] : [];
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }}>
+    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
-        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>👤 Profil</div>
-        <button onClick={onBack} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>← Zurück</button>
+        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconSettings size={17} /> Profil</div>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
       </div>
 
       {/* Name */}
@@ -297,7 +298,17 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
       {/* Stats */}
       <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)" }}>
         <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>📊 STATISTIKEN</div>
-        {!stats ? <div style={{ textAlign: "center", padding: 24, color: C.ivoryDim }}>Lade…</div> : (
+        {!stats ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                <div className="skeleton" style={{ width: 18, height: 18, borderRadius: 5 }} />
+                <div className="skeleton" style={{ width: 28, height: 16, borderRadius: 4 }} />
+                <div className="skeleton" style={{ width: 40, height: 8, borderRadius: 4 }} />
+              </div>
+            ))}
+          </div>
+        ) : (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             {statItems.map(({ label, value, icon }) => (
               <div key={label} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center" }}>
@@ -313,9 +324,188 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   );
 }
 
+// ─── Friends Screen ───────────────────────────────────────────────────────────
+function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; onClose: () => void; onlineUserIds: Set<string> }) {
+  const uid = session.user.id;
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<{ id: string; username: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    supabase.from("friends").select("*").or(`requester_id.eq.${uid},addressee_id.eq.${uid}`)
+      .then(async ({ data }) => {
+        const list = data ?? [];
+        setRows(list);
+        const otherIds = Array.from(new Set(list.map((f: any) => f.requester_id === uid ? f.addressee_id : f.requester_id)));
+        if (otherIds.length) {
+          const { data: profs } = await supabase.from("profiles").select("id, username").in("id", otherIds);
+          const map: Record<string, string> = {};
+          (profs ?? []).forEach((p: any) => { map[p.id] = p.username; });
+          setNames(map);
+        }
+      });
+  }, [uid]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const accepted = (rows ?? []).filter((f: any) => f.status === "accepted");
+  const incoming = (rows ?? []).filter((f: any) => f.status === "pending" && f.addressee_id === uid);
+  const outgoing = (rows ?? []).filter((f: any) => f.status === "pending" && f.requester_id === uid);
+
+  async function search() {
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); return; }
+    setSearching(true);
+    const { data } = await supabase.from("profiles").select("id, username").ilike("username", `%${q}%`).neq("id", uid).limit(8);
+    setSearching(false);
+    setResults(data ?? []);
+  }
+
+  function statusFor(id: string): "friend" | "incoming" | "outgoing" | "none" {
+    if (accepted.some((f: any) => f.requester_id === id || f.addressee_id === id)) return "friend";
+    if (incoming.some((f: any) => f.requester_id === id)) return "incoming";
+    if (outgoing.some((f: any) => f.addressee_id === id)) return "outgoing";
+    return "none";
+  }
+
+  async function sendRequest(id: string) {
+    setBusyId(id); setMsg(null);
+    const { error } = await supabase.from("friends").insert({ requester_id: uid, addressee_id: id, status: "pending" });
+    setBusyId(null);
+    if (error) setMsg({ text: "Anfrage konnte nicht gesendet werden", ok: false });
+    else { setMsg({ text: "Anfrage gesendet ✓", ok: true }); load(); }
+  }
+
+  async function accept(rowId: string) {
+    setBusyId(rowId);
+    await supabase.from("friends").update({ status: "accepted" }).eq("id", rowId);
+    setBusyId(null);
+    load();
+  }
+
+  async function remove(rowId: string) {
+    setBusyId(rowId);
+    await supabase.from("friends").delete().eq("id", rowId);
+    setBusyId(null);
+    load();
+  }
+
+  return (
+    <div style={{
+      position: "fixed" as const, right: 0, top: 0, bottom: 0, zIndex: 150,
+      width: "min(300px, 88vw)",
+      background: "rgba(16,22,26,0.97)", borderLeft: `1px solid ${C.glassBorder}`,
+      display: "flex", flexDirection: "column" as const,
+      paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)",
+    }} className="slide-in-right">
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
+        <div style={{ ...cinzel, fontSize: 14, color: C.gold, display: "flex", alignItems: "center", gap: 6 }}><IconUsers size={15} /> Freunde</div>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: "auto" as const, padding: "14px", display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* Search / add */}
+        <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>FREUND HINZUFÜGEN</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Username suchen"
+              style={{ ...inputStyle, fontSize: 13, padding: "8px 10px" }} onKeyDown={e => e.key === "Enter" && search()} />
+            <button onClick={search} disabled={searching || query.trim().length < 2}
+              style={{ ...goldBtn(), padding: "0 14px", fontSize: 12, opacity: searching || query.trim().length < 2 ? 0.5 : 1 }}>
+              Suchen
+            </button>
+          </div>
+          {results.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {results.map(r => {
+                const st = statusFor(r.id);
+                return (
+                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, flexWrap: "wrap" as const }}>
+                    <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{r.username}</div>
+                    {st === "friend" && <span style={{ fontSize: 10, color: C.ivoryDim }}>Schon Freunde</span>}
+                    {st === "incoming" && <span style={{ fontSize: 10, color: C.ivoryDim }}>Hat dich angefragt</span>}
+                    {st === "outgoing" && <span style={{ fontSize: 10, color: C.ivoryDim }}>Gesendet</span>}
+                    {st === "none" && (
+                      <button onClick={() => sendRequest(r.id)} disabled={busyId === r.id}
+                        style={{ ...goldBtn(), padding: "4px 10px", fontSize: 10, opacity: busyId === r.id ? 0.5 : 1 }}>
+                        Anfragen
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {msg && <div style={{ fontSize: 11, color: msg.ok ? C.success : C.error, textAlign: "center" }}>{msg.text}</div>}
+        </div>
+
+        {/* Incoming requests */}
+        {incoming.length > 0 && (
+          <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>ANFRAGEN ({incoming.length})</div>
+            {incoming.map((f: any) => (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
+                <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[f.requester_id] ?? "…"}</div>
+                <button onClick={() => accept(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(), padding: "4px 10px", fontSize: 10 }}>Annehmen</button>
+                <button onClick={() => remove(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(false), padding: "4px 10px", fontSize: 10 }}>Ablehnen</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Friends list */}
+        <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>MEINE FREUNDE ({accepted.length})</div>
+          {rows === null ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
+                  <div className="skeleton" style={{ width: 7, height: 7, borderRadius: "50%" }} />
+                  <div className="skeleton" style={{ width: `${90 - i * 18}px`, height: 13, borderRadius: 4, flex: "none" }} />
+                </div>
+              ))}
+            </div>
+          ) : accepted.length === 0 ? (
+            <div style={{ fontSize: 11, color: C.ivoryDim, textAlign: "center", padding: 8 }}>Noch keine Freunde – oben nach Usernamen suchen</div>
+          ) : accepted.map((f: any) => {
+            const otherId = f.requester_id === uid ? f.addressee_id : f.requester_id;
+            return (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.10)" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: onlineUserIds.has(otherId) ? C.success : "rgba(255,255,255,0.15)", flexShrink: 0 }} title={onlineUserIds.has(otherId) ? "Online" : "Offline"} />
+                <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[otherId] ?? "…"}</div>
+                <button onClick={() => remove(f.id)} disabled={busyId === f.id}
+                  style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10 }}>Entfernen</button>
+              </div>
+            );
+          })}
+          {outgoing.length > 0 && (
+            <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>AUSSTEHEND</div>
+              {outgoing.map((f: any) => (
+                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 12, color: C.ivoryDim, flex: 1 }}>{names[f.addressee_id] ?? "…"}</div>
+                  <button onClick={() => remove(f.id)} disabled={busyId === f.id}
+                    style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10 }}>Zurückziehen</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Lobby ────────────────────────────────────────────────────────────────────
 function LobbyScreen({ session }: { session: Session }) {
   const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile">("home");
+  const [showFriendsPanel, setShowFriendsPanel] = useState(false);
   const [reconnectRoom, setReconnectRoom] = useState<string|null>(null);
   const [savedPlannedTotal, setSavedPlannedTotal] = useState<number | null>(null);
 
@@ -339,6 +529,54 @@ function LobbyScreen({ session }: { session: Session }) {
   const [loading, setLoading] = useState(false);
   const username = session.user.user_metadata?.username ?? "Spieler";
 
+  // Pending friend requests (badge) + incoming room invites (popup): initial
+  // fetch, then live via realtime so they arrive even while sitting idle.
+  const [pendingFriendCount, setPendingFriendCount] = useState(0);
+  const [incomingInvite, setIncomingInvite] = useState<{ id: string; room_code: string; from_username: string } | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
+
+  useEffect(() => {
+    const uid = session.user.id;
+    const refreshPendingCount = () => {
+      supabase.from("friends").select("id", { count: "exact", head: true })
+        .eq("addressee_id", uid).eq("status", "pending")
+        .then(({ count }) => setPendingFriendCount(count ?? 0));
+    };
+    refreshPendingCount();
+    supabase.from("room_invites").select("id, room_code, from_username").eq("to_user_id", uid)
+      .order("created_at", { ascending: false }).limit(1)
+      .then(({ data }) => { if (data && data[0]) setIncomingInvite(data[0]); });
+
+    const ch = supabase.channel(`social:${uid}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "friends", filter: `addressee_id=eq.${uid}` }, refreshPendingCount)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_invites", filter: `to_user_id=eq.${uid}` }, payload => {
+        setIncomingInvite(payload.new as any);
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "room_invites", filter: `to_user_id=eq.${uid}` }, payload => {
+        setIncomingInvite(prev => prev?.id === (payload.old as any).id ? null : prev);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [session.user.id]);
+
+  // Who's currently online, for the friends list / invite picker. Tracked
+  // here (not in FriendsScreen/GameRoom) because LobbyScreen stays mounted
+  // for the whole session - joining a room only swaps what it renders.
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const uid = session.user.id;
+    const presenceCh = supabase.channel("online-users", { config: { presence: { key: uid } } });
+    presenceCh
+      .on("presence", { event: "sync" }, () => {
+        setOnlineUserIds(new Set(Object.keys(presenceCh.presenceState())));
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") presenceCh.track({ at: new Date().toISOString() });
+      });
+    return () => { supabase.removeChannel(presenceCh); };
+  }, [session.user.id]);
+
   async function createRoom() {
     setLoading(true); setError("");
     const res = await callGameAction("", "createRoom", { username, edition });
@@ -348,11 +586,12 @@ function LobbyScreen({ session }: { session: Session }) {
     setLoading(false);
   }
 
-  async function joinRoom() {
+  async function joinRoom(codeArg?: string) {
+    const code = (codeArg ?? codeInput).toUpperCase();
     setLoading(true); setError("");
-    const res = await callGameAction("", "joinRoom", { username, code: codeInput.toUpperCase() });
+    const res = await callGameAction("", "joinRoom", { username, code });
     if (!res?.roomId) { setError(res?.error ?? "Raum nicht gefunden"); setLoading(false); return; }
-    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: codeInput.toUpperCase() }));
+    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -364,13 +603,27 @@ function LobbyScreen({ session }: { session: Session }) {
     await joinRoom();
   }
 
+  async function respondToInvite(accept: boolean) {
+    if (!incomingInvite) return;
+    const invite = incomingInvite;
+    setInviteBusy(true);
+    await supabase.from("room_invites").delete().eq("id", invite.id);
+    setIncomingInvite(null);
+    setInviteBusy(false);
+    if (accept) {
+      if (roomId && !confirm("Aktuelles Spiel verlassen und dem neuen Raum beitreten?")) return;
+      await joinRoom(invite.room_code);
+    }
+  }
 
+
+  const screen = (() => {
   // ── Rules ──
   if (view === "rules") return (
-    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }}>
+    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(680px,96vw)" }}>
         <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
-        <button onClick={() => setView("home")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>← Zurück</button>
+        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
       </div>
 
       {/* Basic rules */}
@@ -417,7 +670,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
+  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -430,13 +683,25 @@ function LobbyScreen({ session }: { session: Session }) {
           <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
         </div>
       )}
-      {showProfile && <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12 }}>⚙️ Profil</button>}
+      {showProfile && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setShowFriendsPanel(true)} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <IconUsers size={14} /> Freunde
+            {pendingFriendCount > 0 && (
+              <span style={{ position: "absolute", top: -4, right: -4, background: C.error, color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 999, minWidth: 15, height: 15, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+                {pendingFriendCount}
+              </span>
+            )}
+          </button>
+          <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><IconSettings size={14} /> Profil</button>
+        </div>
+      )}
       <GoldDivider />
     </>
   );
 
   if (view === "home") return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
       <HeaderBlock />
       {reconnectRoom && (
         <div style={{ ...glass({ padding: "12px 16px" }), width: "min(320px,92vw)", display: "flex", alignItems: "center", gap: 12 }}>
@@ -445,7 +710,7 @@ function LobbyScreen({ session }: { session: Session }) {
             <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Raum: {reconnectRoom}</div>
           </div>
           <button onClick={reconnect} style={{ ...goldBtn(), padding: "8px 14px", fontSize: 12 }}>Zurück</button>
-          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 16 }}>✕</button>
+          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={16} /></button>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "min(320px, 92vw)" }}>
@@ -467,10 +732,10 @@ function LobbyScreen({ session }: { session: Session }) {
   );
 
   if (view === "create") return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
       <HeaderBlock compact showProfile={false} />
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
-        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
+        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
         <div>
           <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>GESAMTZAHL SPIELER</div>
@@ -515,22 +780,43 @@ function LobbyScreen({ session }: { session: Session }) {
   );
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
       <HeaderBlock compact showProfile={false} />
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Zurück</button>
+        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Spiel beitreten</div>
         <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
           placeholder="XXXXX" maxLength={5}
           style={{ ...inputStyle, textAlign: "center", letterSpacing: 8, fontSize: 22, ...cinzel }}
           onKeyDown={e => e.key==="Enter" && joinRoom()} autoFocus />
-        <button onClick={joinRoom} disabled={loading || codeInput.length < 5}
+        <button onClick={() => joinRoom()} disabled={loading || codeInput.length < 5}
           style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading||codeInput.length<5?0.5:1 }}>
           {loading ? "Suche Raum…" : "⬡ Beitreten"}
         </button>
         {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
       </div>
     </div>
+  );
+  })();
+
+  return (
+    <>
+      {incomingInvite && (
+        <div style={{ position: "fixed", top: "max(16px, env(safe-area-inset-top))", left: 0, right: 0, margin: "0 auto", zIndex: 200, width: "min(360px, 92vw)" }} className="fade-in">
+          <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 13, color: C.ivory }}>
+              <span style={{ ...cinzel, color: C.gold }}>{incomingInvite.from_username}</span> lädt dich zu einer Partie ein
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => respondToInvite(true)} disabled={inviteBusy} style={{ ...goldBtn(), flex: 1, padding: "9px 0", fontSize: 13, opacity: inviteBusy ? 0.5 : 1 }}>Beitreten</button>
+              <button onClick={() => respondToInvite(false)} disabled={inviteBusy} style={{ ...goldBtn(false), flex: 1, padding: "9px 0", fontSize: 13, opacity: inviteBusy ? 0.5 : 1 }}>Ablehnen</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showFriendsPanel && <FriendsScreen session={session} onClose={() => setShowFriendsPanel(false)} onlineUserIds={onlineUserIds} />}
+      {screen}
+    </>
   );
 }
 
@@ -600,7 +886,7 @@ async function loadPlayersSecure(roomId: string, myUserId: string) {
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
-function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId: string; session: Session; plannedTotal: number; edition?: string; onLeave: () => void }) {
+function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLeave }: { roomId: string; session: Session; plannedTotal: number; edition?: string; onlineUserIds: Set<string>; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
   const aiTriggerLastKey = useRef<string>("");
   const clearTrickPending = useRef(false);
@@ -613,6 +899,85 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showScoresheet, setShowScoresheet] = useState(false);
+
+  // Invite a friend into the Warteraum: fetched on demand, not on mount.
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteFriends, setInviteFriends] = useState<{ id: string; username: string }[] | null>(null);
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+  const [inviteSending, setInviteSending] = useState<string | null>(null);
+  const inviteInFlight = useRef<Set<string>>(new Set());
+
+  async function openInvitePicker() {
+    setShowInvite(true);
+    if (inviteFriends !== null) return;
+    const uid = session.user.id;
+    const [{ data }, { data: pending }] = await Promise.all([
+      supabase.from("friends").select("*").eq("status", "accepted").or(`requester_id.eq.${uid},addressee_id.eq.${uid}`),
+      supabase.from("room_invites").select("to_user_id").eq("room_id", room.id).eq("from_user_id", uid),
+    ]);
+    const otherIds = Array.from(new Set((data ?? []).map((f: any) => f.requester_id === uid ? f.addressee_id : f.requester_id)));
+    let list: { id: string; username: string }[] = [];
+    if (otherIds.length) {
+      const { data: profs } = await supabase.from("profiles").select("id, username").in("id", otherIds);
+      list = profs ?? [];
+    }
+    setInviteFriends(list);
+    // Pre-mark anyone we already have a pending invite out to for this room,
+    // so "Einladen" doesn't sit there re-clickable for no reason.
+    if (pending?.length) setInvitedIds(prev => { const next = new Set(prev); pending.forEach((r: any) => next.add(r.to_user_id)); return next; });
+  }
+
+  async function inviteFriend(friendId: string) {
+    // Synchronous guard (not just the `disabled` prop, which only updates on
+    // the next render) - a rapid double-click can't fire this twice.
+    if (inviteInFlight.current.has(friendId) || invitedIds.has(friendId)) return;
+    inviteInFlight.current.add(friendId);
+    setInviteSending(friendId);
+    const { error } = await supabase.from("room_invites").insert({
+      room_id: room.id, room_code: room.code, from_user_id: session.user.id,
+      from_username: session.user.user_metadata?.username ?? "Spieler", to_user_id: friendId,
+    });
+    inviteInFlight.current.delete(friendId);
+    setInviteSending(null);
+    if (!error || error.code === "23505") setInvitedIds(prev => new Set(prev).add(friendId));
+  }
+
+  // Add a fellow room player as a friend directly (no username search needed -
+  // we already know their user_id from the players list).
+  const [friendReqState, setFriendReqState] = useState<Record<string, "sending" | "sent" | "exists" | "error">>({});
+  const friendReqInFlight = useRef<Set<string>>(new Set());
+
+  // Pre-check: mark co-players we're already friends with (or already have a
+  // pending request with, in either direction) as "exists" up front, instead
+  // of only finding out after a wasted insert attempt.
+  const otherPlayerIds = players.filter((p: any) => !p.is_ai && p.user_id && p.user_id !== session.user.id).map((p: any) => p.user_id).sort().join(",");
+  useEffect(() => {
+    if (!otherPlayerIds) return;
+    const uid = session.user.id;
+    supabase.from("friends").select("requester_id, addressee_id").or(`requester_id.eq.${uid},addressee_id.eq.${uid}`)
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const ids = new Set(otherPlayerIds.split(","));
+        const connected = data.map((f: any) => f.requester_id === uid ? f.addressee_id : f.requester_id).filter((id: string) => ids.has(id));
+        if (!connected.length) return;
+        setFriendReqState(prev => {
+          const next = { ...prev };
+          connected.forEach((id: string) => { if (!next[id]) next[id] = "exists"; });
+          return next;
+        });
+      });
+  }, [otherPlayerIds]);
+
+  async function addFriendFromRoom(targetUserId: string) {
+    if (friendReqInFlight.current.has(targetUserId)) return;
+    const st = friendReqState[targetUserId];
+    if (st === "sending" || st === "sent" || st === "exists") return;
+    friendReqInFlight.current.add(targetUserId);
+    setFriendReqState(prev => ({ ...prev, [targetUserId]: "sending" }));
+    const { error } = await supabase.from("friends").insert({ requester_id: session.user.id, addressee_id: targetUserId, status: "pending" });
+    friendReqInFlight.current.delete(targetUserId);
+    setFriendReqState(prev => ({ ...prev, [targetUserId]: !error ? "sent" : error.code === "23505" ? "exists" : "error" }));
+  }
 
   // Reload round history when scoresheet opens
   useEffect(() => {
@@ -886,10 +1251,10 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
     // `plannedTotal` players total, so fewer AI are needed the more humans show up.
     const effectiveAiCount = Math.max(0, plannedTotal - players.length);
     return (
-      <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }}>
+      <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
         <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) onLeave(); }}
-          style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>
-          ← Zurück
+          style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <IconArrowLeft size={13} /> Zurück
         </button>
         <div style={{ ...cinzel, fontSize: 24, color: C.gold }}>🧙 Warteraum</div>
         <div style={{ ...glass({ padding: "8px 24px" }), ...cinzel, fontSize: 20, letterSpacing: 6, color: C.goldLight }}>{room.code}</div>
@@ -898,14 +1263,52 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
           {room?.edition === "anniversary" ? "⚡ 30 Jahre Edition" : "🧙 Classic Edition"}
         </div>
 
-        <div style={{ ...glass({ padding: 16 }), width: "min(320px, 92vw)" }}>
-          {players.map((p: any) => (
-            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
-              <div style={{ fontSize: 18 }}>{p.player_index === 0 ? "👑" : "👤"}</div>
-              <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>{p.ai_name}</div>
-              {p.user_id === session.user.id && <div style={{ fontSize: 10, color: C.ivoryDim, marginLeft: "auto" }}>Du</div>}
+        {!showInvite ? (
+          <button onClick={openInvitePicker} style={{ ...goldBtn(false), padding: "7px 16px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><IconUsers size={13} /> Freund einladen</button>
+        ) : (
+          <div style={{ ...glass({ padding: 14 }), width: "min(320px, 92vw)", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 1 }}>FREUND EINLADEN</div>
+              <button onClick={() => setShowInvite(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
             </div>
-          ))}
+            {inviteFriends === null ? (
+              <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Lade…</div>
+            ) : inviteFriends.length === 0 ? (
+              <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Noch keine Freunde hinzugefügt</div>
+            ) : inviteFriends.map(f => (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: onlineUserIds.has(f.id) ? C.success : "rgba(255,255,255,0.15)", flexShrink: 0 }} title={onlineUserIds.has(f.id) ? "Online" : "Offline"} />
+                <div style={{ fontSize: 13, color: C.ivory, flex: 1 }}>{f.username}</div>
+                <button onClick={() => inviteFriend(f.id)} disabled={invitedIds.has(f.id) || inviteSending === f.id}
+                  style={{ ...goldBtn(!invitedIds.has(f.id)), padding: "5px 12px", fontSize: 11, opacity: invitedIds.has(f.id) ? 0.5 : 1 }}>
+                  {invitedIds.has(f.id) ? "Eingeladen ✓" : "Einladen"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ ...glass({ padding: 16 }), width: "min(320px, 92vw)" }}>
+          {players.map((p: any) => {
+            const st = friendReqState[p.user_id];
+            // Hidden once sent/already connected - nothing left to do here
+            // regardless of whether the other side later accepts or declines.
+            const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
+            return (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
+                <div style={{ fontSize: 18 }}>{p.player_index === 0 ? "👑" : "👤"}</div>
+                <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>{p.ai_name}</div>
+                {p.user_id === session.user.id && <div style={{ fontSize: 10, color: C.ivoryDim, marginLeft: "auto" }}>Du</div>}
+                {canFriend && (
+                  <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending"}
+                    title="Als Freund hinzufügen"
+                    style={{ marginLeft: "auto", background: "none", border: "none", color: C.ivoryDim, cursor: st === "sending" ? "default" : "pointer", display: "flex", padding: 4, opacity: st === "sending" ? 0.5 : 1 }}>
+                    <IconUserPlus size={16} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {isHost && effectiveAiCount > 0 && (
@@ -968,15 +1371,28 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         {/* Ranking */}
         <div style={{ ...glass({ padding: 14 }), width: "min(360px, 96vw)" }}>
           <div style={{ ...cinzel, fontSize: "var(--text-xs)", color: C.ivoryDim, letterSpacing: 2, marginBottom: 8, textTransform: "uppercase" as const }}>Gesamtranking</div>
-          {sorted.map((p: any, i: number) => (
-            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "10px 0", borderTop: i > 0 ? "1px solid rgba(201,168,76,0.10)" : "none" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: i === 0 ? C.gold : C.ivoryDim, width: 14, display: "inline-block" }}>{i + 1}</span>
-                <span style={{ ...cinzel, fontSize: "clamp(13px,3.5vw,15px)", fontWeight: i === 0 ? 600 : 400, color: i === 0 ? C.gold : C.ivory }}>{p.ai_name}</span>
+          {sorted.map((p: any, i: number) => {
+            const st = friendReqState[p.user_id];
+            const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
+            return (
+              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: i > 0 ? "1px solid rgba(201,168,76,0.10)" : "none" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: i === 0 ? C.gold : C.ivoryDim, width: 14, display: "inline-block" }}>{i + 1}</span>
+                  <span style={{ ...cinzel, fontSize: "clamp(13px,3.5vw,15px)", fontWeight: i === 0 ? 600 : 400, color: i === 0 ? C.gold : C.ivory }}>{p.ai_name}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ ...cinzel, fontWeight: 700, fontSize: "clamp(14px,4vw,17px)", fontVariantNumeric: "tabular-nums" as const, color: i === 0 ? C.gold : C.ivory }}>{p.score}</span>
+                  {canFriend && (
+                    <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending"}
+                      title="Als Freund hinzufügen"
+                      style={{ background: "none", border: "none", color: C.ivoryDim, cursor: st === "sending" ? "default" : "pointer", display: "flex", padding: 2, opacity: st === "sending" ? 0.5 : 1 }}>
+                      <IconUserPlus size={15} />
+                    </button>
+                  )}
+                </div>
               </div>
-              <span style={{ ...cinzel, fontWeight: 700, fontSize: "clamp(14px,4vw,17px)", fontVariantNumeric: "tabular-nums" as const, color: i === 0 ? C.gold : C.ivory }}>{p.score}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
@@ -985,7 +1401,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
               {loading ? "…" : `Weiter → Runde ${room.round + 1}`}
             </button>
           )}
-          <button onClick={onLeave} style={{ ...goldBtn(false), padding: "8px 20px", fontSize: 13 }}>🏠 Zurück zur Startseite</button>
+          <button onClick={onLeave} style={{ ...goldBtn(false), padding: "8px 20px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}><IconHome size={14} /> Zurück zur Startseite</button>
           {isHost && room.phase === "gameEnd" && (
             <button onClick={() => act("newGame")} style={{ ...goldBtn(), padding: "12px 28px" }}>Nochmal spielen</button>
           )}
@@ -1108,11 +1524,11 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
       background: "rgba(16,22,26,0.97)", borderLeft: `1px solid ${C.glassBorder}`,
       display: "flex", flexDirection: "column" as const,
       paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)",
-    }}>
+    }} className="slide-in-right">
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
-        <div style={{ ...cinzel, fontSize: 14, color: C.gold }}>💬 Chat</div>
-        <button onClick={() => setShowChat(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 20 }}>✕</button>
+        <div style={{ ...cinzel, fontSize: 14, color: C.gold, display: "flex", alignItems: "center", gap: 6 }}><IconMessageCircle size={15} /> Chat</div>
+        <button onClick={() => setShowChat(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
       </div>
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto" as const, padding: "10px 12px", display: "flex", flexDirection: "column" as const, gap: 8 }}>
@@ -1174,7 +1590,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
           <div style={{ padding: "16px 20px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <div style={{ ...cinzel, fontSize: 10, letterSpacing: 2.5, color: C.ivoryDim, textTransform: "uppercase" as const }}>Runde {room.round}/{room.max_rounds}</div>
-              <button onClick={() => setShowScoresheet(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 18 }}>✕</button>
+              <button onClick={() => setShowScoresheet(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
             </div>
             <div style={{ ...cinzel, fontSize: 18, fontWeight: 600, color: C.ivory }}>Spielblatt</div>
           </div>
@@ -1278,7 +1694,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
   const seats = getSeatPositions(players, effectiveMyIdx);
 
   return (
-    <div style={{
+    <div className="fade-in" style={{
       height: "100dvh", width: "100%", overflow: "hidden", position: "relative" as const,
       background: C.bgDark,
     }}>
@@ -1321,9 +1737,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
         <div style={{ ...cinzel, fontSize: "clamp(10px,1.8vmin,18px)", color: "rgba(255,255,255,0.65)" }}>RUNDE {room.round}/{room.max_rounds}</div>
         <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vmin,22px)", color: C.gold, letterSpacing: "clamp(2px,0.5vmin,6px)" }}>🧙 WIZARD</div>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-          <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", fontSize: 11 }} title="Log">📜</button>
-          <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", fontSize: 11, position: "relative" as const }} title="Chat">
-            💬
+          <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
+          <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", position: "relative" as const, display: "flex" }} title="Chat">
+            <IconMessageCircle size={15} />
             {unreadCount > 0 && (
               <span style={{
                 position: "absolute" as const, top: -6, right: -6,
@@ -1332,8 +1748,8 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
               }}>{unreadCount > 9 ? "9+" : unreadCount}</span>
             )}
           </button>
-          <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 7px", fontSize: 11 }} title="Spielblatt">📋</button>
-          <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 11, padding: "4px 7px", borderRadius: 6 }}>✕</button>
+          <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 7px", display: "flex" }} title="Spielblatt"><IconClipboardList size={15} /></button>
+          <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: "4px 7px", borderRadius: 6, display: "flex" }} title="Verlassen"><IconX size={15} /></button>
         </div>
       </div>
 
@@ -1836,7 +2252,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
       {/* Error Toast */}
       {error && (
         <div onClick={() => setError("")} style={{ position: "absolute" as const, top: "max(50px, env(safe-area-inset-top))", left: "50%", transform: "translateX(-50%)", background: `${C.error}EE`, color: "#fff", padding: "10px 18px", borderRadius: 8, fontSize: 13, zIndex: 100, ...cinzel, cursor: "pointer", whiteSpace: "nowrap" as const, maxWidth: "90vw", textAlign: "center" }}>
-          {error} <span style={{ opacity: 0.7, fontSize: 11 }}>✕</span>
+          {error} <IconX size={11} style={{ opacity: 0.7, verticalAlign: "-1px" }} />
         </div>
       )}
 
