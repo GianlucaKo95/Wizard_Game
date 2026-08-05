@@ -81,3 +81,60 @@ export const IconHistory = ({ size = 16, style }: IconProps) => (
     <line x1="8" y1="18" x2="20" y2="18" /><circle cx="4" cy="18" r="1" />
   </svg>
 );
+
+// ─── Stats icons (Profil) ──────────────────────────────────────────────────
+export const IconCards = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style}>
+    <rect x="3" y="8" width="12" height="15" rx="2" transform="rotate(-10 9 15.5)" />
+    <rect x="8" y="3" width="13" height="17" rx="2" />
+  </svg>
+);
+
+export const IconTrophy = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style}>
+    <path d="M7 4h10v5a5 5 0 0 1-10 0V4z" />
+    <path d="M7 5H4a2 2 0 0 0 0 4h1.5" />
+    <path d="M17 5h3a2 2 0 0 1 0 4h-1.5" />
+    <path d="M12 14v4" />
+    <path d="M8 21h8" />
+    <path d="M9.5 21c0-2 1-2.5 2.5-3 1.5.5 2.5 1 2.5 3" />
+  </svg>
+);
+
+export const IconStar = ({ size = 16, style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" style={style}>
+    <polygon points="12 2 15.1 8.6 22 9.6 17 14.6 18.2 21.8 12 18.4 5.8 21.8 7 14.6 2 9.6 8.9 8.6" />
+  </svg>
+);
+
+export const IconTarget = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style}>
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="5" />
+    <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const IconPercent = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style}>
+    <line x1="19" y1="5" x2="5" y2="19" />
+    <circle cx="6.5" cy="6.5" r="2.5" />
+    <circle cx="17.5" cy="17.5" r="2.5" />
+  </svg>
+);
+
+export const IconLayers = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style}>
+    <polygon points="12 3 2 8.5 12 14 22 8.5 12 3" />
+    <polyline points="2 15.5 12 21 22 15.5" />
+    <polyline points="2 12 12 17.5 22 12" />
+  </svg>
+);
+
+export const IconBarChart = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style}>
+    <line x1="6" y1="20" x2="6" y2="15" />
+    <line x1="12" y1="20" x2="12" y2="9" />
+    <line x1="18" y1="20" x2="18" y2="4" />
+  </svg>
+);

@@ -3,7 +3,8 @@ import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
-import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory } from "./Icons";
+import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart } from "./Icons";
+import { WizardArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -21,6 +22,11 @@ const C = {
   success: "#2D9E5F",
 };
 
+// Corner-radius scale - every rounded element in the app draws from this
+// instead of a one-off number, so "how rounded" stays a handful of
+// deliberate choices rather than per-component guesswork.
+const RADIUS = { sm: 8, md: 12, lg: 16, pill: 999 };
+
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 const cinzel: React.CSSProperties = { fontFamily: "'Cinzel', serif" };
 
@@ -28,7 +34,7 @@ const glass = (extra: React.CSSProperties = {}): React.CSSProperties => ({
   background: "rgba(10,16,28,0.92)",
   backdropFilter: "blur(12px)",
   border: `1px solid rgba(201,168,76,0.35)`,
-  borderRadius: 12,
+  borderRadius: RADIUS.md,
   ...extra,
 });
 
@@ -37,7 +43,7 @@ const goldBtn = (active = true): React.CSSProperties => ({
   background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "rgba(255,255,255,0.05)",
   color: active ? C.goldLight : C.ivoryDim,
   border: "none",
-  borderRadius: 16,
+  borderRadius: RADIUS.lg,
   padding: "clamp(8px,2vw,12px) clamp(12px,3vw,20px)",
   fontSize: "clamp(13px, 2vw, 15px)",
   cursor: "pointer",
@@ -54,10 +60,10 @@ const goldBtn = (active = true): React.CSSProperties => ({
 
 // Pill-track segmented control (player count, edition, login/register toggle …)
 const segTrack: React.CSSProperties = {
-  display: "flex", gap: 2, background: "rgba(255,255,255,0.05)", borderRadius: 999, padding: 3,
+  display: "flex", gap: 2, background: "rgba(255,255,255,0.05)", borderRadius: RADIUS.pill, padding: 3,
 };
 const segBtn = (active: boolean): React.CSSProperties => ({
-  flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 999,
+  flex: 1, textAlign: "center", padding: "10px 0", borderRadius: RADIUS.pill,
   fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13,
   background: active ? `linear-gradient(135deg, ${C.accent}, ${C.accentLight})` : "transparent",
   color: active ? C.goldLight : C.ivoryDim,
@@ -69,7 +75,7 @@ const segBtn = (active: boolean): React.CSSProperties => ({
 
 // Icon-over-label tile button (Home screen secondary actions)
 const tileBtn: React.CSSProperties = {
-  flex: 1, background: "rgba(255,255,255,0.045)", border: "none", borderRadius: 16,
+  flex: 1, background: "rgba(255,255,255,0.045)", border: "none", borderRadius: RADIUS.lg,
   padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
   fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: C.ivoryDim, cursor: "pointer",
   WebkitTapHighlightColor: "transparent", touchAction: "manipulation", minHeight: 44,
@@ -79,7 +85,7 @@ const tileBtn: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   background: "rgba(0,0,0,0.3)",
   border: `1px solid ${C.glassBorder}`,
-  borderRadius: 8,
+  borderRadius: RADIUS.sm,
   color: C.ivory,
   padding: "clamp(10px,2vw,14px) clamp(12px,3vw,18px)",
   fontSize: 16, // must be 16px+ to prevent iOS zoom
@@ -104,6 +110,28 @@ function GoldDivider() {
   return <div style={{ width: "100%", maxWidth: 680, height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />;
 }
 
+// Small framed portrait, keeping the card art's native 100:140 aspect ratio
+// (no cropping) - used wherever we'd otherwise reach for an emoji as a stand-in
+// for actual game content (mascot, special-card icons), since emoji render
+// inconsistently across platforms and this app already has hand-drawn art for
+// nearly all of it.
+function CardIcon({ children, size = 28, style }: { children: React.ReactNode; size?: number; style?: React.CSSProperties }) {
+  return (
+    <div style={{
+      width: size, height: size * 1.4, borderRadius: size * 0.16,
+      overflow: "hidden", flexShrink: 0,
+      boxShadow: `0 0 0 1.5px ${C.glassBorder}, 0 4px 14px rgba(0,0,0,0.4)`,
+      ...style,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function WizardMascot({ size = 48, style }: { size?: number; style?: React.CSSProperties }) {
+  return <CardIcon size={size} style={style}><WizardArt index={0} /></CardIcon>;
+}
+
 // ─── Install Banner ───────────────────────────────────────────────────────────
 function InstallBanner() {
   const [prompt, setPrompt] = useState<any>(null);
@@ -119,10 +147,10 @@ function InstallBanner() {
 
   return (
     <div style={{ ...glass(), position: "fixed", bottom: "max(16px, env(safe-area-inset-bottom))", left: "max(16px, env(safe-area-inset-left))", right: "max(16px, env(safe-area-inset-right))", padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, zIndex: 1000 }}>
-      <div style={{ fontSize: 28 }}>🧙</div>
+      <WizardMascot size={30} />
       <div style={{ flex: 1 }}>
         <div style={{ ...cinzel, fontSize: 13, color: C.gold }}>Als App installieren</div>
-        <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Wizard direkt vom Homescreen starten</div>
+        <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Wizzo direkt vom Homescreen starten</div>
       </div>
       <button onClick={() => { prompt?.prompt(); setShow(false); }} style={{ ...goldBtn(), padding: "7px 14px", fontSize: 12 }}>Installieren</button>
       <button onClick={() => setShow(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", padding: 4, display: "flex" }}><IconX size={18} /></button>
@@ -171,8 +199,8 @@ function AuthScreen() {
     <div style={{ ...tableStyle, justifyContent: "center", gap: 24 }} className="fade-in">
       {/* Logo */}
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "clamp(44px,12vw,64px)", marginBottom: 8 }}>🧙</div>
-        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.accent}` }}>WIZARD</div>
+        <WizardMascot size={56} style={{ margin: "0 auto 10px" }} />
+        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.accent}` }}>WIZZO</div>
         <div style={{ fontSize: 12, color: C.ivoryDim, letterSpacing: 3, marginTop: 4 }}>DAS KARTENSPIEL</div>
       </div>
 
@@ -199,7 +227,7 @@ function AuthScreen() {
 
         <button onClick={handleSubmit} disabled={loading} style={{
           ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14,
-          opacity: loading ? 0.6 : 1,
+          opacity: loading ? 0.5 : 1,
         }}>
           {loading ? "…" : mode === "login" ? "✦ Anmelden" : "✦ Registrieren"}
         </button>
@@ -252,20 +280,18 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   }
 
   const statItems = stats ? [
-    { label: "Spiele", value: stats.games_played ?? 0, icon: "🎮" },
-    { label: "Siege", value: stats.games_won ?? 0, icon: "🏆" },
-    { label: "Ø Punkte", value: stats.avg_score ?? 0, icon: "⭐" },
-    { label: "Ø Platz", value: stats.avg_placement ?? "–", icon: "🎯" },
-    { label: "Trefferquote", value: `${stats.bid_accuracy_pct ?? 0}%`, icon: "🎪" },
-    { label: "Stiche geboten", value: stats.total_bid ?? 0, icon: "🃏" },
+    { label: "Spiele", value: stats.games_played ?? 0, icon: <IconCards size={18} /> },
+    { label: "Siege", value: stats.games_won ?? 0, icon: <IconTrophy size={18} /> },
+    { label: "Ø Punkte", value: stats.avg_score ?? 0, icon: <IconStar size={16} /> },
+    { label: "Ø Platz", value: stats.avg_placement ?? "–", icon: <IconTarget size={18} /> },
+    { label: "Trefferquote", value: `${stats.bid_accuracy_pct ?? 0}%`, icon: <IconPercent size={18} /> },
+    { label: "Stiche geboten", value: stats.total_bid ?? 0, icon: <IconLayers size={18} /> },
   ] : [];
 
   return (
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(420px,92vw)" }}>
-        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconSettings size={17} /> Profil</div>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-      </div>
+      <button onClick={onBack} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
+      <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconSettings size={17} /> Profil</div>
 
       {/* Name */}
       <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -297,7 +323,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 
       {/* Stats */}
       <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)" }}>
-        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 12 }}>📊 STATISTIKEN</div>
+        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}><IconBarChart size={13} /> STATISTIKEN</div>
         {!stats ? (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             {Array.from({ length: 6 }).map((_, i) => (
@@ -312,7 +338,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             {statItems.map(({ label, value, icon }) => (
               <div key={label} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center" }}>
-                <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
+                <div style={{ display: "flex", justifyContent: "center", color: C.gold, marginBottom: 4 }}>{icon}</div>
                 <div style={{ ...cinzel, fontSize: 18, fontWeight: 700, color: C.gold }}>{value}</div>
                 <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 2 }}>{label}</div>
               </div>
@@ -621,10 +647,8 @@ function LobbyScreen({ session }: { session: Session }) {
   // ── Rules ──
   if (view === "rules") return (
     <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "min(680px,96vw)" }}>
-        <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
-        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-      </div>
+      <button onClick={() => setView("home")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
+      <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
 
       {/* Basic rules */}
       <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -649,18 +673,19 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>⚡ 30 JAHRE EDITION – SPEZIALKARTEN</div>
         {[
-          ["🐉 Drache", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
-          ["✦ Fee", "Verliert immer – außer wenn der Drache gespielt wurde. Dann gewinnt die Fee."],
-          ["🧹 Hexe", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
-          ["🐺 Werwolf", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
-          ["🧛 Vampir", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
-          ["💥 Bombe", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
-          ["😄 Jongleur (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
-          ["🚂 Wolke (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
-          ["❓ Zauberernarr", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
-        ].map(([title, desc]) => (
-          <div key={title as string} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
-            <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 120 }}>{title}</div>
+          [<DragonArt />, "Drache", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
+          [<FairyArt />, "Fee", "Verliert immer – außer wenn der Drache gespielt wurde. Dann gewinnt die Fee."],
+          [<WitchArt />, "Hexe", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
+          [<WerewolfArt />, "Werwolf", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
+          [<VampireArt />, "Vampir", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
+          [<BombArt />, "Bombe", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
+          [<Rainbow7Art />, "Jongleur (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
+          [<Rainbow9Art />, "Wolke (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
+          [<WizardFoolArt />, "Zauberernarr", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
+        ].map(([icon, title, desc], i) => (
+          <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
+            <CardIcon size={26}>{icon}</CardIcon>
+            <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 90 }}>{title}</div>
             <div style={{ fontSize: 11, color: C.ivoryDim, flex: 1, lineHeight: 1.5 }}>{desc}</div>
           </div>
         ))}
@@ -679,8 +704,8 @@ function LobbyScreen({ session }: { session: Session }) {
     <>
       {!compact && (
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "clamp(36px,10vw,52px)" }}>🧙</div>
-          <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZARD</div>
+          <WizardMascot size={42} style={{ margin: "0 auto 8px" }} />
+          <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZZO</div>
         </div>
       )}
       {showProfile && (
@@ -710,7 +735,7 @@ function LobbyScreen({ session }: { session: Session }) {
             <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Raum: {reconnectRoom}</div>
           </div>
           <button onClick={reconnect} style={{ ...goldBtn(), padding: "8px 14px", fontSize: 12 }}>Zurück</button>
-          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={16} /></button>
+          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "min(320px, 92vw)" }}>
@@ -753,7 +778,7 @@ function LobbyScreen({ session }: { session: Session }) {
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setEdition("classic")}
               style={{ ...goldBtn(edition === "classic"), flex: 1, padding: "10px 0", fontSize: 12, flexDirection: "column", display: "flex", alignItems: "center", gap: 2 }}>
-              <span style={{ fontSize: 16 }}>🧙</span>
+              <CardIcon size={16}><WizardArt index={0} /></CardIcon>
               <span>Classic</span>
               <span style={{ fontSize: 9, opacity: 0.7 }}>60 Karten</span>
             </button>
@@ -1224,8 +1249,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
   }, [room?.pending_rainbow9, effectiveMyIdxEarly, rainbow9Adjusted]);
 
   if (!room) return (
-    <div style={{ ...tableStyle, justifyContent: "center" }}>
-      <div style={{ ...cinzel, fontSize: 18, color: C.gold }}>Lade…</div>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 10 }}>
+      <WizardMascot size={34} style={{ animation: "pulse 1.5s infinite" }} />
+      <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, animation: "pulse 1.5s infinite" }}>Lade…</div>
     </div>
   );
 
@@ -1256,11 +1282,14 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
           style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
           <IconArrowLeft size={13} /> Zurück
         </button>
-        <div style={{ ...cinzel, fontSize: 24, color: C.gold }}>🧙 Warteraum</div>
+        <div style={{ ...cinzel, fontSize: 24, color: C.gold, display: "flex", alignItems: "center", gap: 10 }}>
+          <WizardMascot size={20} />
+          Warteraum
+        </div>
         <div style={{ ...glass({ padding: "8px 24px" }), ...cinzel, fontSize: 20, letterSpacing: 6, color: C.goldLight }}>{room.code}</div>
         <div style={{ fontSize: 11, color: C.ivoryDim }}>Code mit Freunden teilen</div>
-        <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim }}>
-          {room?.edition === "anniversary" ? "⚡ 30 Jahre Edition" : "🧙 Classic Edition"}
+        <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim, display: "flex", alignItems: "center", gap: 6 }}>
+          {room?.edition === "anniversary" ? <>⚡ 30 Jahre Edition</> : <><CardIcon size={11}><WizardArt index={0} /></CardIcon> Classic Edition</>}
         </div>
 
         {!showInvite ? (
@@ -1272,7 +1301,13 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
               <button onClick={() => setShowInvite(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
             </div>
             {inviteFriends === null ? (
-              <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Lade…</div>
+              [0, 1].map(i => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div className="skeleton" style={{ width: 7, height: 7, borderRadius: "50%" }} />
+                  <div className="skeleton" style={{ width: `${80 - i * 16}px`, height: 13, borderRadius: 4, flex: "none" }} />
+                  <div className="skeleton" style={{ width: 62, height: 24, borderRadius: 16, marginLeft: "auto" }} />
+                </div>
+              ))
             ) : inviteFriends.length === 0 ? (
               <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Noch keine Freunde hinzugefügt</div>
             ) : inviteFriends.map(f => (
@@ -1735,7 +1770,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
         background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%)",
       }}>
         <div style={{ ...cinzel, fontSize: "clamp(10px,1.8vmin,18px)", color: "rgba(255,255,255,0.65)" }}>RUNDE {room.round}/{room.max_rounds}</div>
-        <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vmin,22px)", color: C.gold, letterSpacing: "clamp(2px,0.5vmin,6px)" }}>🧙 WIZARD</div>
+        <div style={{ ...cinzel, fontSize: "clamp(13px,2.5vmin,22px)", color: C.gold, letterSpacing: "clamp(2px,0.5vmin,6px)", display: "flex", alignItems: "center", gap: 6 }}>
+          <CardIcon size={14}><WizardArt index={0} /></CardIcon> WIZZO
+        </div>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
           <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
           <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", position: "relative" as const, display: "flex" }} title="Chat">
@@ -2309,8 +2346,8 @@ export default function App() {
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: C.bgDark, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-      <div style={{ ...cinzel, fontSize: 48, color: C.gold }}>🧙</div>
-      <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, letterSpacing: 3 }}>WIZARD</div>
+      <WizardMascot size={50} />
+      <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, letterSpacing: 3 }}>WIZZO</div>
     </div>
   );
 
