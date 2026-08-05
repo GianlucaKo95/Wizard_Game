@@ -643,13 +643,13 @@ function LobbyScreen({ session }: { session: Session }) {
 
   // Check for reconnectable room on mount
   useEffect(() => {
-    const savedRoom = sessionStorage.getItem("wizard_room");
+    const savedRoom = localStorage.getItem("wizard_room");
     if (savedRoom) {
       const { roomId, code, plannedTotal } = JSON.parse(savedRoom);
       supabase.from("rooms").select("phase").eq("id", roomId).single()
         .then(({ data }) => {
           if (data && data.phase !== "gameEnd") { setReconnectRoom(code); if (plannedTotal) setSavedPlannedTotal(plannedTotal); }
-          else sessionStorage.removeItem("wizard_room");
+          else localStorage.removeItem("wizard_room");
         });
     }
   }, []);
@@ -713,7 +713,7 @@ function LobbyScreen({ session }: { session: Session }) {
     setLoading(true); setError("");
     const res = await callGameAction("", "createRoom", { username, edition });
     if (!res?.roomId) { setError(res?.error ?? "Fehler"); setLoading(false); return; }
-    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code, plannedTotal: totalPlayers }));
+    localStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code, plannedTotal: totalPlayers }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -723,7 +723,7 @@ function LobbyScreen({ session }: { session: Session }) {
     setLoading(true); setError("");
     const res = await callGameAction("", "joinRoom", { username, code });
     if (!res?.roomId) { setError(res?.error ?? "Raum nicht gefunden"); setLoading(false); return; }
-    sessionStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code }));
+    localStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -801,7 +801,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
+  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { localStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -841,7 +841,7 @@ function LobbyScreen({ session }: { session: Session }) {
             <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Raum: {reconnectRoom}</div>
           </div>
           <button onClick={reconnect} style={{ ...goldBtn(), padding: "8px 14px", fontSize: 12 }}>Zurück</button>
-          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
+          <button onClick={() => { localStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "min(320px, 92vw)" }}>
