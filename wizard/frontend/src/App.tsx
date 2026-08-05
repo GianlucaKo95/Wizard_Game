@@ -638,40 +638,24 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
 function LobbyScreen({ session }: { session: Session }) {
   const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile">("home");
   const [showFriendsPanel, setShowFriendsPanel] = useState(false);
-  const [reconnectRoom, setReconnectRoom] = useState<string|null>(null);
-  const [savedPlannedTotal, setSavedPlannedTotal] = useState<number | null>(null);
+  const [reconnectRoom, setReconnectRoom] = useState<{ roomId: string; code: string; phase: string; plannedTotal: number | null } | null>(null);
 
-  // Check for reconnectable room - on mount, and again whenever another tab
-  // touches "wizard_room" (localStorage is shared across tabs of the same
-  // origin, so without this a stale tab keeps showing whatever room *it*
-  // last wrote, not the one most recently created/joined anywhere).
+  // Reconnect state now lives on the backend (room_players membership),
+  // not in localStorage - this is authoritative for any tab/device the
+  // player opens, and the server's inactivity reaper (004_room_cleanup.sql)
+  // is what bounds how long a stale membership can hang around.
   const checkReconnect = useCallback(() => {
-    const savedRoom = localStorage.getItem("wizard_room");
-    if (!savedRoom) { setReconnectRoom(null); return; }
-    const { roomId, code, plannedTotal, savedAt } = JSON.parse(savedRoom);
-    // Stay a hair under the server's 180-minute cleanup window (see
-    // 004_room_cleanup.sql) so an obviously-expired entry is discarded
-    // locally instead of wasting a round trip on a room that's already gone.
-    if (savedAt && (Date.now() - savedAt) / 60000 > 175) {
-      localStorage.removeItem("wizard_room");
-      setReconnectRoom(null);
-      return;
-    }
-    supabase.from("rooms").select("phase").eq("id", roomId).single()
+    supabase.from("room_players")
+      .select("room_id, rooms:room_id(id, code, phase, planned_total, created_at)")
+      .eq("user_id", session.user.id)
+      .order("created_at", { foreignTable: "rooms", ascending: false })
       .then(({ data }) => {
-        if (data && data.phase !== "gameEnd") { setReconnectRoom(code); if (plannedTotal) setSavedPlannedTotal(plannedTotal); }
-        else { localStorage.removeItem("wizard_room"); setReconnectRoom(null); }
+        const active = (data ?? []).map((r: any) => r.rooms).find((r: any) => r && r.phase !== "gameEnd");
+        setReconnectRoom(active ? { roomId: active.id, code: active.code, phase: active.phase, plannedTotal: active.planned_total } : null);
       });
-  }, []);
+  }, [session.user.id]);
 
-  useEffect(() => {
-    checkReconnect();
-    // Fires in every OTHER tab when one tab changes localStorage - never in
-    // the tab that made the change itself.
-    const onStorage = (e: StorageEvent) => { if (e.key === "wizard_room" || e.key === null) checkReconnect(); };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, [checkReconnect]);
+  useEffect(() => { checkReconnect(); }, [checkReconnect]);
   const [codeInput, setCodeInput] = useState("");
   const [totalPlayers, setTotalPlayers] = useState(3);
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -730,9 +714,8 @@ function LobbyScreen({ session }: { session: Session }) {
 
   async function createRoom() {
     setLoading(true); setError("");
-    const res = await callGameAction("", "createRoom", { username, edition });
+    const res = await callGameAction("", "createRoom", { username, edition, totalPlayers });
     if (!res?.roomId) { setError(res?.error ?? "Fehler"); setLoading(false); return; }
-    localStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code: res.code, plannedTotal: totalPlayers, savedAt: Date.now() }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -742,7 +725,6 @@ function LobbyScreen({ session }: { session: Session }) {
     setLoading(true); setError("");
     const res = await callGameAction("", "joinRoom", { username, code });
     if (!res?.roomId) { setError(res?.error ?? "Raum nicht gefunden"); setLoading(false); return; }
-    localStorage.setItem("wizard_room", JSON.stringify({ roomId: res.roomId, code, savedAt: Date.now() }));
     setRoomId(res.roomId);
     setLoading(false);
   }
@@ -750,8 +732,8 @@ function LobbyScreen({ session }: { session: Session }) {
   // Reconnect function
   async function reconnect() {
     if (!reconnectRoom) return;
-    setCodeInput(reconnectRoom);
-    await joinRoom();
+    setCodeInput(reconnectRoom.code);
+    await joinRoom(reconnectRoom.code);
   }
 
   async function respondToInvite(accept: boolean) {
@@ -820,7 +802,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { localStorage.removeItem("wizard_room"); setRoomId(null); }} />;
+  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={reconnectRoom?.plannedTotal ?? totalPlayers} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { setRoomId(null); checkReconnect(); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -857,10 +839,15 @@ function LobbyScreen({ session }: { session: Session }) {
         <div style={{ ...glass({ padding: "12px 16px" }), width: "min(320px,92vw)", display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={{ ...cinzel, fontSize: 12, color: C.gold }}>Laufendes Spiel gefunden</div>
-            <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Raum: {reconnectRoom}</div>
+            <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Raum: {reconnectRoom.code}</div>
           </div>
           <button onClick={reconnect} style={{ ...goldBtn(), padding: "8px 14px", fontSize: 12 }}>Zurück</button>
-          <button onClick={() => { localStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
+          <button onClick={() => {
+            // Only actually leave the room server-side pre-start - mid-game,
+            // dismissing the banner is just hiding it, the seat stays reserved.
+            if (reconnectRoom.phase === "lobby") callGameAction(reconnectRoom.roomId, "leaveRoom", {});
+            setReconnectRoom(null);
+          }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "min(320px, 92vw)" }}>
@@ -1417,7 +1404,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
     const effectiveAiCount = Math.max(0, plannedTotal - players.length);
     return (
       <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
-        <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) onLeave(); }}
+        <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) { callGameAction(roomId, "leaveRoom", {}); onLeave(); } }}
           style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
           <IconArrowLeft size={13} /> Zurück
         </button>
