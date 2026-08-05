@@ -4,7 +4,7 @@ import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
 import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory } from "./Icons";
-import { WizardArt } from "./CardArt";
+import { WizardArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -105,10 +105,12 @@ function GoldDivider() {
   return <div style={{ width: "100%", maxWidth: 680, height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />;
 }
 
-// Reuses the same hand-drawn portrait used for the Wizard playing card as the
-// app's mascot/logo, instead of the 🧙 emoji (renders inconsistently across
-// platforms). Keeps the art's native 100:140 aspect ratio - no cropping.
-function WizardMascot({ size = 48, style }: { size?: number; style?: React.CSSProperties }) {
+// Small framed portrait, keeping the card art's native 100:140 aspect ratio
+// (no cropping) - used wherever we'd otherwise reach for an emoji as a stand-in
+// for actual game content (mascot, special-card icons), since emoji render
+// inconsistently across platforms and this app already has hand-drawn art for
+// nearly all of it.
+function CardIcon({ children, size = 28, style }: { children: React.ReactNode; size?: number; style?: React.CSSProperties }) {
   return (
     <div style={{
       width: size, height: size * 1.4, borderRadius: size * 0.16,
@@ -116,9 +118,13 @@ function WizardMascot({ size = 48, style }: { size?: number; style?: React.CSSPr
       boxShadow: `0 0 0 1.5px ${C.glassBorder}, 0 4px 14px rgba(0,0,0,0.4)`,
       ...style,
     }}>
-      <WizardArt index={0} />
+      {children}
     </div>
   );
+}
+
+function WizardMascot({ size = 48, style }: { size?: number; style?: React.CSSProperties }) {
+  return <CardIcon size={size} style={style}><WizardArt index={0} /></CardIcon>;
 }
 
 // ─── Install Banner ───────────────────────────────────────────────────────────
@@ -662,18 +668,19 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>⚡ 30 JAHRE EDITION – SPEZIALKARTEN</div>
         {[
-          ["🐉 Drache", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
-          ["✦ Fee", "Verliert immer – außer wenn der Drache gespielt wurde. Dann gewinnt die Fee."],
-          ["🧹 Hexe", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
-          ["🐺 Werwolf", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
-          ["🧛 Vampir", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
-          ["💥 Bombe", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
-          ["😄 Jongleur (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
-          ["🚂 Wolke (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
-          ["❓ Zauberernarr", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
-        ].map(([title, desc]) => (
-          <div key={title as string} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
-            <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 120 }}>{title}</div>
+          [<DragonArt />, "Drache", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
+          [<FairyArt />, "Fee", "Verliert immer – außer wenn der Drache gespielt wurde. Dann gewinnt die Fee."],
+          [<WitchArt />, "Hexe", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
+          [<WerewolfArt />, "Werwolf", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
+          [<VampireArt />, "Vampir", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
+          [<BombArt />, "Bombe", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
+          [<Rainbow7Art />, "Jongleur (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
+          [<Rainbow9Art />, "Wolke (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
+          [<WizardFoolArt />, "Zauberernarr", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
+        ].map(([icon, title, desc], i) => (
+          <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
+            <CardIcon size={26}>{icon}</CardIcon>
+            <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 90 }}>{title}</div>
             <div style={{ fontSize: 11, color: C.ivoryDim, flex: 1, lineHeight: 1.5 }}>{desc}</div>
           </div>
         ))}
