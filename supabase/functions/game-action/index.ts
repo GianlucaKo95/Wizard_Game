@@ -876,8 +876,9 @@ serve(async (req) => {
       case "createRoom": {
         const code = Array.from({ length: 5 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
         const uname = (body.username ?? "Spieler").toString().slice(0, 24);
+        const plannedTotal = Number(body.totalPlayers);
         const { data: newRoom, error: crErr } = await supabase.from("rooms")
-          .insert({ code, host_id: user.id, phase: "lobby", round: 0, max_rounds: 0, dealer: 0, current_player: 0, log: [], edition: body.edition === "anniversary" ? "anniversary" : "classic" })
+          .insert({ code, host_id: user.id, phase: "lobby", round: 0, max_rounds: 0, dealer: 0, current_player: 0, log: [], edition: body.edition === "anniversary" ? "anniversary" : "classic", planned_total: Number.isInteger(plannedTotal) ? plannedTotal : null })
           .select("id, code").single();
         if (crErr || !newRoom) return json({ error: "Raum konnte nicht erstellt werden" }, 500);
         await upd(supabase.from("room_players").insert({ room_id: newRoom.id, user_id: user.id, player_index: 0, is_ai: false, ai_name: uname, hand: [], score: 0, tricks_won: 0, connected: true }), "createRoom.player");
@@ -914,6 +915,39 @@ serve(async (req) => {
 
   switch (action) {
 
+    case "leaveRoom": {
+      // Only meaningful pre-start: mid-game, player_index positions are load
+      // -bearing for hands/dealer rotation/etc, so we don't remove a row
+      // there - the player just navigates away client-side and can always
+      // rejoin (joinRoom already lets an existing member back in at any
+      // phase). A lobby they've actually walked away from should stop
+      // showing up as "reconnect" though, so this cleans that case up
+      // immediately instead of waiting on the inactivity reaper.
+      if (room.phase !== "lobby") return json({ error: "Laufendes Spiel kann nicht so verlassen werden" }, 400);
+      if (callerIdx < 0) return json({ error: "Nicht in diesem Raum" }, 400);
+      await upd(supabase.from("room_players").delete().eq("room_id", roomId).eq("user_id", user.id), "leaveRoom.player");
+      const { data: remaining } = await supabase.from("room_players").select("id").eq("room_id", roomId);
+      if (!remaining || remaining.length === 0) {
+        await upd(supabase.from("rooms").delete().eq("id", roomId), "leaveRoom.emptyRoom");
+      }
+      return json({ ok: true });
+    }
+
+    case "syncPresence": {
+      // Reports which human players currently have this room open, driven by
+      // the client's realtime presence channel. `room_players.connected` is
+      // the persisted mirror of that - Postgres has no visibility into the
+      // Realtime server's in-memory presence state on its own, so this is
+      // what lets cleanup_stale_rooms() (006_room_presence_cleanup.sql)
+      // tell "everyone left mid-game" apart from "someone's still thinking".
+      if (callerIdx < 0) return json({ error: "Nicht in diesem Raum" }, 400);
+      const present = new Set((Array.isArray(body.presentUserIds) ? body.presentUserIds : []).map(String));
+      const humans = players.filter(p => !p.is_ai);
+      await Promise.all(humans
+        .filter(p => p.connected !== present.has(p.user_id))
+        .map(p => upd(supabase.from("room_players").update({ connected: present.has(p.user_id) }).eq("id", p.id), "syncPresence.player")));
+      return json({ ok: true });
+    }
 
     case "clearTrick": return await handleClearTrick(supabase, roomId, room);
 
