@@ -325,7 +325,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 }
 
 // ─── Friends Screen ───────────────────────────────────────────────────────────
-function FriendsScreen({ session, onBack }: { session: Session; onBack: () => void }) {
+function FriendsScreen({ session, onBack, onlineUserIds }: { session: Session; onBack: () => void; onlineUserIds: Set<string> }) {
   const uid = session.user.id;
   const [rows, setRows] = useState<any[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -454,13 +454,21 @@ function FriendsScreen({ session, onBack }: { session: Session; onBack: () => vo
       <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>MEINE FREUNDE ({accepted.length})</div>
         {rows === null ? (
-          <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center", padding: 8 }}>Lade…</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
+                <div className="skeleton" style={{ width: 7, height: 7, borderRadius: "50%" }} />
+                <div className="skeleton" style={{ width: `${90 - i * 18}px`, height: 13, borderRadius: 4, flex: "none" }} />
+              </div>
+            ))}
+          </div>
         ) : accepted.length === 0 ? (
           <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center", padding: 8 }}>Noch keine Freunde – oben nach Usernamen suchen</div>
         ) : accepted.map((f: any) => {
           const otherId = f.requester_id === uid ? f.addressee_id : f.requester_id;
           return (
             <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.10)" }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: onlineUserIds.has(otherId) ? C.success : "rgba(255,255,255,0.15)", flexShrink: 0 }} title={onlineUserIds.has(otherId) ? "Online" : "Offline"} />
               <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[otherId] ?? "…"}</div>
               <button onClick={() => remove(f.id)} disabled={busyId === f.id}
                 style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 11 }}>Entfernen</button>
@@ -539,6 +547,23 @@ function LobbyScreen({ session }: { session: Session }) {
       .subscribe();
 
     return () => { supabase.removeChannel(ch); };
+  }, [session.user.id]);
+
+  // Who's currently online, for the friends list / invite picker. Tracked
+  // here (not in FriendsScreen/GameRoom) because LobbyScreen stays mounted
+  // for the whole session - joining a room only swaps what it renders.
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const uid = session.user.id;
+    const presenceCh = supabase.channel("online-users", { config: { presence: { key: uid } } });
+    presenceCh
+      .on("presence", { event: "sync" }, () => {
+        setOnlineUserIds(new Set(Object.keys(presenceCh.presenceState())));
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") presenceCh.track({ at: new Date().toISOString() });
+      });
+    return () => { supabase.removeChannel(presenceCh); };
   }, [session.user.id]);
 
   async function createRoom() {
@@ -634,9 +659,9 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (view === "friends") return <FriendsScreen session={session} onBack={() => setView("home")} />;
+  if (view === "friends") return <FriendsScreen session={session} onBack={() => setView("home")} onlineUserIds={onlineUserIds} />;
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
+  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={savedPlannedTotal ?? totalPlayers} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { sessionStorage.removeItem("wizard_room"); setRoomId(null); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -851,7 +876,7 @@ async function loadPlayersSecure(roomId: string, myUserId: string) {
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
-function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId: string; session: Session; plannedTotal: number; edition?: string; onLeave: () => void }) {
+function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLeave }: { roomId: string; session: Session; plannedTotal: number; edition?: string; onlineUserIds: Set<string>; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
   const aiTriggerLastKey = useRef<string>("");
   const clearTrickPending = useRef(false);
@@ -1242,6 +1267,7 @@ function GameRoom({ roomId, session, plannedTotal, edition, onLeave }: { roomId:
               <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Noch keine Freunde hinzugefügt</div>
             ) : inviteFriends.map(f => (
               <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: onlineUserIds.has(f.id) ? C.success : "rgba(255,255,255,0.15)", flexShrink: 0 }} title={onlineUserIds.has(f.id) ? "Online" : "Offline"} />
                 <div style={{ fontSize: 13, color: C.ivory, flex: 1 }}>{f.username}</div>
                 <button onClick={() => inviteFriend(f.id)} disabled={invitedIds.has(f.id) || inviteSending === f.id}
                   style={{ ...goldBtn(!invitedIds.has(f.id)), padding: "5px 12px", fontSize: 11, opacity: invitedIds.has(f.id) ? 0.5 : 1 }}>
