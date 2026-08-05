@@ -199,7 +199,7 @@ function AuthScreen() {
 
         <button onClick={handleSubmit} disabled={loading} style={{
           ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14,
-          opacity: loading ? 0.6 : 1,
+          opacity: loading ? 0.5 : 1,
         }}>
           {loading ? "…" : mode === "login" ? "✦ Anmelden" : "✦ Registrieren"}
         </button>
@@ -706,7 +706,7 @@ function LobbyScreen({ session }: { session: Session }) {
             <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Raum: {reconnectRoom}</div>
           </div>
           <button onClick={reconnect} style={{ ...goldBtn(), padding: "8px 14px", fontSize: 12 }}>Zurück</button>
-          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={16} /></button>
+          <button onClick={() => { sessionStorage.removeItem("wizard_room"); setReconnectRoom(null); }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "min(320px, 92vw)" }}>
@@ -1220,8 +1220,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
   }, [room?.pending_rainbow9, effectiveMyIdxEarly, rainbow9Adjusted]);
 
   if (!room) return (
-    <div style={{ ...tableStyle, justifyContent: "center" }}>
-      <div style={{ ...cinzel, fontSize: 18, color: C.gold }}>Lade…</div>
+    <div style={{ ...tableStyle, justifyContent: "center", gap: 10 }}>
+      <div style={{ fontSize: 36, animation: "pulse 1.5s infinite" }}>🧙</div>
+      <div style={{ ...cinzel, fontSize: 14, color: C.ivoryDim, animation: "pulse 1.5s infinite" }}>Lade…</div>
     </div>
   );
 
@@ -1268,7 +1269,13 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
               <button onClick={() => setShowInvite(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
             </div>
             {inviteFriends === null ? (
-              <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Lade…</div>
+              [0, 1].map(i => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div className="skeleton" style={{ width: 7, height: 7, borderRadius: "50%" }} />
+                  <div className="skeleton" style={{ width: `${80 - i * 16}px`, height: 13, borderRadius: 4, flex: "none" }} />
+                  <div className="skeleton" style={{ width: 62, height: 24, borderRadius: 16, marginLeft: "auto" }} />
+                </div>
+              ))
             ) : inviteFriends.length === 0 ? (
               <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Noch keine Freunde hinzugefügt</div>
             ) : inviteFriends.map(f => (

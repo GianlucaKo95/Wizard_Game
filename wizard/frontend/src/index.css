@@ -20,12 +20,6 @@
   --error: #CF4444;
   --success: #2D9E5F;
 
-  /* Fluid spacing */
-  --space-xs: clamp(4px, 1vw, 8px);
-  --space-sm: clamp(8px, 2vw, 12px);
-  --space-md: clamp(12px, 3vw, 20px);
-  --space-lg: clamp(16px, 4vw, 28px);
-
   /* Fluid font sizes */
   --text-xs: clamp(9px, 2vw, 11px);
   --text-sm: clamp(11px, 2.5vw, 13px);
@@ -221,14 +215,6 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ─── Media queries ──────────────────────────────────────────────────────────── */
-@media (max-width: 380px) {
-  /* Very small phones (SE etc.) */
-  :root {
-    --space-md: 8px;
-    --space-lg: 12px;
-  }
-}
-
 @media (min-width: 768px) {
   /* Tablet / desktop */
   .hand-scroll {
