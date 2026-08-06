@@ -662,6 +662,9 @@ function LobbyScreen({ session }: { session: Session }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const username = session.user.user_metadata?.username ?? "Spieler";
+  // Lebt hier (nicht in GameRoom) und übersteht darum Phasenwechsel innerhalb
+  // eines Raums - siehe Kommentar bei useVoiceChat.
+  const voice = useVoiceChat(roomId, session);
 
   // Pending friend requests (badge) + incoming room invites (popup): initial
   // fetch, then live via realtime so they arrive even while sitting idle.
@@ -801,12 +804,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (roomId) return (
-    <>
-      <GameRoom roomId={roomId} session={session} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { setRoomId(null); checkReconnect(); }} />
-      <VoiceChat roomId={roomId} session={session} />
-    </>
-  );
+  if (roomId) return <GameRoom roomId={roomId} session={session} edition={edition} onlineUserIds={onlineUserIds} voice={voice} onLeave={() => { setRoomId(null); checkReconnect(); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -1016,19 +1014,24 @@ async function loadPlayersSecure(roomId: string, myUserId: string) {
 // Opt-in P2P-Mesh per WebRTC zwischen den Mitspielern eines Raums. Signaling
 // läuft über einen eigenen Supabase-Realtime-Broadcast-Channel (kein eigener
 // Signaling-Server nötig), ICE-Server (STUN + eigener TURN) kommen von der
-// "getIceServers"-Aktion der Edge Function. Rendert als Geschwister von
-// <GameRoom>, nicht darin verschachtelt - GameRoom hat pro Phase komplett
-// unterschiedliche JSX-Bäume (separate return-Statements), ein hier
-// verschachtelter Verbindungs-State würde bei jedem Phasenwechsel (z.B.
-// Warteraum → Spiel gestartet) unmounten und die Verbindung verlieren.
-function VoiceChat({ roomId, session }: { roomId: string; session: Session }) {
+// "getIceServers"-Aktion der Edge Function.
+//
+// Als Hook statt als eigene Komponente, aufgerufen in LobbyScreen (nicht in
+// GameRoom) - GameRoom hat pro Spielphase komplett unterschiedliche JSX-Bäume
+// (separate return-Statements), ein dort verschachtelter Verbindungs-State
+// würde bei jedem Phasenwechsel (z.B. Warteraum → Spiel gestartet) unmounten
+// und die Verbindung verlieren. LobbyScreen bleibt dagegen für die gesamte
+// Raum-Sitzung gemountet. GameRoom bekommt das Ergebnis als Prop und
+// entscheidet selbst, wo und wie die Steuerung angezeigt wird (Warteraum:
+// große Karte, laufendes Spiel: kleines Icon im Header statt einem Button,
+// der sonst die Handkarten verdecken würde).
+function useVoiceChat(roomId: string | null, session: Session) {
   const [enabled, setEnabled] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState("");
   const [participantIds, setParticipantIds] = useState<Set<string>>(new Set());
   const [speakingIds, setSpeakingIds] = useState<Set<string>>(new Set());
-  const [names, setNames] = useState<Record<string, string>>({});
 
   const localStreamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -1036,16 +1039,6 @@ function VoiceChat({ roomId, session }: { roomId: string; session: Session }) {
   const channelRef = useRef<any>(null);
   const iceServersRef = useRef<RTCIceServer[]>([{ urls: "stun:stun.l.google.com:19302" }]);
   const rafsRef = useRef<Map<string, number>>(new Map());
-
-  // Für hübschere Labels als rohe User-IDs - unabhängig von GameRoom geladen,
-  // da VoiceChat als Geschwister und nicht als Kind rendert.
-  useEffect(() => {
-    supabase.from("room_players_view").select("user_id, ai_name").eq("room_id", roomId).eq("is_ai", false)
-      .then(({ data }) => {
-        if (!data) return;
-        setNames(Object.fromEntries(data.map((p: any) => [p.user_id, p.ai_name])));
-      });
-  }, [roomId]);
 
   function stopSpeakingDetection(id: string) {
     const raf = rafsRef.current.get(id);
@@ -1146,16 +1139,18 @@ function VoiceChat({ roomId, session }: { roomId: string; session: Session }) {
   }
 
   async function enableVoice() {
+    if (!roomId) return;
+    const rid = roomId;
     setError(""); setConnecting(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
       startSpeakingDetection(stream, session.user.id);
 
-      const iceRes = await callGameAction(roomId, "getIceServers", {});
+      const iceRes = await callGameAction(rid, "getIceServers", {});
       if (iceRes?.iceServers) iceServersRef.current = iceRes.iceServers;
 
-      const ch = supabase.channel(`voice:${roomId}`, { config: { broadcast: { self: false } } });
+      const ch = supabase.channel(`voice:${rid}`, { config: { broadcast: { self: false } } });
       channelRef.current = ch;
       ch.on("broadcast", { event: "signal" }, ({ payload }: any) => handleSignal(payload));
       ch.subscribe((status: string) => {
@@ -1197,39 +1192,11 @@ function VoiceChat({ roomId, session }: { roomId: string; session: Session }) {
     setMuted(next);
   }
 
-  const nameFor = (id: string) => id === session.user.id ? "Du" : (names[id] ?? "Spieler");
-
-  return (
-    <div style={{ position: "fixed", bottom: "max(16px, env(safe-area-inset-bottom))", left: "max(16px, env(safe-area-inset-left))", zIndex: 150, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
-      {enabled && participantIds.size > 0 && (
-        <div style={{ ...glass({ padding: "8px 12px" }), display: "flex", flexDirection: "column", gap: 4 }}>
-          {[session.user.id, ...participantIds].map(id => (
-            <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: speakingIds.has(id) ? C.success : C.ivoryDim }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: speakingIds.has(id) ? C.success : "rgba(255,255,255,0.25)" }} />
-              {nameFor(id)}
-            </div>
-          ))}
-        </div>
-      )}
-      {!enabled ? (
-        <button onClick={enableVoice} disabled={connecting} style={{ ...goldBtn(false), padding: "8px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, opacity: connecting ? 0.5 : 1 }}>
-          <IconMic size={14} /> {connecting ? "Verbinde…" : "Sprachchat aktivieren"}
-        </button>
-      ) : (
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={toggleMute} style={{ ...goldBtn(!muted), padding: "8px 12px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            {muted ? <IconMicOff size={14} /> : <IconMic size={14} />} {muted ? "Stumm" : "Live"}
-          </button>
-          <button onClick={disableVoice} style={{ ...glass({ padding: "8px 10px" }), border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", alignItems: "center" }} title="Sprachchat verlassen"><IconX size={15} /></button>
-        </div>
-      )}
-      {error && <div style={{ ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080" }}>{error}</div>}
-    </div>
-  );
+  return { enabled, connecting, muted, error, participantIds, speakingIds, enableVoice, disableVoice, toggleMute };
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
-function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId: string; session: Session; edition?: string; onlineUserIds: Set<string>; onLeave: () => void }) {
+function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: { roomId: string; session: Session; edition?: string; onlineUserIds: Set<string>; voice: ReturnType<typeof useVoiceChat>; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
   const aiTriggerLastKey = useRef<string>("");
   const clearTrickPending = useRef(false);
@@ -1629,6 +1596,38 @@ function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId
   const forbidden = forbiddenDealerBid(players.map((p: any) => p.bid), room.dealer, room.round);
   const dealerForbidden = room.dealer === effectiveMyIdx ? forbidden : null;
 
+  const voiceNameFor = (id: string) => id === session.user.id ? "Du" : (players.find((p: any) => p.user_id === id)?.ai_name ?? "Spieler");
+
+  // Für Warteraum/Rundenende - hier ist genug Platz für Text+Teilnehmerliste.
+  // Im laufenden Spiel (Header) gibt's stattdessen nur ein kleines Icon, siehe unten.
+  const voicePanel = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+      {voice.enabled && voice.participantIds.size > 0 && (
+        <div style={{ ...glass({ padding: "8px 12px" }), display: "flex", flexDirection: "column", gap: 4 }}>
+          {[session.user.id, ...voice.participantIds].map((id: string) => (
+            <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: voice.speakingIds.has(id) ? C.success : C.ivoryDim }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: voice.speakingIds.has(id) ? C.success : "rgba(255,255,255,0.25)" }} />
+              {voiceNameFor(id)}
+            </div>
+          ))}
+        </div>
+      )}
+      {!voice.enabled ? (
+        <button onClick={voice.enableVoice} disabled={voice.connecting} style={{ ...goldBtn(false), padding: "8px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, opacity: voice.connecting ? 0.5 : 1 }}>
+          <IconMic size={14} /> {voice.connecting ? "Verbinde…" : "Sprachchat aktivieren"}
+        </button>
+      ) : (
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={voice.toggleMute} style={{ ...goldBtn(!voice.muted), padding: "8px 12px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {voice.muted ? <IconMicOff size={14} /> : <IconMic size={14} />} {voice.muted ? "Stumm" : "Live"}
+          </button>
+          <button onClick={voice.disableVoice} style={{ ...glass({ padding: "8px 10px" }), border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", alignItems: "center" }} title="Sprachchat verlassen"><IconX size={15} /></button>
+        </div>
+      )}
+      {voice.error && <div style={{ ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080" }}>{voice.error}</div>}
+    </div>
+  );
+
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
     // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
@@ -1725,6 +1724,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId
           </button>
         ) : <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf den Host…</div>}
         {error && <div style={{ color: "#FF8080", fontSize: 12 }}>{error}</div>}
+        {voicePanel}
       </div>
     );
   }
@@ -1813,6 +1813,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId
           {!isHost && <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf Host…</div>}
           <button onClick={() => window.location.reload()} style={{ ...goldBtn(false), padding: "12px 20px", fontSize: 12 }}>Raum verlassen</button>
         </div>
+        {voicePanel}
       </div>
     );
   }
@@ -2144,6 +2145,14 @@ function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId
           <CardIcon size={14}><WizardArt index={0} /></CardIcon> WIZZO
         </div>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+          <button
+            onClick={voice.enabled ? voice.toggleMute : voice.enableVoice}
+            disabled={voice.connecting}
+            style={{ ...goldBtn(voice.enabled && !voice.muted), padding: "4px 7px", display: "flex", opacity: voice.connecting ? 0.5 : 1 }}
+            title={!voice.enabled ? "Sprachchat aktivieren" : voice.muted ? "Stummschaltung aufheben" : "Stummschalten"}
+          >
+            {voice.enabled && voice.muted ? <IconMicOff size={15} /> : <IconMic size={15} />}
+          </button>
           <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
           <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", position: "relative" as const, display: "flex" }} title="Chat">
             <IconMessageCircle size={15} />
