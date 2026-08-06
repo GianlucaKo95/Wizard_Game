@@ -956,6 +956,32 @@ serve(async (req) => {
       return json({ ok: true });
     }
 
+    case "getIceServers": {
+      // Mints short-lived TURN credentials for the self-hosted coturn add-on
+      // (the "TURN REST API" convention coturn's --use-auth-secret expects:
+      // username = "<expiry-unix-ts>:<anything>", password = base64(HMAC-SHA1
+      // (sharedSecret, username))). The long-lived secret never leaves the
+      // server - only these expiring username/password pairs do.
+      if (callerIdx < 0) return json({ error: "Nicht in diesem Raum" }, 400);
+      const turnSecret = Deno.env.get("TURN_SHARED_SECRET");
+      const turnHost = Deno.env.get("TURN_HOST");
+      const iceServers: any[] = [{ urls: "stun:stun.l.google.com:19302" }];
+      if (turnSecret && turnHost) {
+        const ttlSeconds = 3600;
+        const username = `${Math.floor(Date.now() / 1000) + ttlSeconds}:${user.id}`;
+        const key = await crypto.subtle.importKey(
+          "raw", new TextEncoder().encode(turnSecret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+        );
+        const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(username));
+        const credential = btoa(String.fromCharCode(...new Uint8Array(sig)));
+        iceServers.push({
+          urls: [`turn:${turnHost}:3478?transport=udp`, `turn:${turnHost}:3478?transport=tcp`],
+          username, credential,
+        });
+      }
+      return json({ iceServers });
+    }
+
     case "clearTrick": return await handleClearTrick(supabase, roomId, room);
 
     case "witchRevealDone": return await handleWitchRevealDone(supabase, roomId, room);
