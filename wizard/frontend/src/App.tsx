@@ -1022,12 +1022,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId
   const [loading, setLoading] = useState(false);
   const [showScoresheet, setShowScoresheet] = useState(false);
 
-  // Wie groß soll die Runde am Ende sein (echte Spieler + KI-Auffüllung)?
-  // Wird erst im Warteraum entschieden, nicht schon bei der Raumerstellung -
-  // max_rounds hängt server-seitig ohnehin von der tatsächlichen Spielerzahl
-  // beim Start ab, ein vorab festgelegtes Ziel wäre also nur geraten.
-  const [targetTotal, setTargetTotal] = useState(3);
-
   // Invite a friend into the Warteraum: fetched on demand, not on mount.
   const [showInvite, setShowInvite] = useState(false);
   const [inviteFriends, setInviteFriends] = useState<{ id: string; username: string; avatar_url: string | null }[] | null>(null);
@@ -1212,13 +1206,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId
       }
     });
   }, [roomId]);
-
-  // Kann nie unter die Zahl der bereits echt beigetretenen Spieler fallen -
-  // wächst automatisch mit, schrumpft aber nie von selbst (der Host kann es
-  // manuell wieder senken, solange es über der aktuellen Spielerzahl bleibt).
-  useEffect(() => {
-    setTargetTotal(t => Math.max(t, players.length));
-  }, [players.length]);
 
   useEffect(() => {
     const refreshState = () => {
@@ -1423,10 +1410,9 @@ function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId
 
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
-    // targetTotal is chosen live here in the Warteraum, not upfront at room
-    // creation - max_rounds is computed server-side from the actual final
-    // player count at startGame anyway, so there's nothing to pre-plan.
-    const effectiveAiCount = Math.max(0, targetTotal - players.length);
+    // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
+    // spielen ausschließlich die tatsächlich beigetretenen Menschen mit.
+    const effectiveAiCount = Math.max(0, 3 - players.length);
     return (
       <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
         <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) { callGameAction(roomId, "leaveRoom", {}); onLeave(); } }}
@@ -1508,18 +1494,8 @@ function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId
           })}
         </div>
 
-        {isHost && (
-          <div style={{ width: "min(320px, 92vw)" }}>
-            <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8, textAlign: "center" }}>GESAMTZAHL SPIELER</div>
-            <div style={segTrack}>
-              {[3, 4, 5, 6].filter(n => n >= players.length).map(n => (
-                <button key={n} onClick={() => setTargetTotal(n)} style={{ ...segBtn(targetTotal === n), fontSize: 15 }}>{n}</button>
-              ))}
-            </div>
-            {effectiveAiCount > 0 && (
-              <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 6, textAlign: "center" }}>+ {effectiveAiCount} KI {effectiveAiCount === 1 ? "wird" : "werden"} beim Start ergänzt</div>
-            )}
-          </div>
+        {isHost && effectiveAiCount > 0 && (
+          <div style={{ fontSize: 11, color: C.ivoryDim }}>+ {effectiveAiCount} KI {effectiveAiCount === 1 ? "wird" : "werden"} beim Start ergänzt</div>
         )}
         {isHost ? (
           <button onClick={() => act("startGame", { aiCount: effectiveAiCount, edition: room?.edition ?? "classic" })} disabled={loading || players.length + effectiveAiCount < 2}
