@@ -1228,11 +1228,17 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
       loadPlayersSecure(roomId, session.user.id).then(data => { if (data) setPlayers(data); });
     };
 
+    // A channel fires an initial "sync" as soon as it's subscribed, before
+    // track() below has run - at that point the presence state is empty, so
+    // reporting it would (briefly) mark ourselves as disconnected in our own
+    // room. Ignore sync events until we've actually tracked our own presence.
+    let tracked = false;
     const ch = supabase.channel(`room:${roomId}`, { config: { presence: { key: session.user.id } } })
       // Reports who's actually got this room open right now, so the server
       // can tell "everyone left mid-game" apart from "someone's still
       // thinking" (see cleanup_stale_rooms() / syncPresence action).
       .on("presence", { event: "sync" }, () => {
+        if (!tracked) return;
         callGameAction(roomId, "syncPresence", { presentUserIds: Object.keys(ch.presenceState()) });
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => {
@@ -1288,7 +1294,11 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
         }
       })
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") ch.track({ at: new Date().toISOString() });
+        if (status !== "SUBSCRIBED") return;
+        ch.track({ at: new Date().toISOString() }).then(() => {
+          tracked = true;
+          callGameAction(roomId, "syncPresence", { presentUserIds: Object.keys(ch.presenceState()) });
+        });
       });
 
     // Poll every 5 seconds as fallback for missed realtime events (read-only, no AI trigger)
