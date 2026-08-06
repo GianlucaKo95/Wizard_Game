@@ -3,7 +3,7 @@ import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
-import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart } from "./Icons";
+import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart, IconMic, IconMicOff } from "./Icons";
 import { WizardArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -801,7 +801,12 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { setRoomId(null); checkReconnect(); }} />;
+  if (roomId) return (
+    <>
+      <GameRoom roomId={roomId} session={session} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { setRoomId(null); checkReconnect(); }} />
+      <VoiceChat roomId={roomId} session={session} />
+    </>
+  );
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -1005,6 +1010,222 @@ async function loadPlayersSecure(roomId: string, myUserId: string) {
       : (p.visible_hand ?? Array.from({ length: p.hand_count ?? 0 }, (_, i) => ({ id: `hidden-${p.player_index}-${i}`, type: "hidden" })));
     return { ...p, hand };
   });
+}
+
+// ─── Voice Chat ───────────────────────────────────────────────────────────────
+// Opt-in P2P-Mesh per WebRTC zwischen den Mitspielern eines Raums. Signaling
+// läuft über einen eigenen Supabase-Realtime-Broadcast-Channel (kein eigener
+// Signaling-Server nötig), ICE-Server (STUN + eigener TURN) kommen von der
+// "getIceServers"-Aktion der Edge Function. Rendert als Geschwister von
+// <GameRoom>, nicht darin verschachtelt - GameRoom hat pro Phase komplett
+// unterschiedliche JSX-Bäume (separate return-Statements), ein hier
+// verschachtelter Verbindungs-State würde bei jedem Phasenwechsel (z.B.
+// Warteraum → Spiel gestartet) unmounten und die Verbindung verlieren.
+function VoiceChat({ roomId, session }: { roomId: string; session: Session }) {
+  const [enabled, setEnabled] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [error, setError] = useState("");
+  const [participantIds, setParticipantIds] = useState<Set<string>>(new Set());
+  const [speakingIds, setSpeakingIds] = useState<Set<string>>(new Set());
+  const [names, setNames] = useState<Record<string, string>>({});
+
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const audioElsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const channelRef = useRef<any>(null);
+  const iceServersRef = useRef<RTCIceServer[]>([{ urls: "stun:stun.l.google.com:19302" }]);
+  const rafsRef = useRef<Map<string, number>>(new Map());
+
+  // Für hübschere Labels als rohe User-IDs - unabhängig von GameRoom geladen,
+  // da VoiceChat als Geschwister und nicht als Kind rendert.
+  useEffect(() => {
+    supabase.from("room_players_view").select("user_id, ai_name").eq("room_id", roomId).eq("is_ai", false)
+      .then(({ data }) => {
+        if (!data) return;
+        setNames(Object.fromEntries(data.map((p: any) => [p.user_id, p.ai_name])));
+      });
+  }, [roomId]);
+
+  function stopSpeakingDetection(id: string) {
+    const raf = rafsRef.current.get(id);
+    if (raf) cancelAnimationFrame(raf);
+    rafsRef.current.delete(id);
+  }
+
+  function startSpeakingDetection(stream: MediaStream, id: string) {
+    try {
+      const ctx = new AudioContext();
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      src.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        setSpeakingIds(prev => {
+          const isSpeaking = avg > 12;
+          if (isSpeaking === prev.has(id)) return prev;
+          const next = new Set(prev);
+          if (isSpeaking) next.add(id); else next.delete(id);
+          return next;
+        });
+        rafsRef.current.set(id, requestAnimationFrame(tick));
+      };
+      tick();
+    } catch { /* Analyse ist nur Kosmetik - Verbindung funktioniert auch ohne */ }
+  }
+
+  function getOrCreatePeer(otherId: string): RTCPeerConnection {
+    let pc = peersRef.current.get(otherId);
+    if (pc) return pc;
+    pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
+    localStreamRef.current?.getTracks().forEach(t => pc!.addTrack(t, localStreamRef.current!));
+    pc.onicecandidate = (e) => {
+      if (e.candidate) send({ type: "ice", from: session.user.id, to: otherId, candidate: e.candidate });
+    };
+    pc.ontrack = (e) => {
+      let el = audioElsRef.current.get(otherId);
+      if (!el) {
+        el = document.createElement("audio");
+        el.autoplay = true;
+        audioElsRef.current.set(otherId, el);
+      }
+      el.srcObject = e.streams[0];
+      setParticipantIds(prev => new Set(prev).add(otherId));
+      startSpeakingDetection(e.streams[0], otherId);
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc && (pc.connectionState === "failed" || pc.connectionState === "closed")) removePeer(otherId);
+    };
+    peersRef.current.set(otherId, pc);
+    return pc;
+  }
+
+  function removePeer(otherId: string) {
+    peersRef.current.get(otherId)?.close();
+    peersRef.current.delete(otherId);
+    audioElsRef.current.get(otherId)?.remove();
+    audioElsRef.current.delete(otherId);
+    stopSpeakingDetection(otherId);
+    setParticipantIds(prev => { const next = new Set(prev); next.delete(otherId); return next; });
+    setSpeakingIds(prev => { const next = new Set(prev); next.delete(otherId); return next; });
+  }
+
+  function send(payload: any) {
+    channelRef.current?.send({ type: "broadcast", event: "signal", payload });
+  }
+
+  async function handleSignal(payload: any) {
+    if (payload.from === session.user.id) return;
+    if (payload.type === "join") {
+      // Nur die Seite mit der "kleineren" User-ID initiiert den Offer - sonst
+      // erzeugen beide Seiten gleichzeitig einen und es kommt zum Glare.
+      if (session.user.id < payload.from) {
+        const pc = getOrCreatePeer(payload.from);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        send({ type: "offer", from: session.user.id, to: payload.from, sdp: offer });
+      }
+      return;
+    }
+    if (payload.type === "leave") { removePeer(payload.from); return; }
+    if (payload.to !== session.user.id) return;
+    if (payload.type === "offer") {
+      const pc = getOrCreatePeer(payload.from);
+      await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      send({ type: "answer", from: session.user.id, to: payload.from, sdp: answer });
+    } else if (payload.type === "answer") {
+      await peersRef.current.get(payload.from)?.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+    } else if (payload.type === "ice") {
+      await peersRef.current.get(payload.from)?.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+    }
+  }
+
+  async function enableVoice() {
+    setError(""); setConnecting(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStreamRef.current = stream;
+      startSpeakingDetection(stream, session.user.id);
+
+      const iceRes = await callGameAction(roomId, "getIceServers", {});
+      if (iceRes?.iceServers) iceServersRef.current = iceRes.iceServers;
+
+      const ch = supabase.channel(`voice:${roomId}`, { config: { broadcast: { self: false } } });
+      channelRef.current = ch;
+      ch.on("broadcast", { event: "signal" }, ({ payload }: any) => handleSignal(payload));
+      ch.subscribe((status: string) => {
+        if (status === "SUBSCRIBED") send({ type: "join", from: session.user.id });
+      });
+      setEnabled(true);
+    } catch {
+      setError("Mikrofon nicht verfügbar");
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  function disableVoice() {
+    send({ type: "leave", from: session.user.id });
+    peersRef.current.forEach((_, id) => removePeer(id));
+    localStreamRef.current?.getTracks().forEach(t => t.stop());
+    localStreamRef.current = null;
+    stopSpeakingDetection(session.user.id);
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    channelRef.current = null;
+    setParticipantIds(new Set());
+    setSpeakingIds(new Set());
+    setMuted(false);
+    setEnabled(false);
+  }
+
+  // Verbindung sauber abbauen, wenn der Raum komplett verlassen wird (nicht
+  // bei jedem Re-Render - deshalb leeres Dependency-Array mit roomId-Ref-Check
+  // wäre Overkill hier, roomId ändert sich für diese Komponente ohnehin nie
+  // innerhalb ihrer Lebenszeit, da sie pro Raum neu gemountet wird).
+  useEffect(() => () => { if (channelRef.current) disableVoice(); }, [roomId]);
+
+  function toggleMute() {
+    const stream = localStreamRef.current;
+    if (!stream) return;
+    const next = !muted;
+    stream.getAudioTracks().forEach(t => { t.enabled = !next; });
+    setMuted(next);
+  }
+
+  const nameFor = (id: string) => id === session.user.id ? "Du" : (names[id] ?? "Spieler");
+
+  return (
+    <div style={{ position: "fixed", bottom: "max(16px, env(safe-area-inset-bottom))", left: "max(16px, env(safe-area-inset-left))", zIndex: 150, display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+      {enabled && participantIds.size > 0 && (
+        <div style={{ ...glass({ padding: "8px 12px" }), display: "flex", flexDirection: "column", gap: 4 }}>
+          {[session.user.id, ...participantIds].map(id => (
+            <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: speakingIds.has(id) ? C.success : C.ivoryDim }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: speakingIds.has(id) ? C.success : "rgba(255,255,255,0.25)" }} />
+              {nameFor(id)}
+            </div>
+          ))}
+        </div>
+      )}
+      {!enabled ? (
+        <button onClick={enableVoice} disabled={connecting} style={{ ...goldBtn(false), padding: "8px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, opacity: connecting ? 0.5 : 1 }}>
+          <IconMic size={14} /> {connecting ? "Verbinde…" : "Sprachchat aktivieren"}
+        </button>
+      ) : (
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={toggleMute} style={{ ...goldBtn(!muted), padding: "8px 12px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {muted ? <IconMicOff size={14} /> : <IconMic size={14} />} {muted ? "Stumm" : "Live"}
+          </button>
+          <button onClick={disableVoice} style={{ ...glass({ padding: "8px 10px" }), border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", alignItems: "center" }} title="Sprachchat verlassen"><IconX size={15} /></button>
+        </div>
+      )}
+      {error && <div style={{ ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080" }}>{error}</div>}
+    </div>
+  );
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────

@@ -1,0 +1,22 @@
+name: Wizzo Sprachchat (TURN)
+version: "1.0.0"
+slug: wizard_turn
+description: "TURN/STUN-Relay für den optionalen In-Game-Sprachchat von Wizzo"
+url: "https://github.com/GianlucaKo95/Wizard_Game"
+homeassistant: "2024.1.0"
+startup: services
+boot: auto
+host_network: true
+init: true
+arch:
+  - amd64
+  - aarch64
+image: ghcr.io/gianlucako95/wizard-turn-addon
+options:
+  shared_secret: ""
+  relay_min_port: 49160
+  relay_max_port: 49200
+schema:
+  shared_secret: password
+  relay_min_port: port
+  relay_max_port: port
