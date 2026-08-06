@@ -1476,7 +1476,12 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
             const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
             return (
               <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
-                <Avatar userId={p.user_id} username={p.ai_name} avatarUrl={avatars[p.user_id]} size={26} />
+                <div style={{ position: "relative" }}>
+                  <Avatar userId={p.user_id} username={p.ai_name} avatarUrl={avatars[p.user_id]} size={26} />
+                  {!p.is_ai && (
+                    <span style={{ position: "absolute", bottom: -1, right: -1, width: 8, height: 8, borderRadius: "50%", background: p.connected ? C.success : "rgba(255,255,255,0.25)", boxShadow: `0 0 0 2px ${C.bgDark}` }} title={p.connected ? "Verbunden" : "Getrennt"} />
+                  )}
+                </div>
                 <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>
                   {p.ai_name}
                   {p.player_index === 0 && <span style={{ color: C.ivoryDim, fontWeight: 400 }}> (Host)</span>}
