@@ -942,6 +942,13 @@ serve(async (req) => {
       // tell "everyone left mid-game" apart from "someone's still thinking".
       if (callerIdx < 0) return json({ error: "Nicht in diesem Raum" }, 400);
       const present = new Set((Array.isArray(body.presentUserIds) ? body.presentUserIds : []).map(String));
+      // Whoever is calling this is, by definition, present right now - forces
+      // this regardless of what the client's presence snapshot says. Without
+      // this, the very first "sync" event on a fresh channel subscription
+      // fires before track() has run (empty presence state), and if that
+      // request happens to land after the later, correct one, the caller
+      // ends up marked disconnected in their own room.
+      present.add(user.id);
       const humans = players.filter(p => !p.is_ai);
       await Promise.all(humans
         .filter(p => p.connected !== present.has(p.user_id))

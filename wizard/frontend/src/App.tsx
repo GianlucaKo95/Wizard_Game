@@ -638,7 +638,7 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
 function LobbyScreen({ session }: { session: Session }) {
   const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile">("home");
   const [showFriendsPanel, setShowFriendsPanel] = useState(false);
-  const [reconnectRoom, setReconnectRoom] = useState<{ roomId: string; code: string; phase: string; plannedTotal: number | null } | null>(null);
+  const [reconnectRoom, setReconnectRoom] = useState<{ roomId: string; code: string; phase: string } | null>(null);
 
   // Reconnect state now lives on the backend (room_players membership),
   // not in localStorage - this is authoritative for any tab/device the
@@ -646,18 +646,17 @@ function LobbyScreen({ session }: { session: Session }) {
   // is what bounds how long a stale membership can hang around.
   const checkReconnect = useCallback(() => {
     supabase.from("room_players")
-      .select("room_id, rooms:room_id(id, code, phase, planned_total, created_at)")
+      .select("room_id, rooms:room_id(id, code, phase, created_at)")
       .eq("user_id", session.user.id)
       .order("created_at", { foreignTable: "rooms", ascending: false })
       .then(({ data }) => {
         const active = (data ?? []).map((r: any) => r.rooms).find((r: any) => r && r.phase !== "gameEnd");
-        setReconnectRoom(active ? { roomId: active.id, code: active.code, phase: active.phase, plannedTotal: active.planned_total } : null);
+        setReconnectRoom(active ? { roomId: active.id, code: active.code, phase: active.phase } : null);
       });
   }, [session.user.id]);
 
   useEffect(() => { checkReconnect(); }, [checkReconnect]);
   const [codeInput, setCodeInput] = useState("");
-  const [totalPlayers, setTotalPlayers] = useState(3);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [edition, setEdition] = useState<"classic"|"anniversary">("classic");
   const [error, setError] = useState("");
@@ -714,7 +713,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   async function createRoom() {
     setLoading(true); setError("");
-    const res = await callGameAction("", "createRoom", { username, edition, totalPlayers });
+    const res = await callGameAction("", "createRoom", { username, edition });
     if (!res?.roomId) { setError(res?.error ?? "Fehler"); setLoading(false); return; }
     setRoomId(res.roomId);
     setLoading(false);
@@ -802,7 +801,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
-  if (roomId) return <GameRoom roomId={roomId} session={session} plannedTotal={reconnectRoom?.plannedTotal ?? totalPlayers} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { setRoomId(null); checkReconnect(); }} />;
+  if (roomId) return <GameRoom roomId={roomId} session={session} edition={edition} onlineUserIds={onlineUserIds} onLeave={() => { setRoomId(null); checkReconnect(); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
   // home screen) so content-heavy sub-screens like "create" don't push their
@@ -874,16 +873,6 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
         <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
         <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
-        <div>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>GESAMTZAHL SPIELER</div>
-          <div style={segTrack}>
-            {[3,4,5,6].map(n => (
-              <button key={n} onClick={() => setTotalPlayers(n)}
-                style={{ ...segBtn(totalPlayers===n), fontSize: 15 }}>{n}</button>
-            ))}
-          </div>
-          <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 6 }}>Fehlende Plätze werden beim Start automatisch mit KI aufgefüllt</div>
-        </div>
         {/* Edition */}
         <div>
           <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>EDITION</div>
@@ -903,10 +892,6 @@ function LobbyScreen({ session }: { session: Session }) {
           </div>
         </div>
 
-        <div style={{ ...glass({ padding: "10px 14px" }), fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>
-          Ziel: <span style={{ color: C.gold, ...cinzel }}>{totalPlayers}</span> Spieler ·{" "}
-          <span style={{ color: C.gold }}>{Math.floor(60/totalPlayers)} Runden</span>
-        </div>
         <button onClick={createRoom} disabled={loading}
           style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading?0.5:1 }}>
           {loading ? "Erstelle Raum…" : "✦ Raum erstellen"}
@@ -1023,7 +1008,7 @@ async function loadPlayersSecure(roomId: string, myUserId: string) {
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
-function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLeave }: { roomId: string; session: Session; plannedTotal: number; edition?: string; onlineUserIds: Set<string>; onLeave: () => void }) {
+function GameRoom({ roomId, session, edition, onlineUserIds, onLeave }: { roomId: string; session: Session; edition?: string; onlineUserIds: Set<string>; onLeave: () => void }) {
   const aiTriggerPending = useRef(false);
   const aiTriggerLastKey = useRef<string>("");
   const clearTrickPending = useRef(false);
@@ -1228,11 +1213,17 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
       loadPlayersSecure(roomId, session.user.id).then(data => { if (data) setPlayers(data); });
     };
 
+    // A channel fires an initial "sync" as soon as it's subscribed, before
+    // track() below has run - at that point the presence state is empty, so
+    // reporting it would (briefly) mark ourselves as disconnected in our own
+    // room. Ignore sync events until we've actually tracked our own presence.
+    let tracked = false;
     const ch = supabase.channel(`room:${roomId}`, { config: { presence: { key: session.user.id } } })
       // Reports who's actually got this room open right now, so the server
       // can tell "everyone left mid-game" apart from "someone's still
       // thinking" (see cleanup_stale_rooms() / syncPresence action).
       .on("presence", { event: "sync" }, () => {
+        if (!tracked) return;
         callGameAction(roomId, "syncPresence", { presentUserIds: Object.keys(ch.presenceState()) });
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => {
@@ -1288,7 +1279,11 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
         }
       })
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") ch.track({ at: new Date().toISOString() });
+        if (status !== "SUBSCRIBED") return;
+        ch.track({ at: new Date().toISOString() }).then(() => {
+          tracked = true;
+          callGameAction(roomId, "syncPresence", { presentUserIds: Object.keys(ch.presenceState()) });
+        });
       });
 
     // Poll every 5 seconds as fallback for missed realtime events (read-only, no AI trigger)
@@ -1415,9 +1410,9 @@ function GameRoom({ roomId, session, plannedTotal, edition, onlineUserIds, onLea
 
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
-    // Shrinks automatically as real players join: the host originally planned for
-    // `plannedTotal` players total, so fewer AI are needed the more humans show up.
-    const effectiveAiCount = Math.max(0, plannedTotal - players.length);
+    // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
+    // spielen ausschließlich die tatsächlich beigetretenen Menschen mit.
+    const effectiveAiCount = Math.max(0, 3 - players.length);
     return (
       <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
         <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) { callGameAction(roomId, "leaveRoom", {}); onLeave(); } }}
