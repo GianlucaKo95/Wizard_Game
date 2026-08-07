@@ -1146,6 +1146,13 @@ function useVoiceChat(roomId: string | null, session: Session) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
       startSpeakingDetection(stream, session.user.id);
+      // The OS/browser can revoke mic access at any point without the app
+      // asking for it back - most commonly by backgrounding the tab/app.
+      // Without this, the UI would keep showing "connected" indefinitely
+      // even though nothing is actually being captured or sent anymore.
+      stream.getAudioTracks().forEach(track => {
+        track.onended = () => { setError("Mikrofonverbindung unterbrochen"); disableVoice(); };
+      });
 
       const iceRes = await callGameAction(rid, "getIceServers", {});
       if (iceRes?.iceServers) iceServersRef.current = iceRes.iceServers;
@@ -1154,7 +1161,14 @@ function useVoiceChat(roomId: string | null, session: Session) {
       channelRef.current = ch;
       ch.on("broadcast", { event: "signal" }, ({ payload }: any) => handleSignal(payload));
       ch.subscribe((status: string) => {
-        if (status === "SUBSCRIBED") send({ type: "join", from: session.user.id });
+        if (status === "SUBSCRIBED") { send({ type: "join", from: session.user.id }); return; }
+        // Same idea for the signaling channel itself - a network drop here
+        // otherwise leaves the UI stuck on "connected" with no way to ever
+        // exchange offers with anyone again.
+        if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setError("Verbindung zum Sprachchat unterbrochen");
+          disableVoice();
+        }
       });
       setEnabled(true);
     } catch {
@@ -1170,8 +1184,16 @@ function useVoiceChat(roomId: string | null, session: Session) {
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
     stopSpeakingDetection(session.user.id);
-    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    // Clear the ref *before* removing the channel, not after - removeChannel
+    // can synchronously re-fire the subscribe callback with a "CLOSED"
+    // status, which now also calls disableVoice() (see the CLOSED/
+    // CHANNEL_ERROR/TIMED_OUT handling in enableVoice). If the ref were
+    // still set at that point, the re-entrant call would call
+    // removeChannel() again on the same channel, which fires the callback
+    // again, and so on - an infinite loop.
+    const ch = channelRef.current;
     channelRef.current = null;
+    if (ch) supabase.removeChannel(ch);
     setParticipantIds(new Set());
     setSpeakingIds(new Set());
     setMuted(false);
