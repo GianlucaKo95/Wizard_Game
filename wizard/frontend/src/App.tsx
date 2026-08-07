@@ -2153,6 +2153,9 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           >
             {voice.enabled && voice.muted ? <IconMicOff size={15} /> : <IconMic size={15} />}
           </button>
+          {voice.enabled && (
+            <button onClick={voice.disableVoice} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: "4px 7px", borderRadius: 6, display: "flex" }} title="Sprachchat verlassen"><IconX size={15} /></button>
+          )}
           <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
           <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", position: "relative" as const, display: "flex" }} title="Chat">
             <IconMessageCircle size={15} />
