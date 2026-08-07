@@ -2219,7 +2219,12 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                 <span style={{ ...cinzel, fontSize: "clamp(9px,1.6vmin,16px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis", maxWidth: "clamp(70px,10vmin,120px)" }}>
                   {p.ai_name}
                 </span>
-                {hasPlayed && <span style={{ fontSize: 9, color: C.gold, marginLeft: "auto" }}>✓</span>}
+                <div style={{ display: "flex", alignItems: "center", gap: 3, marginLeft: "auto" }}>
+                  {!p.is_ai && voice.participantIds.has(p.user_id) && (
+                    <IconMic size={9} style={{ color: voice.speakingIds.has(p.user_id) ? C.success : "rgba(255,255,255,0.4)", flexShrink: 0 }} />
+                  )}
+                  {hasPlayed && <span style={{ fontSize: 9, color: C.gold }}>✓</span>}
+                </div>
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
                 <span style={{ ...cinzel, fontSize: "clamp(11px,2vmin,18px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
@@ -2388,6 +2393,9 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                 <span style={{ ...cinzel, fontSize: "clamp(9px,1.6vmin,16px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const }}>
                   {p.ai_name}
                 </span>
+                {voice.enabled && (
+                  <IconMic size={9} style={{ color: voice.speakingIds.has(session.user.id) ? C.success : "rgba(255,255,255,0.4)", flexShrink: 0 }} />
+                )}
                 {hasPlayed && <span style={{ fontSize: 9, color: C.gold }}>✓</span>}
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "baseline", justifyContent: "center" }}>
