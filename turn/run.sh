@@ -4,7 +4,7 @@ set -e
 OPTIONS=/data/options.json
 SECRET=$(jq -r '.shared_secret // empty' "$OPTIONS")
 MIN_PORT=$(jq -r '.relay_min_port // 49160' "$OPTIONS")
-MAX_PORT=$(jq -r '.relay_max_port // 49200' "$OPTIONS")
+MAX_PORT=$(jq -r '.relay_max_port // 49300' "$OPTIONS")
 
 if [ -z "$SECRET" ]; then
   echo "shared_secret ist nicht gesetzt - bitte in den Add-on-Einstellungen einen Wert eintragen (muss mit dem TURN_SHARED_SECRET-Secret der Supabase Edge Function übereinstimmen)." >&2
