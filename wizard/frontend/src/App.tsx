@@ -1039,16 +1039,27 @@ function useVoiceChat(roomId: string | null, session: Session) {
   const channelRef = useRef<any>(null);
   const iceServersRef = useRef<RTCIceServer[]>([{ urls: "stun:stun.l.google.com:19302" }]);
   const rafsRef = useRef<Map<string, number>>(new Map());
+  const audioCtxsRef = useRef<Map<string, AudioContext>>(new Map());
+  const roomIdRef = useRef(roomId);
+  useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
 
   function stopSpeakingDetection(id: string) {
     const raf = rafsRef.current.get(id);
     if (raf) cancelAnimationFrame(raf);
     rafsRef.current.delete(id);
+    // Every call to startSpeakingDetection opens a new AudioContext - without
+    // closing it here, each connect/disconnect leaks one. Browsers cap how
+    // many can be open at once (Safari/iOS especially), so over a longer
+    // session with a few join/leave cycles new ones eventually start
+    // silently failing.
+    audioCtxsRef.current.get(id)?.close().catch(() => {});
+    audioCtxsRef.current.delete(id);
   }
 
   function startSpeakingDetection(stream: MediaStream, id: string) {
     try {
       const ctx = new AudioContext();
+      audioCtxsRef.current.set(id, ctx);
       const src = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
@@ -1090,7 +1101,12 @@ function useVoiceChat(roomId: string | null, session: Session) {
       startSpeakingDetection(e.streams[0], otherId);
     };
     pc.onconnectionstatechange = () => {
-      if (pc && (pc.connectionState === "failed" || pc.connectionState === "closed")) removePeer(otherId);
+      // "disconnected" can persist for a long time (or indefinitely, on some
+      // browsers) without ever escalating to "failed" - since there's no
+      // ICE-restart/reconnect logic here to recover it either way, treat it
+      // the same as a hard failure rather than leaving a dead peer marked
+      // as connected forever.
+      if (pc && (pc.connectionState === "failed" || pc.connectionState === "closed" || pc.connectionState === "disconnected")) removePeer(otherId);
     };
     peersRef.current.set(otherId, pc);
     return pc;
@@ -1110,31 +1126,55 @@ function useVoiceChat(roomId: string | null, session: Session) {
     channelRef.current?.send({ type: "broadcast", event: "signal", payload });
   }
 
+  // Nur die Seite mit der "kleineren" User-ID initiiert den Offer für ein
+  // gegebenes Paar - sonst erzeugen beide Seiten gleichzeitig einen und es
+  // kommt zum Glare. Dieselbe Prüfung läuft auf beiden Seiten, darum ist es
+  // für jedes Paar immer genau eine Seite, unabhängig davon, wer wann
+  // beigetreten ist.
+  async function maybeOffer(otherId: string) {
+    if (session.user.id >= otherId) return;
+    const pc = getOrCreatePeer(otherId);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    send({ type: "offer", from: session.user.id, to: otherId, sdp: offer });
+  }
+
   async function handleSignal(payload: any) {
     if (payload.from === session.user.id) return;
     if (payload.type === "join") {
-      // Nur die Seite mit der "kleineren" User-ID initiiert den Offer - sonst
-      // erzeugen beide Seiten gleichzeitig einen und es kommt zum Glare.
-      if (session.user.id < payload.from) {
-        const pc = getOrCreatePeer(payload.from);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        send({ type: "offer", from: session.user.id, to: payload.from, sdp: offer });
-      }
+      // Antworte immer mit "here", unabhängig davon ob wir selbst anbieten -
+      // sonst erfährt ein neu Beigetretener mit kleinerer ID nie von einem
+      // bereits anwesenden Peer mit größerer ID (der correctly nicht
+      // anbietet), und keine Seite initiiert je einen Offer für dieses Paar.
+      send({ type: "here", from: session.user.id, to: payload.from });
+      await maybeOffer(payload.from).catch(() => removePeer(payload.from));
+      return;
+    }
+    if (payload.type === "here") {
+      if (payload.to !== session.user.id) return;
+      await maybeOffer(payload.from).catch(() => removePeer(payload.from));
       return;
     }
     if (payload.type === "leave") { removePeer(payload.from); return; }
     if (payload.to !== session.user.id) return;
-    if (payload.type === "offer") {
-      const pc = getOrCreatePeer(payload.from);
-      await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      send({ type: "answer", from: session.user.id, to: payload.from, sdp: answer });
-    } else if (payload.type === "answer") {
-      await peersRef.current.get(payload.from)?.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-    } else if (payload.type === "ice") {
-      await peersRef.current.get(payload.from)?.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+    try {
+      if (payload.type === "offer") {
+        const pc = getOrCreatePeer(payload.from);
+        await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        send({ type: "answer", from: session.user.id, to: payload.from, sdp: answer });
+      } else if (payload.type === "answer") {
+        await peersRef.current.get(payload.from)?.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+      } else if (payload.type === "ice") {
+        await peersRef.current.get(payload.from)?.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+      }
+    } catch {
+      // Negotiation gescheitert (z.B. ein verspätetes/doppeltes Offer trifft
+      // eine Connection im falschen Signaling-State) - Paar sauber
+      // fallenlassen statt eines unbehandelten Rejections mit halb
+      // ausgehandelter, nie wieder erholender Connection.
+      removePeer(payload.from);
     }
   }
 
@@ -1145,6 +1185,11 @@ function useVoiceChat(roomId: string | null, session: Session) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
+      // The user can leave the room while getUserMedia/getIceServers above
+      // (or below) are still pending - without this check, the continuation
+      // would keep the mic hot and open a signaling channel for a room
+      // that's already been left, with no UI left anywhere to stop it.
+      if (roomIdRef.current !== rid) { disableVoice(); return; }
       startSpeakingDetection(stream, session.user.id);
       // The OS/browser can revoke mic access at any point without the app
       // asking for it back - most commonly by backgrounding the tab/app.
@@ -1155,6 +1200,7 @@ function useVoiceChat(roomId: string | null, session: Session) {
       });
 
       const iceRes = await callGameAction(rid, "getIceServers", {});
+      if (roomIdRef.current !== rid) { disableVoice(); return; }
       if (iceRes?.iceServers) iceServersRef.current = iceRes.iceServers;
 
       const ch = supabase.channel(`voice:${rid}`, { config: { broadcast: { self: false } } });
