@@ -15,7 +15,7 @@ image: ghcr.io/gianlucako95/wizard-turn-addon
 options:
   shared_secret: ""
   relay_min_port: 49160
-  relay_max_port: 49200
+  relay_max_port: 49300
 schema:
   shared_secret: password
   relay_min_port: port
