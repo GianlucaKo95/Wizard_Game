@@ -913,25 +913,27 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
     onChange();
   }
 
-  async function editBids() {
-    const prev: Record<number, string> = {};
-    if (pendingBids) for (const [idx, b] of Object.entries(pendingBids)) prev[Number(idx)] = String(b);
-    setBids(prev);
-    await supabase.from("manual_games").update({ pending_bids: null }).eq("id", game.id);
-    onChange();
+  // Bid displayed/edited for a player once bids are locked in (Phase B) -
+  // starts out as whatever was locked, but stays editable: Wolke (9¾)
+  // forces the trick winner to raise or lower their Ansage *during* the
+  // round, after bids are already locked, so this needs to be changeable
+  // right up until the round is finalized, not just before locking.
+  function effectiveBid(playerIndex: number): string {
+    if (bids[playerIndex] !== undefined) return bids[playerIndex];
+    return pendingBids ? String(pendingBids[playerIndex] ?? "") : "";
   }
 
   async function saveRound() {
     if (!pendingBids) return;
     setError("");
     for (const p of players) {
-      if (gots[p.player_index] === undefined || gots[p.player_index] === "") {
-        setError("Bitte für jeden Spieler die Stiche eintragen"); return;
+      if (effectiveBid(p.player_index) === "" || gots[p.player_index] === undefined || gots[p.player_index] === "") {
+        setError("Bitte für jeden Spieler Ansage und Stiche eintragen"); return;
       }
     }
     setSaving(true);
     const results = players.map(p => {
-      const bid = Number(pendingBids[p.player_index]);
+      const bid = Number(effectiveBid(p.player_index));
       const got = Number(gots[p.player_index]);
       const delta = bid === got ? 20 + bid * 10 : -Math.abs(bid - got) * 10;
       return { playerIndex: p.player_index, name: p.display_name, bid, got, delta };
@@ -1013,7 +1015,13 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                 {players.map(p => (
                   <td key={p.id} style={{ padding: "6px 4px", background: "rgba(201,168,76,0.045)" }}>
                     <div style={{ display: "flex", gap: 3, justifyContent: "flex-end", alignItems: "center" }}>
-                      <span style={{ fontSize: 11.5, color: C.ivoryDim, whiteSpace: "nowrap" }}>{pendingBids[p.player_index]} /</span>
+                      {/* Ansage stays editable here (not just plain text) - Wolke (9¾)
+                          forces the trick winner to adjust it mid-round, after bids
+                          are already locked in above. */}
+                      <input type="number" min={0} max={currentRoundNum} value={effectiveBid(p.player_index)}
+                        onChange={e => setBids(prev => ({ ...prev, [p.player_index]: e.target.value }))}
+                        style={{ ...inputStyle, width: 36, padding: "5px 2px", fontSize: 12, textAlign: "center" }} />
+                      <span style={{ fontSize: 11.5, color: C.ivoryDim }}>/</span>
                       <input type="number" min={0} max={currentRoundNum} placeholder="Sti." value={gots[p.player_index] ?? ""}
                         onChange={e => setGots(prev => ({ ...prev, [p.player_index]: e.target.value }))}
                         style={{ ...inputStyle, width: 44, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
@@ -1030,12 +1038,9 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
             </tr>
           </tbody>
         </table>
-        {!isDone && pendingBids && (
-          <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <button onClick={editBids} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10.5, padding: 0 }}>Ansagen bearbeiten</button>
-            {currentRoundNum > 1 && gotSum > 0 && gotSum !== currentRoundNum && (
-              <div style={{ fontSize: 10.5, color: C.ivoryDim, textAlign: "right" }}>Summe Stiche ({gotSum}) ≠ Runde ({currentRoundNum}) - bei einer Bombe normal.</div>
-            )}
+        {!isDone && pendingBids && currentRoundNum > 1 && gotSum > 0 && gotSum !== currentRoundNum && (
+          <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ fontSize: 10.5, color: C.ivoryDim, textAlign: "right" }}>Summe Stiche ({gotSum}) ≠ Runde ({currentRoundNum}) - bei einer Bombe normal.</div>
           </div>
         )}
       </div>
