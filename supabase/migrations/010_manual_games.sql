@@ -20,12 +20,17 @@
 -- ════════════════════════════════════════════════════════════════
 
 create table public.manual_games (
-  id          uuid primary key default gen_random_uuid(),
-  host_id     uuid not null references auth.users(id) on delete cascade,
-  edition     text not null default 'classic',
-  max_rounds  int not null,
-  finished_at timestamptz,
-  created_at  timestamptz not null default now()
+  id           uuid primary key default gen_random_uuid(),
+  host_id      uuid not null references auth.users(id) on delete cascade,
+  edition      text not null default 'classic',
+  max_rounds   int not null,
+  -- Bids for the round currently being played, announced (and locked in)
+  -- before anyone knows the trick results - matches the real Wizard flow
+  -- where Ansage happens before the round is played, not together with the
+  -- result. {playerIndex: bid}, null once no round is "in progress".
+  pending_bids jsonb,
+  finished_at  timestamptz,
+  created_at   timestamptz not null default now()
 );
 
 create table public.manual_game_players (

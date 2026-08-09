@@ -872,13 +872,20 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
 }) {
   const currentRoundNum = rounds.length + 1;
   const isDone = currentRoundNum > game.max_rounds;
+  // Bids get announced (and locked in) before anyone knows the trick
+  // results - matches the real Wizard flow, so this is a two-phase round:
+  // first lock in everyone's Ansage (pending_bids), then once the round has
+  // actually been played, enter Stiche and finalize together.
+  const pendingBids: Record<string, number> | null = game.pending_bids ?? null;
   const [bids, setBids] = useState<Record<number, string>>({});
   const [gots, setGots] = useState<Record<number, string>>({});
+  const [locking, setLocking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState("");
+  const dealer = players[(currentRoundNum - 1) % players.length];
 
-  useEffect(() => { setBids({}); setGots({}); setError(""); }, [currentRoundNum]);
+  useEffect(() => { setBids({}); setGots({}); setError(""); }, [currentRoundNum, !!pendingBids]);
 
   const totals = players.map(p => {
     let score = 0;
@@ -890,25 +897,50 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
   });
   const gotSum = players.reduce((s, p) => s + (Number(gots[p.player_index]) || 0), 0);
 
-  async function saveRound() {
+  async function lockBids() {
     setError("");
     for (const p of players) {
-      const b = bids[p.player_index], g = gots[p.player_index];
-      if (b === undefined || b === "" || g === undefined || g === "") {
-        setError("Bitte für jeden Spieler Ansage und Stiche eintragen"); return;
+      if (bids[p.player_index] === undefined || bids[p.player_index] === "") {
+        setError("Bitte für jeden Spieler eine Ansage eintragen"); return;
+      }
+    }
+    setLocking(true);
+    const asObject: Record<string, number> = {};
+    for (const p of players) asObject[p.player_index] = Number(bids[p.player_index]);
+    const { error: bErr } = await supabase.from("manual_games").update({ pending_bids: asObject }).eq("id", game.id);
+    setLocking(false);
+    if (bErr) { setError("Ansagen konnten nicht gespeichert werden"); return; }
+    onChange();
+  }
+
+  async function editBids() {
+    const prev: Record<number, string> = {};
+    if (pendingBids) for (const [idx, b] of Object.entries(pendingBids)) prev[Number(idx)] = String(b);
+    setBids(prev);
+    await supabase.from("manual_games").update({ pending_bids: null }).eq("id", game.id);
+    onChange();
+  }
+
+  async function saveRound() {
+    if (!pendingBids) return;
+    setError("");
+    for (const p of players) {
+      if (gots[p.player_index] === undefined || gots[p.player_index] === "") {
+        setError("Bitte für jeden Spieler die Stiche eintragen"); return;
       }
     }
     setSaving(true);
     const results = players.map(p => {
-      const bid = Number(bids[p.player_index]);
+      const bid = Number(pendingBids[p.player_index]);
       const got = Number(gots[p.player_index]);
       const delta = bid === got ? 20 + bid * 10 : -Math.abs(bid - got) * 10;
       return { playerIndex: p.player_index, name: p.display_name, bid, got, delta };
     });
     const { error: rErr } = await supabase.from("manual_game_rounds")
       .insert({ manual_game_id: game.id, round: currentRoundNum, results });
+    if (rErr) { setSaving(false); setError("Runde konnte nicht gespeichert werden"); return; }
+    await supabase.from("manual_games").update({ pending_bids: null }).eq("id", game.id);
     setSaving(false);
-    if (rErr) { setError("Runde konnte nicht gespeichert werden"); return; }
     onChange();
   }
 
@@ -960,15 +992,28 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                 })}
               </tr>
             ))}
-            {!isDone && (
+            {!isDone && !pendingBids && (
+              <tr>
+                <td style={{ padding: "8px", background: "rgba(201,168,76,0.045)", fontSize: 12, color: C.goldLight, whiteSpace: "nowrap" }}>
+                  R{currentRoundNum} ▶
+                  <div style={{ fontSize: 9.5, color: C.ivoryDim, fontWeight: 400, marginTop: 1 }}>{dealer?.display_name} gibt</div>
+                </td>
+                {players.map(p => (
+                  <td key={p.id} style={{ padding: "6px 4px", background: "rgba(201,168,76,0.045)" }}>
+                    <input type="number" min={0} max={currentRoundNum} placeholder="Ansage" value={bids[p.player_index] ?? ""}
+                      onChange={e => setBids(prev => ({ ...prev, [p.player_index]: e.target.value }))}
+                      style={{ ...inputStyle, width: 56, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
+                  </td>
+                ))}
+              </tr>
+            )}
+            {!isDone && pendingBids && (
               <tr>
                 <td style={{ padding: "8px", background: "rgba(201,168,76,0.045)", fontSize: 12, color: C.goldLight, whiteSpace: "nowrap" }}>R{currentRoundNum} ▶</td>
                 {players.map(p => (
                   <td key={p.id} style={{ padding: "6px 4px", background: "rgba(201,168,76,0.045)" }}>
-                    <div style={{ display: "flex", gap: 3, justifyContent: "flex-end" }}>
-                      <input type="number" min={0} max={currentRoundNum} placeholder="Ans." value={bids[p.player_index] ?? ""}
-                        onChange={e => setBids(prev => ({ ...prev, [p.player_index]: e.target.value }))}
-                        style={{ ...inputStyle, width: 44, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
+                    <div style={{ display: "flex", gap: 3, justifyContent: "flex-end", alignItems: "center" }}>
+                      <span style={{ fontSize: 11.5, color: C.ivoryDim, whiteSpace: "nowrap" }}>{pendingBids[p.player_index]} /</span>
                       <input type="number" min={0} max={currentRoundNum} placeholder="Sti." value={gots[p.player_index] ?? ""}
                         onChange={e => setGots(prev => ({ ...prev, [p.player_index]: e.target.value }))}
                         style={{ ...inputStyle, width: 44, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
@@ -985,17 +1030,27 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
             </tr>
           </tbody>
         </table>
-        {!isDone && currentRoundNum > 1 && gotSum > 0 && gotSum !== currentRoundNum && (
-          <div style={{ fontSize: 10.5, color: C.ivoryDim, marginTop: 8 }}>Hinweis: Summe der Stiche ({gotSum}) weicht von der Rundenzahl ({currentRoundNum}) ab - bei einer Bombe (30-Jahre-Edition) ist das normal.</div>
+        {!isDone && pendingBids && (
+          <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <button onClick={editBids} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10.5, padding: 0 }}>Ansagen bearbeiten</button>
+            {currentRoundNum > 1 && gotSum > 0 && gotSum !== currentRoundNum && (
+              <div style={{ fontSize: 10.5, color: C.ivoryDim, textAlign: "right" }}>Summe Stiche ({gotSum}) ≠ Runde ({currentRoundNum}) - bei einer Bombe normal.</div>
+            )}
+          </div>
         )}
       </div>
 
       {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
 
       <div style={{ display: "flex", gap: 10, width: "min(460px, 96vw)" }}>
-        {!isDone && (
+        {!isDone && !pendingBids && (
+          <button onClick={lockBids} disabled={locking} style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: locking ? 0.5 : 1 }}>
+            {locking ? "…" : "Ansagen sperren"}
+          </button>
+        )}
+        {!isDone && pendingBids && (
           <button onClick={saveRound} disabled={saving} style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: saving ? 0.5 : 1 }}>
-            {saving ? "…" : "Runde speichern"}
+            {saving ? "…" : "Runde abschließen"}
           </button>
         )}
         <button onClick={finish} disabled={finishing || rounds.length === 0} style={{ ...goldBtn(isDone), flex: 1, padding: "12px 0", fontSize: 14, opacity: (finishing || rounds.length === 0) ? 0.5 : 1 }}>
