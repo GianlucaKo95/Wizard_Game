@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import webpush from "npm:web-push@3";
 
 import {
   SUITS, buildDeck, shuffle, trickWinner, trickWinnerWithoutBomb,
@@ -159,11 +160,13 @@ async function handleClearTrick(supabase, roomId, room) {
         await endRound(supabase, roomId, fr, fp2);
       } else {
         // Just set phase to playing - client will trigger AI via triggerAI
+        const nextPlayerIdx = fr.last_trick_winner ?? fr.current_player;
         await supabase.from("rooms").update({
           phase: "playing",
-          current_player: fr.last_trick_winner ?? fr.current_player
+          current_player: nextPlayerIdx
         }).eq("id", roomId);
       scheduleAITurn(supabase, roomId);
+      if (!fp2[nextPlayerIdx]?.is_ai) await notifyPlayerTurn(supabase, roomId, nextPlayerIdx);
       }
       return json({ ok: true });
 }
@@ -201,6 +204,49 @@ function json(data, status = 200) {
   });
 }
 
+// Sends a "Du bist dran" Web Push notification to a player whose turn it is,
+// if they have one or more devices subscribed. Never throws - a push
+// provider outage or missing VAPID config should never break the actual
+// game action that triggered it. Not called for every current_player write
+// in this file (there are many, across bidding/trick-play/special cards) -
+// wired into the three chokepoints that cover normal turn progression
+// (tickAIBids, advanceTrick's mid-trick advance, handleClearTrick's
+// new-trick resume); rarer special-card sub-prompts (trump/werewolf suit
+// choice, witch swap, Jongleur pass) don't trigger one yet.
+async function notifyPlayerTurn(supabase, roomId, playerIndex) {
+  try {
+    const { data: player } = await supabase.from("room_players")
+      .select("user_id, is_ai").eq("room_id", roomId).eq("player_index", playerIndex).maybeSingle();
+    if (!player || player.is_ai || !player.user_id) return;
+
+    const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY");
+    const vapidPrivate = Deno.env.get("VAPID_PRIVATE_KEY");
+    const vapidSubject = Deno.env.get("VAPID_SUBJECT");
+    if (!vapidPublic || !vapidPrivate || !vapidSubject) return; // not configured - silently skip
+
+    const { data: subs } = await supabase.from("push_subscriptions").select("*").eq("user_id", player.user_id);
+    if (!subs || subs.length === 0) return;
+
+    webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
+    const payload = JSON.stringify({ title: "Du bist dran!", body: "Wizzo wartet auf deinen Zug." });
+    await Promise.all(subs.map(async (s) => {
+      try {
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
+      } catch (e) {
+        // 404/410 = the subscription is dead (uninstalled, permission revoked,
+        // browser data cleared) - clean it up instead of retrying it forever.
+        if (e?.statusCode === 404 || e?.statusCode === 410) {
+          await upd(supabase.from("push_subscriptions").delete().eq("id", s.id), "notifyPlayerTurn.deadSub");
+        } else {
+          console.error("[notifyPlayerTurn] push failed:", e?.message ?? e);
+        }
+      }
+    }));
+  } catch (e) {
+    console.error("[notifyPlayerTurn] error:", e?.message ?? e);
+  }
+}
+
 async function tickAIBids(supabase, roomId, room, players) {
   // Always reload fresh players to get correct bid state
   const { data: freshBidPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
@@ -233,6 +279,7 @@ async function tickAIBids(supabase, roomId, room, players) {
   const newPhase = allBid ? "playing" : "bidding";
   const newCurrent = allBid ? startBidder : current;
   await supabase.from("rooms").update({ phase: newPhase, current_player: newCurrent, log: room.log }).eq("id", roomId);
+  if (!players[newCurrent]?.is_ai) await notifyPlayerTurn(supabase, roomId, newCurrent);
 
   dbg("[tickAIBids] allBid:", allBid, "newCurrent:", newCurrent, "is_ai:", players[newCurrent]?.is_ai);
   return json({ ok: true });
@@ -354,6 +401,7 @@ async function advanceBidder(supabase, roomId, room, players, bids) {
   if (!allBid && players[newCurrent]?.is_ai) {
     return await tickAIBids(supabase, roomId, { ...room, phase: newPhase, current_player: newCurrent }, players);
   }
+  if (!players[newCurrent]?.is_ai) await notifyPlayerTurn(supabase, roomId, newCurrent);
   return json({ ok: true });
 }
 
@@ -423,6 +471,7 @@ async function advanceTrick(supabase, roomId, room, players) {
       scheduleAITurn(supabase, roomId); // server drives the next AI move
       return json({ ok: true });
     }
+    await notifyPlayerTurn(supabase, roomId, next);
     return json({ ok: true });
   }
 

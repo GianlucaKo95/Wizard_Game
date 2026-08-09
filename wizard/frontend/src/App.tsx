@@ -3,7 +3,7 @@ import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
-import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart, IconMic, IconMicOff } from "./Icons";
+import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart, IconMic, IconMicOff, IconBell, IconBellOff } from "./Icons";
 import { WizardArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -270,6 +270,48 @@ function AuthScreen() {
   );
 }
 
+// ─── Push Notifications ("Du bist dran") ──────────────────────────────────────
+function urlBase64ToUint8Array(base64: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const base64Safe = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64Safe);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+async function subscribeToPush(userId: string): Promise<{ ok: boolean; error?: string }> {
+  const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+  if (!vapidKey) return { ok: false, error: "Push ist nicht konfiguriert" };
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return { ok: false, error: "Dein Browser unterstützt keine Benachrichtigungen" };
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") return { ok: false, error: "Berechtigung verweigert" };
+  const registration = await navigator.serviceWorker.ready;
+  const sub = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(vapidKey),
+  });
+  const json = sub.toJSON();
+  const { error } = await supabase.from("push_subscriptions").upsert({
+    user_id: userId,
+    endpoint: json.endpoint,
+    p256dh: json.keys?.p256dh,
+    auth: json.keys?.auth,
+  }, { onConflict: "user_id,endpoint" });
+  if (error) return { ok: false, error: "Speichern fehlgeschlagen" };
+  return { ok: true };
+}
+
+async function unsubscribeFromPush(userId: string): Promise<void> {
+  if (!("serviceWorker" in navigator)) return;
+  const registration = await navigator.serviceWorker.ready;
+  const sub = await registration.pushManager.getSubscription();
+  if (sub) {
+    await supabase.from("push_subscriptions").delete().eq("user_id", userId).eq("endpoint", sub.endpoint);
+    await sub.unsubscribe();
+  }
+}
+
 // ─── Profile Screen ───────────────────────────────────────────────────────────
 function ProfileScreen({ session, onBack }: { session: Session; onBack: () => void }) {
   const username = session.user.user_metadata?.username ?? "Spieler";
@@ -291,6 +333,32 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
     supabase.from("profiles").select("avatar_url").eq("id", session.user.id).single()
       .then(({ data }) => setAvatarUrl(data?.avatar_url ?? null));
   }, [session.user.id]);
+
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const pushSupported = "serviceWorker" in navigator && "PushManager" in window && !!import.meta.env.VITE_VAPID_PUBLIC_KEY;
+
+  useEffect(() => {
+    if (!pushSupported) return;
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => setPushEnabled(!!sub))
+      .catch(() => {});
+  }, [pushSupported]);
+
+  async function togglePush() {
+    setPushBusy(true); setPushMsg(null);
+    if (pushEnabled) {
+      await unsubscribeFromPush(session.user.id);
+      setPushEnabled(false);
+    } else {
+      const res = await subscribeToPush(session.user.id);
+      if (res.ok) setPushEnabled(true);
+      else setPushMsg({ text: res.error ?? "Fehlgeschlagen", ok: false });
+    }
+    setPushBusy(false);
+  }
 
   async function processAvatarImage(file: File): Promise<Blob> {
     const img = await createImageBitmap(file);
@@ -419,6 +487,19 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
         </button>
         {pwMsg && <div style={{ fontSize: 12, color: pwMsg.ok ? C.success : "#FF8080", textAlign: "center" }}>{pwMsg.text}</div>}
       </div>
+
+      {/* Push notifications */}
+      {pushSupported && (
+        <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>BENACHRICHTIGUNGEN</div>
+          <button onClick={togglePush} disabled={pushBusy}
+            style={{ ...goldBtn(pushEnabled), padding: "10px 0", fontSize: 13, opacity: pushBusy ? 0.5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            {pushEnabled ? <IconBellOff size={14} /> : <IconBell size={14} />}
+            {pushBusy ? "…" : pushEnabled ? "Deaktivieren" : "\"Du bist dran\" aktivieren"}
+          </button>
+          {pushMsg && <div style={{ fontSize: 12, color: pushMsg.ok ? C.success : "#FF8080", textAlign: "center" }}>{pushMsg.text}</div>}
+        </div>
+      )}
 
       {/* Stats */}
       <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)" }}>

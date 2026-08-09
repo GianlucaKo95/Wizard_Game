@@ -159,3 +159,20 @@ export const IconMicOff = ({ size = 16, style }: IconProps) => (
     <line x1="8" y1="22" x2="16" y2="22" />
   </svg>
 );
+
+export const IconBell = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style}>
+    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+  </svg>
+);
+
+export const IconBellOff = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style}>
+    <line x1="2" y1="2" x2="22" y2="22" />
+    <path d="M8.7 3.7A6 6 0 0 1 18 8c0 3.5.9 5.8 1.6 7.1" />
+    <path d="M6 8c0 7-3 9-3 9h13" />
+    <path d="M18 17h3s-.7-.9-1.3-2.5" />
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+  </svg>
+);
