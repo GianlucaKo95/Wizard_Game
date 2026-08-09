@@ -204,15 +204,18 @@ function json(data, status = 200) {
   });
 }
 
-// Sends a Web Push notification to one player, if they're human and have
-// one or more devices subscribed. Never throws - a push provider outage or
-// missing VAPID config should never break the actual game action that
-// triggered it.
+// Sends a Web Push notification to one player, if they're human, have one
+// or more devices subscribed, and aren't currently present in the room
+// (room_players.connected, maintained by syncPresence from the client's
+// realtime presence channel) - no point pushing "it's your turn" at someone
+// who's already looking at the screen where that's obvious. Never throws -
+// a push provider outage or missing VAPID config should never break the
+// actual game action that triggered it.
 async function sendTurnPush(supabase, roomId, playerIndex, title, body) {
   try {
     const { data: player } = await supabase.from("room_players")
-      .select("user_id, is_ai").eq("room_id", roomId).eq("player_index", playerIndex).maybeSingle();
-    if (!player || player.is_ai || !player.user_id) return;
+      .select("user_id, is_ai, connected").eq("room_id", roomId).eq("player_index", playerIndex).maybeSingle();
+    if (!player || player.is_ai || !player.user_id || player.connected) return;
 
     const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY");
     const vapidPrivate = Deno.env.get("VAPID_PRIVATE_KEY");
