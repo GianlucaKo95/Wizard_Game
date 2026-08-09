@@ -261,6 +261,11 @@ function notifyRainbow9Adjust(supabase, roomId, playerIndex) {
   return sendTurnPush(supabase, roomId, playerIndex, "Vorhersage anpassen!", "Die Wolke verlangt eine neue Vorhersage.");
 }
 
+// Hexe: the witch player must swap a hand card with one from the trick.
+function notifyWitchSwap(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Karte tauschen!", "Die Hexe ist im Spiel - tausche eine Karte mit dem Stich.");
+}
+
 async function tickAIBids(supabase, roomId, room, players) {
   // Always reload fresh players to get correct bid state
   const { data: freshBidPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
@@ -632,6 +637,8 @@ async function advanceTrick(supabase, roomId, room, players) {
       } else {
         await supabase.from("rooms").update({ pending_witch: null }).eq("id", roomId);
       }
+    } else if (bombPendingWitch !== null) {
+      await notifyWitchSwap(supabase, roomId, bombPendingWitch);
     }
 
     return json({ ok: true });
@@ -736,6 +743,8 @@ async function advanceTrick(supabase, roomId, room, players) {
     } else {
       await supabase.from("rooms").update({ pending_witch: null }).eq("id", roomId);
     }
+  } else if (pendingWitch !== null) {
+    await notifyWitchSwap(supabase, roomId, pendingWitch);
   }
 
   // Reload fresh room AND players to get correct state
