@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import webpush from "npm:web-push@3";
 
 import {
   SUITS, buildDeck, shuffle, trickWinner, trickWinnerWithoutBomb,
@@ -159,11 +160,13 @@ async function handleClearTrick(supabase, roomId, room) {
         await endRound(supabase, roomId, fr, fp2);
       } else {
         // Just set phase to playing - client will trigger AI via triggerAI
+        const nextPlayerIdx = fr.last_trick_winner ?? fr.current_player;
         await supabase.from("rooms").update({
           phase: "playing",
-          current_player: fr.last_trick_winner ?? fr.current_player
+          current_player: nextPlayerIdx
         }).eq("id", roomId);
       scheduleAITurn(supabase, roomId);
+      if (!fp2[nextPlayerIdx]?.is_ai) await notifyPlayerTurn(supabase, roomId, nextPlayerIdx);
       }
       return json({ ok: true });
 }
@@ -201,6 +204,81 @@ function json(data, status = 200) {
   });
 }
 
+// Sends a Web Push notification to one player, if they're human, have one
+// or more devices subscribed, and aren't currently present in the room
+// (room_players.connected, maintained by syncPresence from the client's
+// realtime presence channel) - no point pushing "it's your turn" at someone
+// who's already looking at the screen where that's obvious. Never throws -
+// a push provider outage or missing VAPID config should never break the
+// actual game action that triggered it.
+async function sendTurnPush(supabase, roomId, playerIndex, title, body) {
+  try {
+    const { data: player } = await supabase.from("room_players")
+      .select("user_id, is_ai, connected").eq("room_id", roomId).eq("player_index", playerIndex).maybeSingle();
+    if (!player || player.is_ai || !player.user_id || player.connected) return;
+
+    const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY");
+    const vapidPrivate = Deno.env.get("VAPID_PRIVATE_KEY");
+    const vapidSubject = Deno.env.get("VAPID_SUBJECT");
+    if (!vapidPublic || !vapidPrivate || !vapidSubject) return; // not configured - silently skip
+
+    const { data: subs } = await supabase.from("push_subscriptions").select("*").eq("user_id", player.user_id);
+    if (!subs || subs.length === 0) return;
+
+    webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
+    const payload = JSON.stringify({ title, body });
+    await Promise.all(subs.map(async (s) => {
+      try {
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
+      } catch (e) {
+        // 404/410 = the subscription is dead (uninstalled, permission revoked,
+        // browser data cleared) - clean it up instead of retrying it forever.
+        if (e?.statusCode === 404 || e?.statusCode === 410) {
+          await upd(supabase.from("push_subscriptions").delete().eq("id", s.id), "sendTurnPush.deadSub");
+        } else {
+          console.error("[sendTurnPush] push failed:", e?.message ?? e);
+        }
+      }
+    }));
+  } catch (e) {
+    console.error("[sendTurnPush] error:", e?.message ?? e);
+  }
+}
+
+// Wired into the chokepoints that cover normal turn progression
+// (tickAIBids, advanceBidder, advanceTrick's mid-trick advance,
+// handleClearTrick's new-trick resume). Trump/werewolf suit choice and
+// witch swap don't trigger one yet.
+function notifyPlayerTurn(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Du bist dran!", "Wizzo wartet auf deinen Zug.");
+}
+
+// Jongleur (7½): everyone in pending_rainbow7 needs to pick a card to pass
+// on - notify each human in that list, not just one "current" player.
+function notifyRainbow7Pass(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Karte weitergeben!", "Der Jongleur ist im Spiel - wähle eine Karte zum Weitergeben.");
+}
+
+// Wolke (9¾): the trick winner must adjust their prediction.
+function notifyRainbow9Adjust(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Vorhersage anpassen!", "Die Wolke verlangt eine neue Vorhersage.");
+}
+
+// Hexe: the witch player must swap a hand card with one from the trick.
+function notifyWitchSwap(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Karte tauschen!", "Die Hexe ist im Spiel - tausche eine Karte mit dem Stich.");
+}
+
+// Dealer must pick a trump suit (Zauberer/Drache/Vampir/Jongleur/Wolke as trump card).
+function notifyChooseTrump(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Trumpf wählen!", "Du bist Dealer - wähle die Trumpffarbe.");
+}
+
+// Dealer must pick a suit for the werewolf (werewolf drawn as/in place of the trump card).
+function notifyChooseWerewolf(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Stichfarbe wählen!", "Der Werwolf ist deine Trumpfkarte - wähle die Stichfarbe.");
+}
+
 async function tickAIBids(supabase, roomId, room, players) {
   // Always reload fresh players to get correct bid state
   const { data: freshBidPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
@@ -233,6 +311,7 @@ async function tickAIBids(supabase, roomId, room, players) {
   const newPhase = allBid ? "playing" : "bidding";
   const newCurrent = allBid ? startBidder : current;
   await supabase.from("rooms").update({ phase: newPhase, current_player: newCurrent, log: room.log }).eq("id", roomId);
+  if (!players[newCurrent]?.is_ai) await notifyPlayerTurn(supabase, roomId, newCurrent);
 
   dbg("[tickAIBids] allBid:", allBid, "newCurrent:", newCurrent, "is_ai:", players[newCurrent]?.is_ai);
   return json({ ok: true });
@@ -354,6 +433,7 @@ async function advanceBidder(supabase, roomId, room, players, bids) {
   if (!allBid && players[newCurrent]?.is_ai) {
     return await tickAIBids(supabase, roomId, { ...room, phase: newPhase, current_player: newCurrent }, players);
   }
+  if (!players[newCurrent]?.is_ai) await notifyPlayerTurn(supabase, roomId, newCurrent);
   return json({ ok: true });
 }
 
@@ -413,16 +493,25 @@ async function advanceTrick(supabase, roomId, room, players) {
 
   if (trick.length < players.length) {
     const next = (room.current_player + 1) % players.length;
-    await supabase.from("rooms").update({ current_trick: trick, current_player: next, log: room.log }).eq("id", roomId);
+    // Atomic guard: only advance if current_player is still the value this
+    // call expects. A duplicate playCard request (double-tap, client
+    // network retry, multi-tab) that already advanced the turn through a
+    // concurrent call loses this race and returns without appending a
+    // second entry to current_trick - the actual corruption case that
+    // motivated this guard.
+    const { data: advanceClaim } = await supabase.from("rooms")
+      .update({ current_trick: trick, current_player: next, log: room.log })
+      .eq("id", roomId)
+      .eq("current_player", room.current_player)
+      .select("id");
+    if (!advanceClaim || advanceClaim.length === 0) {
+      return json({ ok: true }); // lost the race - already advanced by another call
+    }
     if (players[next]?.is_ai) {
-      await supabase.from("rooms").update({
-        current_trick: trick,
-        current_player: next,
-        log: room.log
-      }).eq("id", roomId);
       scheduleAITurn(supabase, roomId); // server drives the next AI move
       return json({ ok: true });
     }
+    await notifyPlayerTurn(supabase, roomId, next);
     return json({ ok: true });
   }
 
@@ -516,7 +605,11 @@ async function advanceTrick(supabase, roomId, room, players) {
       ? bombWitchPlayerIdx
       : null;
 
-    await supabase.from("rooms").update({
+    // Same atomic guard as the non-bomb winnerIdx branch: only resolve if
+    // current_player is still what this call expects, so a duplicate
+    // playCard request for the trick-completing (bombed) card can't
+    // resolve the same trick twice.
+    const { data: bombTrickClaim } = await supabase.from("rooms").update({
       current_trick: [], current_player: nextLeader,
       last_trick_winner: null, last_trick_cards: trick,
       phase: "trickEnd",
@@ -524,7 +617,13 @@ async function advanceTrick(supabase, roomId, room, players) {
       pending_witch: bombPendingWitch,
       pending_rainbow9: null, pending_rainbow9_deferred: null,
       log: room.log
-    }).eq("id", roomId);
+    }).eq("id", roomId).eq("current_player", room.current_player).select("id");
+    if (!bombTrickClaim || bombTrickClaim.length === 0) {
+      return json({ ok: true }); // lost the race - already resolved by another call
+    }
+    if (bombRainbow7Players) {
+      for (const idx of bombRainbow7Players) if (!players[idx]?.is_ai) await notifyRainbow7Pass(supabase, roomId, idx);
+    }
 
     // If the witch player is an AI, auto-swap immediately
     if (bombPendingWitch !== null && players[bombPendingWitch]?.is_ai) {
@@ -551,9 +650,28 @@ async function advanceTrick(supabase, roomId, room, players) {
       } else {
         await supabase.from("rooms").update({ pending_witch: null }).eq("id", roomId);
       }
+    } else if (bombPendingWitch !== null) {
+      await notifyWitchSwap(supabase, roomId, bombPendingWitch);
     }
 
     return json({ ok: true });
+  }
+
+  // Atomic guard: claim exclusive rights to resolve this trick before
+  // touching any player state. A duplicate playCard request for the trick-
+  // completing card (double-tap, network retry, multi-tab) that loses this
+  // race returns immediately below, instead of double-incrementing
+  // tricks_won or double-writing current_trick/current_player. Only
+  // current_player/phase move here - the rest of the trickEnd fields
+  // (current_trick, pending_*, etc.) depend on tricks_won/isLastTrick and
+  // are written by the full update further down, once this claim succeeds.
+  const { data: trickClaim } = await supabase.from("rooms")
+    .update({ phase: "trickEnd", current_player: winnerIdx })
+    .eq("id", roomId)
+    .eq("current_player", room.current_player)
+    .select("id");
+  if (!trickClaim || trickClaim.length === 0) {
+    return json({ ok: true }); // lost the race - already resolved by another call
   }
 
   // Load fresh tricks_won from DB to avoid stale local value from previous round
@@ -587,20 +705,30 @@ async function advanceTrick(supabase, roomId, room, players) {
     ? witchPlayerIdx
     : null;
 
+  // Exclusivity was already claimed above (current_player -> winnerIdx) -
+  // this just fills in the rest of the trickEnd fields, no CAS needed here.
   await supabase.from("rooms").update({
     current_trick: [], current_player: winnerIdx,
     last_trick_winner: winnerIdx, last_trick_cards: trick,
     phase: "trickEnd",
     // If both Jongleur (7½) and Wolke (9¾) are in the trick,
     // Jongleur resolves first (official FAQ). Defer rainbow9 until after rainbow7 is done.
-    pending_rainbow9: (has9Active && !has7) ? winnerIdx : null,
-    pending_rainbow9_deferred: (has9Active && has7) ? winnerIdx : null,
+    // On the last trick there are no cards left to pass, so Jongleur's
+    // effect never actually happens (rainbow7Players is null below too) -
+    // Wolke must resolve immediately in that case instead of deferring to a
+    // pass-completion event that can now never fire, which otherwise left
+    // pending_rainbow9_deferred set forever with no way to clear it.
+    pending_rainbow9: (has9Active && (!has7 || isLastTrick)) ? winnerIdx : null,
+    pending_rainbow9_deferred: (has9Active && has7 && !isLastTrick) ? winnerIdx : null,
     pending_rainbow7: rainbow7Players,
     pending_witch: pendingWitch,
     log: room.log
   }).eq("id", roomId);
   scheduleClearTrick(supabase, roomId); // server clears the trick after display delay
   dbg("[advanceTrick] after trickEnd update, room.trump_suit:", room.trump_suit, "room.werewolf_suit:", room.werewolf_suit);
+  if (rainbow7Players) {
+    for (const idx of rainbow7Players) if (!players[idx]?.is_ai) await notifyRainbow7Pass(supabase, roomId, idx);
+  }
 
   // If the witch player is an AI, auto-swap immediately
   if (pendingWitch !== null && players[pendingWitch]?.is_ai) {
@@ -628,6 +756,8 @@ async function advanceTrick(supabase, roomId, room, players) {
     } else {
       await supabase.from("rooms").update({ pending_witch: null }).eq("id", roomId);
     }
+  } else if (pendingWitch !== null) {
+    await notifyWitchSwap(supabase, roomId, pendingWitch);
   }
 
   // Reload fresh room AND players to get correct state
@@ -645,8 +775,11 @@ async function advanceTrick(supabase, roomId, room, players) {
   const roundOver = allHandsEmpty || totalTricksPlayed >= currentRound;
   dbg("[advanceTrick] totalTricksPlayed:", totalTricksPlayed, "currentRound:", currentRound, "allHandsEmpty:", allHandsEmpty, "roundOver:", roundOver);
 
-  // If the 9¾ winner is an AI, resolve it automatically right away
-  if (has9Active && updatedPlayers2[winnerIdx]?.is_ai) {
+  // If the 9¾ winner is an AI, resolve it automatically right away - but
+  // only in the same cases pending_rainbow9 (not _deferred) was actually
+  // set above, or this double-adjusts once passCard's deferred-resolution
+  // block also runs for the same event.
+  if (has9Active && (!has7 || isLastTrick) && updatedPlayers2[winnerIdx]?.is_ai) {
     const winnerPlayer = updatedPlayers2[winnerIdx];
     const tricksWon = winnerPlayer.tricks_won ?? 0;
     const currentBid = winnerPlayer.bid ?? 0;
@@ -660,6 +793,8 @@ async function advanceTrick(supabase, roomId, room, players) {
     addLog(room, `${winnerPlayer.ai_name} ändert Vorhersage auf ${newBid}`);
     await supabase.from("rooms").update({ pending_rainbow9: null, log: room.log }).eq("id", roomId);
     updatedPlayers2[winnerIdx] = { ...winnerPlayer, bid: newBid };
+  } else if (has9Active && (!has7 || isLastTrick) && !updatedPlayers2[winnerIdx]?.is_ai) {
+    await notifyRainbow9Adjust(supabase, roomId, winnerIdx);
   }
 
   // Note: even if roundOver is true, we do NOT call endRound here.
@@ -729,6 +864,7 @@ async function dealRound(supabase, roomId, room, players) {
       const updPlayers = dealtPlayers.map(p => p.player_index === werewolfHolder.player_index ? { ...p, hand: newHand } : p);
       return await tickAIBids(supabase, roomId, { ...room, phase: "bidding", current_player: wPlayer, werewolf_suit: wSuit }, updPlayers);
     }
+    await notifyChooseWerewolf(supabase, roomId, wPlayer);
     return json({ ok: true });
   }
 
@@ -837,6 +973,8 @@ async function dealRound(supabase, roomId, room, players) {
   if (phase === "bidding") {
     return await tickAIBids(supabase, roomId, { ...room, phase, current_player: currentPlayer, trump_suit: trumpSuit, werewolf_suit: null }, dealtPlayers);
   }
+  if (phase === "choosingTrump") await notifyChooseTrump(supabase, roomId, currentPlayer);
+  if (phase === "choosingWerewolf") await notifyChooseWerewolf(supabase, roomId, currentPlayer);
   return json({ ok: true });
 }
 
@@ -1097,7 +1235,18 @@ serve(async (req) => {
       const isRainbowChoice = (card.specialType === "rainbow7" || card.specialType === "rainbow9") && body.suit;
       if (isRainbowChoice && !SUITS.includes(body.suit)) return json({ error: "Ungültige Farbe" }, 400);
       const newHand = hand.filter(c => c.id !== card.id);
-      await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
+      // Atomic guard: only remove the card if it's still actually in the DB
+      // hand at write time - a duplicate playCard request for the same card
+      // (double-tap, client network retry, multi-tab) finds it already gone
+      // and bails out instead of playing it a second time.
+      const { data: handClaim, error: handClaimErr } = await supabase
+        .from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id)
+        .contains("hand", [{ id: card.id }]).select("id");
+      if (handClaimErr) {
+        console.error("[playCard] hand claim failed:", handClaimErr.message);
+      } else if (!handClaim || handClaim.length === 0) {
+        return json({ ok: true }); // lost the race - another request already played this card
+      }
       const playedCard = isWitch ? { ...card, type: "fool" } : (isRainbowChoice ? { ...card, suit: body.suit } : card);
       const newTrick = [...room.current_trick, { card: playedCard, playerIndex: callerIdx }];
       addLog(room, `${callerPlayer.ai_name}: ${cardLabel(playedCard)}`);
@@ -1111,6 +1260,7 @@ serve(async (req) => {
       const { specialAction: sa, cardId, suit, takeCardId, giveCardId, choice } = body;
 
       if (sa === "witch" && takeCardId && giveCardId) {
+        if (room.pending_witch !== callerIdx) return json({ error: "Nicht dein Zug" }, 400);
         const lastTrick = room.last_trick_cards ?? [];
         const takenCard = lastTrick.find(t => t.card.id === takeCardId)?.card;
         if (!takenCard) return json({ error: "Karte nicht gefunden" }, 400);
@@ -1133,10 +1283,20 @@ serve(async (req) => {
       }
 
       if (sa === "wizardfool") {
+        if (room.phase !== "playing") return json({ error: "Falscher Status" }, 400);
+        if (room.current_player !== callerIdx) return json({ error: "Nicht dein Zug" }, 403);
         const card = callerPlayer.hand.find(c => c.id === cardId);
         if (!card) return json({ error: "Karte nicht gefunden" }, 400);
         const newHand = callerPlayer.hand.filter(c => c.id !== cardId);
-        await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
+        // Same atomic hand-claim guard as playCard - see comment there.
+        const { data: wfHandClaim, error: wfHandClaimErr } = await supabase
+          .from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id)
+          .contains("hand", [{ id: card.id }]).select("id");
+        if (wfHandClaimErr) {
+          console.error("[playSpecial:wizardfool] hand claim failed:", wfHandClaimErr.message);
+        } else if (!wfHandClaim || wfHandClaim.length === 0) {
+          return json({ ok: true }); // lost the race - another request already played this card
+        }
         const resolvedCard = { ...card, type: choice === "wizard" ? "wizard" : "fool" };
         const newTrick = [...room.current_trick, { card: resolvedCard, playerIndex: callerIdx }];
         addLog(room, `${callerPlayer.ai_name}: Ron als ${choice === "wizard" ? "Zauberer" : "Narr"}`);
@@ -1151,14 +1311,30 @@ serve(async (req) => {
         return json({ error: "Nicht dein Zug" }, 400);
       const passedCard = callerPlayer.hand.find(c => c.id === body.cardId);
       if (!passedCard) return json({ error: "Karte nicht gefunden" }, 400);
+
+      // Atomically remove callerIdx from pending_rainbow7 and record their card
+      // in the buffer, inside a single DB-locked transaction (SELECT ... FOR
+      // UPDATE in record_rainbow7_pass) instead of a JS read-modify-write.
+      // Previously, two players' concurrent passCard calls each computed their
+      // buffer/remaining-list write from the same stale in-memory snapshot -
+      // whichever write landed second silently overwrote the first player's
+      // already-committed pass, permanently losing a card from play.
+      const { data: passResult, error: passRpcErr } = await supabase.rpc("record_rainbow7_pass", {
+        p_room_id: roomId, p_player_idx: callerIdx, p_card: passedCard,
+      });
+      if (passRpcErr) {
+        console.error("[passCard] RPC failed:", passRpcErr.message);
+        return json({ error: "Fehler beim Weitergeben" }, 500);
+      }
+      if (!passResult) return json({ ok: true }); // lost the race, or a duplicate/retried request
+
       const newHand = callerPlayer.hand.filter(c => c.id !== body.cardId);
-      await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
-      const buffer = room.pending_rainbow7_buffer ?? {};
-      buffer[callerIdx] = passedCard;
+      await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "passCard.hand");
       addLog(room, `${callerPlayer.ai_name} hat eine Karte gewählt`);
-      let remaining = room.pending_rainbow7.filter(i => i !== callerIdx);
-      // Immediately write updated pending list to DB to prevent duplicate passCard calls
-      await supabase.from("rooms").update({ pending_rainbow7: remaining, pending_rainbow7_buffer: buffer, log: room.log }).eq("id", roomId);
+      await upd(supabase.from("rooms").update({ log: room.log }).eq("id", roomId), "passCard.log");
+
+      let remaining = passResult.pending;
+      let buffer = passResult.buffer;
       // Reload fresh players for AI auto-pass to avoid stale hand data
       const { data: freshPassPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
       const updPlayers = freshPassPlayers ?? players;
@@ -1166,13 +1342,31 @@ serve(async (req) => {
         const aiPlayer = updPlayers.find(p => p.player_index === aiIdx);
         if (aiPlayer?.is_ai && aiPlayer.hand.length > 0) {
           const aiCard = aiWorstCard(aiPlayer.hand, room.trump_suit, room.werewolf_suit);
+          // Same atomic pass-recording as the human branch above - if a
+          // concurrent request already passed for this AI (e.g. two human
+          // passCard calls both driving the same trailing AI), this RPC call
+          // returns null and the AI's card is left untouched.
+          const { data: aiPassResult, error: aiPassErr } = await supabase.rpc("record_rainbow7_pass", {
+            p_room_id: roomId, p_player_idx: aiIdx, p_card: aiCard,
+          });
+          if (aiPassErr || !aiPassResult) continue;
           const aiNewHand = aiPlayer.hand.filter(c => c.id !== aiCard.id);
-          await supabase.from("room_players").update({ hand: aiNewHand }).eq("id", aiPlayer.id);
-          buffer[aiIdx] = aiCard;
-          remaining = remaining.filter(i => i !== aiIdx);
+          await upd(supabase.from("room_players").update({ hand: aiNewHand }).eq("id", aiPlayer.id), "passCard.aiHand");
+          buffer = aiPassResult.buffer;
+          remaining = aiPassResult.pending;
         }
       }
       if (remaining.length === 0) {
+        // Atomic guard: only one concurrent passCard call may run the final
+        // card distribution - same optimistic-lock idiom as handleClearTrick's
+        // roundOver2 branch (flip a field, check how many rows it affected).
+        const { data: finalizeLockRows } = await supabase.from("rooms")
+          .update({ pending_rainbow7_buffer: null })
+          .eq("id", roomId)
+          .not("pending_rainbow7_buffer", "is", null)
+          .select("id");
+        if (!finalizeLockRows || finalizeLockRows.length === 0) return json({ ok: true }); // already finalized by another call
+
         const { data: finalPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
         for (const [fromIdxStr, card] of Object.entries(buffer)) {
           const fromIdx = parseInt(fromIdxStr);
@@ -1191,7 +1385,9 @@ serve(async (req) => {
           phase: deferredRainbow9 !== null ? "trickEnd" : "playing",
           log: room.log
         }).eq("id", roomId);
-        // If deferred rainbow9 is for an AI, auto-resolve it
+        // If deferred rainbow9 is for an AI, auto-resolve it; otherwise the
+        // human's rainbow9Adjust turn only actually begins now (after every
+        // Jongleur pass has completed), so that's when they get notified.
         if (deferredRainbow9 !== null) {
           const { data: r9Players2 } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
           const r9Room2 = { ...room, pending_rainbow9: deferredRainbow9, pending_rainbow9_deferred: null };
@@ -1202,6 +1398,8 @@ serve(async (req) => {
             await supabase.from("room_players").update({ bid: newBid }).eq("id", wp.id);
             addLog(room, `${wp.ai_name} ändert Vorhersage auf ${newBid}`);
             await supabase.from("rooms").update({ pending_rainbow9: null, phase: "playing", log: room.log }).eq("id", roomId);
+          } else {
+            await notifyRainbow9Adjust(supabase, roomId, deferredRainbow9);
           }
         }
         // Check if round is over after card exchange
@@ -1214,9 +1412,10 @@ serve(async (req) => {
             await endRound(supabase, roomId, afterPassRoom, afterPassPlayers);
           }
         }
-      } else {
-        await supabase.from("rooms").update({ pending_rainbow7: remaining, pending_rainbow7_buffer: buffer, log: room.log }).eq("id", roomId);
       }
+      // No else branch needed here: record_rainbow7_pass already persisted
+      // pending_rainbow7/pending_rainbow7_buffer atomically for every pass
+      // recorded above - nothing stale left to (re-)write.
       return json({ ok: true });
     }
 
