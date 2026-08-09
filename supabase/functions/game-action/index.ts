@@ -461,13 +461,21 @@ async function advanceTrick(supabase, roomId, room, players) {
 
   if (trick.length < players.length) {
     const next = (room.current_player + 1) % players.length;
-    await supabase.from("rooms").update({ current_trick: trick, current_player: next, log: room.log }).eq("id", roomId);
+    // Atomic guard: only advance if current_player is still the value this
+    // call expects. A duplicate playCard request (double-tap, client
+    // network retry, multi-tab) that already advanced the turn through a
+    // concurrent call loses this race and returns without appending a
+    // second entry to current_trick - the actual corruption case that
+    // motivated this guard.
+    const { data: advanceClaim } = await supabase.from("rooms")
+      .update({ current_trick: trick, current_player: next, log: room.log })
+      .eq("id", roomId)
+      .eq("current_player", room.current_player)
+      .select("id");
+    if (!advanceClaim || advanceClaim.length === 0) {
+      return json({ ok: true }); // lost the race - already advanced by another call
+    }
     if (players[next]?.is_ai) {
-      await supabase.from("rooms").update({
-        current_trick: trick,
-        current_player: next,
-        log: room.log
-      }).eq("id", roomId);
       scheduleAITurn(supabase, roomId); // server drives the next AI move
       return json({ ok: true });
     }
@@ -565,7 +573,11 @@ async function advanceTrick(supabase, roomId, room, players) {
       ? bombWitchPlayerIdx
       : null;
 
-    await supabase.from("rooms").update({
+    // Same atomic guard as the non-bomb winnerIdx branch: only resolve if
+    // current_player is still what this call expects, so a duplicate
+    // playCard request for the trick-completing (bombed) card can't
+    // resolve the same trick twice.
+    const { data: bombTrickClaim } = await supabase.from("rooms").update({
       current_trick: [], current_player: nextLeader,
       last_trick_winner: null, last_trick_cards: trick,
       phase: "trickEnd",
@@ -573,7 +585,10 @@ async function advanceTrick(supabase, roomId, room, players) {
       pending_witch: bombPendingWitch,
       pending_rainbow9: null, pending_rainbow9_deferred: null,
       log: room.log
-    }).eq("id", roomId);
+    }).eq("id", roomId).eq("current_player", room.current_player).select("id");
+    if (!bombTrickClaim || bombTrickClaim.length === 0) {
+      return json({ ok: true }); // lost the race - already resolved by another call
+    }
 
     // If the witch player is an AI, auto-swap immediately
     if (bombPendingWitch !== null && players[bombPendingWitch]?.is_ai) {
@@ -603,6 +618,23 @@ async function advanceTrick(supabase, roomId, room, players) {
     }
 
     return json({ ok: true });
+  }
+
+  // Atomic guard: claim exclusive rights to resolve this trick before
+  // touching any player state. A duplicate playCard request for the trick-
+  // completing card (double-tap, network retry, multi-tab) that loses this
+  // race returns immediately below, instead of double-incrementing
+  // tricks_won or double-writing current_trick/current_player. Only
+  // current_player/phase move here - the rest of the trickEnd fields
+  // (current_trick, pending_*, etc.) depend on tricks_won/isLastTrick and
+  // are written by the full update further down, once this claim succeeds.
+  const { data: trickClaim } = await supabase.from("rooms")
+    .update({ phase: "trickEnd", current_player: winnerIdx })
+    .eq("id", roomId)
+    .eq("current_player", room.current_player)
+    .select("id");
+  if (!trickClaim || trickClaim.length === 0) {
+    return json({ ok: true }); // lost the race - already resolved by another call
   }
 
   // Load fresh tricks_won from DB to avoid stale local value from previous round
@@ -636,6 +668,8 @@ async function advanceTrick(supabase, roomId, room, players) {
     ? witchPlayerIdx
     : null;
 
+  // Exclusivity was already claimed above (current_player -> winnerIdx) -
+  // this just fills in the rest of the trickEnd fields, no CAS needed here.
   await supabase.from("rooms").update({
     current_trick: [], current_player: winnerIdx,
     last_trick_winner: winnerIdx, last_trick_cards: trick,
@@ -1154,7 +1188,18 @@ serve(async (req) => {
       const isRainbowChoice = (card.specialType === "rainbow7" || card.specialType === "rainbow9") && body.suit;
       if (isRainbowChoice && !SUITS.includes(body.suit)) return json({ error: "Ungültige Farbe" }, 400);
       const newHand = hand.filter(c => c.id !== card.id);
-      await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
+      // Atomic guard: only remove the card if it's still actually in the DB
+      // hand at write time - a duplicate playCard request for the same card
+      // (double-tap, client network retry, multi-tab) finds it already gone
+      // and bails out instead of playing it a second time.
+      const { data: handClaim, error: handClaimErr } = await supabase
+        .from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id)
+        .contains("hand", [{ id: card.id }]).select("id");
+      if (handClaimErr) {
+        console.error("[playCard] hand claim failed:", handClaimErr.message);
+      } else if (!handClaim || handClaim.length === 0) {
+        return json({ ok: true }); // lost the race - another request already played this card
+      }
       const playedCard = isWitch ? { ...card, type: "fool" } : (isRainbowChoice ? { ...card, suit: body.suit } : card);
       const newTrick = [...room.current_trick, { card: playedCard, playerIndex: callerIdx }];
       addLog(room, `${callerPlayer.ai_name}: ${cardLabel(playedCard)}`);
@@ -1196,7 +1241,15 @@ serve(async (req) => {
         const card = callerPlayer.hand.find(c => c.id === cardId);
         if (!card) return json({ error: "Karte nicht gefunden" }, 400);
         const newHand = callerPlayer.hand.filter(c => c.id !== cardId);
-        await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
+        // Same atomic hand-claim guard as playCard - see comment there.
+        const { data: wfHandClaim, error: wfHandClaimErr } = await supabase
+          .from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id)
+          .contains("hand", [{ id: card.id }]).select("id");
+        if (wfHandClaimErr) {
+          console.error("[playSpecial:wizardfool] hand claim failed:", wfHandClaimErr.message);
+        } else if (!wfHandClaim || wfHandClaim.length === 0) {
+          return json({ ok: true }); // lost the race - another request already played this card
+        }
         const resolvedCard = { ...card, type: choice === "wizard" ? "wizard" : "fool" };
         const newTrick = [...room.current_trick, { card: resolvedCard, playerIndex: callerIdx }];
         addLog(room, `${callerPlayer.ai_name}: Ron als ${choice === "wizard" ? "Zauberer" : "Narr"}`);
@@ -1211,14 +1264,30 @@ serve(async (req) => {
         return json({ error: "Nicht dein Zug" }, 400);
       const passedCard = callerPlayer.hand.find(c => c.id === body.cardId);
       if (!passedCard) return json({ error: "Karte nicht gefunden" }, 400);
+
+      // Atomically remove callerIdx from pending_rainbow7 and record their card
+      // in the buffer, inside a single DB-locked transaction (SELECT ... FOR
+      // UPDATE in record_rainbow7_pass) instead of a JS read-modify-write.
+      // Previously, two players' concurrent passCard calls each computed their
+      // buffer/remaining-list write from the same stale in-memory snapshot -
+      // whichever write landed second silently overwrote the first player's
+      // already-committed pass, permanently losing a card from play.
+      const { data: passResult, error: passRpcErr } = await supabase.rpc("record_rainbow7_pass", {
+        p_room_id: roomId, p_player_idx: callerIdx, p_card: passedCard,
+      });
+      if (passRpcErr) {
+        console.error("[passCard] RPC failed:", passRpcErr.message);
+        return json({ error: "Fehler beim Weitergeben" }, 500);
+      }
+      if (!passResult) return json({ ok: true }); // lost the race, or a duplicate/retried request
+
       const newHand = callerPlayer.hand.filter(c => c.id !== body.cardId);
-      await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "playCard.hand");
-      const buffer = room.pending_rainbow7_buffer ?? {};
-      buffer[callerIdx] = passedCard;
+      await upd(supabase.from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id), "passCard.hand");
       addLog(room, `${callerPlayer.ai_name} hat eine Karte gewählt`);
-      let remaining = room.pending_rainbow7.filter(i => i !== callerIdx);
-      // Immediately write updated pending list to DB to prevent duplicate passCard calls
-      await supabase.from("rooms").update({ pending_rainbow7: remaining, pending_rainbow7_buffer: buffer, log: room.log }).eq("id", roomId);
+      await upd(supabase.from("rooms").update({ log: room.log }).eq("id", roomId), "passCard.log");
+
+      let remaining = passResult.pending;
+      let buffer = passResult.buffer;
       // Reload fresh players for AI auto-pass to avoid stale hand data
       const { data: freshPassPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
       const updPlayers = freshPassPlayers ?? players;
@@ -1226,13 +1295,31 @@ serve(async (req) => {
         const aiPlayer = updPlayers.find(p => p.player_index === aiIdx);
         if (aiPlayer?.is_ai && aiPlayer.hand.length > 0) {
           const aiCard = aiWorstCard(aiPlayer.hand, room.trump_suit, room.werewolf_suit);
+          // Same atomic pass-recording as the human branch above - if a
+          // concurrent request already passed for this AI (e.g. two human
+          // passCard calls both driving the same trailing AI), this RPC call
+          // returns null and the AI's card is left untouched.
+          const { data: aiPassResult, error: aiPassErr } = await supabase.rpc("record_rainbow7_pass", {
+            p_room_id: roomId, p_player_idx: aiIdx, p_card: aiCard,
+          });
+          if (aiPassErr || !aiPassResult) continue;
           const aiNewHand = aiPlayer.hand.filter(c => c.id !== aiCard.id);
-          await supabase.from("room_players").update({ hand: aiNewHand }).eq("id", aiPlayer.id);
-          buffer[aiIdx] = aiCard;
-          remaining = remaining.filter(i => i !== aiIdx);
+          await upd(supabase.from("room_players").update({ hand: aiNewHand }).eq("id", aiPlayer.id), "passCard.aiHand");
+          buffer = aiPassResult.buffer;
+          remaining = aiPassResult.pending;
         }
       }
       if (remaining.length === 0) {
+        // Atomic guard: only one concurrent passCard call may run the final
+        // card distribution - same optimistic-lock idiom as handleClearTrick's
+        // roundOver2 branch (flip a field, check how many rows it affected).
+        const { data: finalizeLockRows } = await supabase.from("rooms")
+          .update({ pending_rainbow7_buffer: null })
+          .eq("id", roomId)
+          .not("pending_rainbow7_buffer", "is", null)
+          .select("id");
+        if (!finalizeLockRows || finalizeLockRows.length === 0) return json({ ok: true }); // already finalized by another call
+
         const { data: finalPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
         for (const [fromIdxStr, card] of Object.entries(buffer)) {
           const fromIdx = parseInt(fromIdxStr);
@@ -1274,9 +1361,10 @@ serve(async (req) => {
             await endRound(supabase, roomId, afterPassRoom, afterPassPlayers);
           }
         }
-      } else {
-        await supabase.from("rooms").update({ pending_rainbow7: remaining, pending_rainbow7_buffer: buffer, log: room.log }).eq("id", roomId);
       }
+      // No else branch needed here: record_rainbow7_pass already persisted
+      // pending_rainbow7/pending_rainbow7_buffer atomically for every pass
+      // recorded above - nothing stale left to (re-)write.
       return json({ ok: true });
     }
 
