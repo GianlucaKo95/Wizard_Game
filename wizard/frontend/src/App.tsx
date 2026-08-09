@@ -883,9 +883,11 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
   const [saving, setSaving] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState("");
+  const [wolkePicking, setWolkePicking] = useState(false);
+  const [wolkePlayer, setWolkePlayer] = useState<number | null>(null);
   const dealer = players[(currentRoundNum - 1) % players.length];
 
-  useEffect(() => { setBids({}); setGots({}); setError(""); }, [currentRoundNum, !!pendingBids]);
+  useEffect(() => { setBids({}); setGots({}); setError(""); setWolkePicking(false); setWolkePlayer(null); }, [currentRoundNum, !!pendingBids]);
 
   const totals = players.map(p => {
     let score = 0;
@@ -921,6 +923,15 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
   function effectiveBid(playerIndex: number): string {
     if (bids[playerIndex] !== undefined) return bids[playerIndex];
     return pendingBids ? String(pendingBids[playerIndex] ?? "") : "";
+  }
+
+  // Wolke (9¾): exactly ±1 on the trick winner's already-locked Ansage,
+  // never below 0 - guided step buttons instead of a free-text edit, so a
+  // typo can't silently produce an invalid adjustment.
+  function adjustBid(playerIndex: number, delta: 1 | -1) {
+    const current = Number(effectiveBid(playerIndex) || 0);
+    const next = Math.max(0, current + delta);
+    setBids(prev => ({ ...prev, [playerIndex]: String(next) }));
   }
 
   async function saveRound() {
@@ -1043,6 +1054,45 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
             <div style={{ fontSize: 10.5, color: C.ivoryDim, textAlign: "right" }}>Summe Stiche ({gotSum}) ≠ Runde ({currentRoundNum}) - bei einer Bombe normal.</div>
           </div>
         )}
+        {!isDone && pendingBids && !wolkePicking && (
+          <button onClick={() => setWolkePicking(true)} style={{ marginTop: 10, background: "none", border: `1px solid ${C.glassBorder}`, borderRadius: RADIUS.sm, color: C.ivoryDim, cursor: "pointer", fontSize: 11.5, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            🚂 9¾ – Vorhersage anpassen
+          </button>
+        )}
+        {!isDone && pendingBids && wolkePicking && wolkePlayer === null && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: C.ivoryDim, marginBottom: 6 }}>Wer hat den Stich mit der Wolke gewonnen?</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {players.map(p => (
+                <button key={p.id} onClick={() => setWolkePlayer(p.player_index)}
+                  style={{ ...goldBtn(false), padding: "7px 12px", fontSize: 12 }}>{p.display_name}</button>
+              ))}
+              <button onClick={() => setWolkePicking(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 11.5, padding: "7px 4px" }}>Abbrechen</button>
+            </div>
+          </div>
+        )}
+        {!isDone && pendingBids && wolkePicking && wolkePlayer !== null && (() => {
+          const p = players.find(pl => pl.player_index === wolkePlayer);
+          const current = Number(effectiveBid(wolkePlayer) || 0);
+          return (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, color: C.ivoryDim, marginBottom: 6 }}>
+                <span style={{ color: C.gold }}>{p?.display_name}</span> - aktuelle Ansage: <span style={{ color: C.gold, fontWeight: 700 }}>{current}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => { adjustBid(wolkePlayer, -1); setWolkePicking(false); setWolkePlayer(null); }} disabled={current === 0}
+                  style={{ ...goldBtn(false), flex: 1, padding: "9px 0", fontSize: 13, opacity: current === 0 ? 0.4 : 1 }}>
+                  −1 → {Math.max(0, current - 1)}
+                </button>
+                <button onClick={() => { adjustBid(wolkePlayer, 1); setWolkePicking(false); setWolkePlayer(null); }}
+                  style={{ ...goldBtn(), flex: 1, padding: "9px 0", fontSize: 13 }}>
+                  +1 → {current + 1}
+                </button>
+              </div>
+              <button onClick={() => setWolkePlayer(null)} style={{ marginTop: 6, background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10.5, padding: 0 }}>Anderer Spieler</button>
+            </div>
+          );
+        })()}
       </div>
 
       {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
