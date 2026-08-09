@@ -266,6 +266,16 @@ function notifyWitchSwap(supabase, roomId, playerIndex) {
   return sendTurnPush(supabase, roomId, playerIndex, "Karte tauschen!", "Die Hexe ist im Spiel - tausche eine Karte mit dem Stich.");
 }
 
+// Dealer must pick a trump suit (Zauberer/Drache/Vampir/Jongleur/Wolke as trump card).
+function notifyChooseTrump(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Trumpf wählen!", "Du bist Dealer - wähle die Trumpffarbe.");
+}
+
+// Dealer must pick a suit for the werewolf (werewolf drawn as/in place of the trump card).
+function notifyChooseWerewolf(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Stichfarbe wählen!", "Der Werwolf ist deine Trumpfkarte - wähle die Stichfarbe.");
+}
+
 async function tickAIBids(supabase, roomId, room, players) {
   // Always reload fresh players to get correct bid state
   const { data: freshBidPlayers } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
@@ -851,6 +861,7 @@ async function dealRound(supabase, roomId, room, players) {
       const updPlayers = dealtPlayers.map(p => p.player_index === werewolfHolder.player_index ? { ...p, hand: newHand } : p);
       return await tickAIBids(supabase, roomId, { ...room, phase: "bidding", current_player: wPlayer, werewolf_suit: wSuit }, updPlayers);
     }
+    await notifyChooseWerewolf(supabase, roomId, wPlayer);
     return json({ ok: true });
   }
 
@@ -959,6 +970,8 @@ async function dealRound(supabase, roomId, room, players) {
   if (phase === "bidding") {
     return await tickAIBids(supabase, roomId, { ...room, phase, current_player: currentPlayer, trump_suit: trumpSuit, werewolf_suit: null }, dealtPlayers);
   }
+  if (phase === "choosingTrump") await notifyChooseTrump(supabase, roomId, currentPlayer);
+  if (phase === "choosingWerewolf") await notifyChooseWerewolf(supabase, roomId, currentPlayer);
   return json({ ok: true });
 }
 
