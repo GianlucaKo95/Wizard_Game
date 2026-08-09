@@ -204,16 +204,11 @@ function json(data, status = 200) {
   });
 }
 
-// Sends a "Du bist dran" Web Push notification to a player whose turn it is,
-// if they have one or more devices subscribed. Never throws - a push
-// provider outage or missing VAPID config should never break the actual
-// game action that triggered it. Not called for every current_player write
-// in this file (there are many, across bidding/trick-play/special cards) -
-// wired into the three chokepoints that cover normal turn progression
-// (tickAIBids, advanceTrick's mid-trick advance, handleClearTrick's
-// new-trick resume); rarer special-card sub-prompts (trump/werewolf suit
-// choice, witch swap, Jongleur pass) don't trigger one yet.
-async function notifyPlayerTurn(supabase, roomId, playerIndex) {
+// Sends a Web Push notification to one player, if they're human and have
+// one or more devices subscribed. Never throws - a push provider outage or
+// missing VAPID config should never break the actual game action that
+// triggered it.
+async function sendTurnPush(supabase, roomId, playerIndex, title, body) {
   try {
     const { data: player } = await supabase.from("room_players")
       .select("user_id, is_ai").eq("room_id", roomId).eq("player_index", playerIndex).maybeSingle();
@@ -228,7 +223,7 @@ async function notifyPlayerTurn(supabase, roomId, playerIndex) {
     if (!subs || subs.length === 0) return;
 
     webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
-    const payload = JSON.stringify({ title: "Du bist dran!", body: "Wizzo wartet auf deinen Zug." });
+    const payload = JSON.stringify({ title, body });
     await Promise.all(subs.map(async (s) => {
       try {
         await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
@@ -236,15 +231,34 @@ async function notifyPlayerTurn(supabase, roomId, playerIndex) {
         // 404/410 = the subscription is dead (uninstalled, permission revoked,
         // browser data cleared) - clean it up instead of retrying it forever.
         if (e?.statusCode === 404 || e?.statusCode === 410) {
-          await upd(supabase.from("push_subscriptions").delete().eq("id", s.id), "notifyPlayerTurn.deadSub");
+          await upd(supabase.from("push_subscriptions").delete().eq("id", s.id), "sendTurnPush.deadSub");
         } else {
-          console.error("[notifyPlayerTurn] push failed:", e?.message ?? e);
+          console.error("[sendTurnPush] push failed:", e?.message ?? e);
         }
       }
     }));
   } catch (e) {
-    console.error("[notifyPlayerTurn] error:", e?.message ?? e);
+    console.error("[sendTurnPush] error:", e?.message ?? e);
   }
+}
+
+// Wired into the chokepoints that cover normal turn progression
+// (tickAIBids, advanceBidder, advanceTrick's mid-trick advance,
+// handleClearTrick's new-trick resume). Trump/werewolf suit choice and
+// witch swap don't trigger one yet.
+function notifyPlayerTurn(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Du bist dran!", "Wizzo wartet auf deinen Zug.");
+}
+
+// Jongleur (7½): everyone in pending_rainbow7 needs to pick a card to pass
+// on - notify each human in that list, not just one "current" player.
+function notifyRainbow7Pass(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Karte weitergeben!", "Der Jongleur ist im Spiel - wähle eine Karte zum Weitergeben.");
+}
+
+// Wolke (9¾): the trick winner must adjust their prediction.
+function notifyRainbow9Adjust(supabase, roomId, playerIndex) {
+  return sendTurnPush(supabase, roomId, playerIndex, "Vorhersage anpassen!", "Die Wolke verlangt eine neue Vorhersage.");
 }
 
 async function tickAIBids(supabase, roomId, room, players) {
@@ -589,6 +603,9 @@ async function advanceTrick(supabase, roomId, room, players) {
     if (!bombTrickClaim || bombTrickClaim.length === 0) {
       return json({ ok: true }); // lost the race - already resolved by another call
     }
+    if (bombRainbow7Players) {
+      for (const idx of bombRainbow7Players) if (!players[idx]?.is_ai) await notifyRainbow7Pass(supabase, roomId, idx);
+    }
 
     // If the witch player is an AI, auto-swap immediately
     if (bombPendingWitch !== null && players[bombPendingWitch]?.is_ai) {
@@ -689,6 +706,9 @@ async function advanceTrick(supabase, roomId, room, players) {
   }).eq("id", roomId);
   scheduleClearTrick(supabase, roomId); // server clears the trick after display delay
   dbg("[advanceTrick] after trickEnd update, room.trump_suit:", room.trump_suit, "room.werewolf_suit:", room.werewolf_suit);
+  if (rainbow7Players) {
+    for (const idx of rainbow7Players) if (!players[idx]?.is_ai) await notifyRainbow7Pass(supabase, roomId, idx);
+  }
 
   // If the witch player is an AI, auto-swap immediately
   if (pendingWitch !== null && players[pendingWitch]?.is_ai) {
@@ -751,6 +771,8 @@ async function advanceTrick(supabase, roomId, room, players) {
     addLog(room, `${winnerPlayer.ai_name} ändert Vorhersage auf ${newBid}`);
     await supabase.from("rooms").update({ pending_rainbow9: null, log: room.log }).eq("id", roomId);
     updatedPlayers2[winnerIdx] = { ...winnerPlayer, bid: newBid };
+  } else if (has9Active && (!has7 || isLastTrick) && !updatedPlayers2[winnerIdx]?.is_ai) {
+    await notifyRainbow9Adjust(supabase, roomId, winnerIdx);
   }
 
   // Note: even if roundOver is true, we do NOT call endRound here.
@@ -1338,7 +1360,9 @@ serve(async (req) => {
           phase: deferredRainbow9 !== null ? "trickEnd" : "playing",
           log: room.log
         }).eq("id", roomId);
-        // If deferred rainbow9 is for an AI, auto-resolve it
+        // If deferred rainbow9 is for an AI, auto-resolve it; otherwise the
+        // human's rainbow9Adjust turn only actually begins now (after every
+        // Jongleur pass has completed), so that's when they get notified.
         if (deferredRainbow9 !== null) {
           const { data: r9Players2 } = await supabase.from("room_players").select("*").eq("room_id", roomId).order("player_index");
           const r9Room2 = { ...room, pending_rainbow9: deferredRainbow9, pending_rainbow9_deferred: null };
@@ -1349,6 +1373,8 @@ serve(async (req) => {
             await supabase.from("room_players").update({ bid: newBid }).eq("id", wp.id);
             addLog(room, `${wp.ai_name} ändert Vorhersage auf ${newBid}`);
             await supabase.from("rooms").update({ pending_rainbow9: null, phase: "playing", log: room.log }).eq("id", roomId);
+          } else {
+            await notifyRainbow9Adjust(supabase, roomId, deferredRainbow9);
           }
         }
         // Check if round is over after card exchange
