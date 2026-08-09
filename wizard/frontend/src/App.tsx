@@ -1814,6 +1814,11 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showScoresheet, setShowScoresheet] = useState(false);
+  // Host-adjustable override for how many AI seats to add at start - null
+  // means "use the default" (top up to 3 total). Lets the host explicitly
+  // choose 0 to play with exactly the humans present, e.g. a 2-player game,
+  // instead of always being forced up to 3.
+  const [aiCountOverride, setAiCountOverride] = useState<number | null>(null);
 
   // Invite a friend into the Warteraum: fetched on demand, not on mount.
   const [showInvite, setShowInvite] = useState(false);
@@ -2235,9 +2240,12 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
 
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
-    // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
-    // spielen ausschließlich die tatsächlich beigetretenen Menschen mit.
-    const effectiveAiCount = Math.max(0, 3 - players.length);
+    // Default: top up to 3 total so a lone host still gets a playable game.
+    // The host can override this down to 0, e.g. to play a 2-player game
+    // with exactly the humans present instead of always being forced to 3.
+    const autoAiCount = Math.max(0, 3 - players.length);
+    const maxAiCount = Math.max(0, 6 - players.length);
+    const effectiveAiCount = Math.min(maxAiCount, aiCountOverride ?? autoAiCount);
     return (
       <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
         <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) { callGameAction(roomId, "leaveRoom", {}); onLeave(); } }}
@@ -2319,8 +2327,15 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           })}
         </div>
 
-        {isHost && effectiveAiCount > 0 && (
-          <div style={{ fontSize: 11, color: C.ivoryDim }}>+ {effectiveAiCount} KI {effectiveAiCount === 1 ? "wird" : "werden"} beim Start ergänzt</div>
+        {isHost && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 11, color: C.ivoryDim }}>KI-Spieler:</span>
+            <button onClick={() => setAiCountOverride(Math.max(0, effectiveAiCount - 1))} disabled={effectiveAiCount <= 0}
+              style={{ ...goldBtn(false), width: 28, height: 28, padding: 0, fontSize: 15, lineHeight: 1, opacity: effectiveAiCount <= 0 ? 0.4 : 1 }}>−</button>
+            <span style={{ ...cinzel, fontSize: 14, color: C.gold, minWidth: 14, textAlign: "center" }}>{effectiveAiCount}</span>
+            <button onClick={() => setAiCountOverride(Math.min(maxAiCount, effectiveAiCount + 1))} disabled={effectiveAiCount >= maxAiCount}
+              style={{ ...goldBtn(false), width: 28, height: 28, padding: 0, fontSize: 15, lineHeight: 1, opacity: effectiveAiCount >= maxAiCount ? 0.4 : 1 }}>+</button>
+          </div>
         )}
         {isHost ? (
           <button onClick={() => act("startGame", { aiCount: effectiveAiCount, edition: room?.edition ?? "classic" })} disabled={loading || players.length + effectiveAiCount < 2}
