@@ -1007,10 +1007,49 @@ serve(async (req) => {
 
   if (rateLimited(user.id)) return json({ error: "Zu viele Anfragen" }, 429);
 
-  // createRoom/joinRoom don't operate on an existing roomId yet (createRoom
-  // makes one, joinRoom resolves the room from a room code) - skip the lookup.
-  if (action === "createRoom" || action === "joinRoom") {
+  // createRoom/joinRoom/finishManualGame don't operate on an existing roomId
+  // (createRoom makes one, joinRoom resolves the room from a room code,
+  // finishManualGame operates on a manual_games row instead) - skip the lookup.
+  if (action === "createRoom" || action === "joinRoom" || action === "finishManualGame") {
     switch (action) {
+      case "finishManualGame": {
+        // Manual (paper-replacement) games are otherwise entirely client-
+        // written (see 010_manual_games.sql) - RLS already restricts every
+        // manual_* table to the host. This one step needs the service role
+        // because game_stats' insert policy is service_role-only (same
+        // protection online games get), so it's the one thing routed
+        // through the edge function instead of a direct client write.
+        const manualGameId = body.manualGameId;
+        const { data: mg } = await supabase.from("manual_games").select("*").eq("id", manualGameId).maybeSingle();
+        if (!mg) return json({ error: "Spiel nicht gefunden" }, 404);
+        if (mg.host_id !== user.id) return json({ error: "Nur der Ersteller kann abschließen" }, 403);
+        if (mg.finished_at) return json({ ok: true }); // already finished - idempotent
+
+        const { data: mgPlayers } = await supabase.from("manual_game_players").select("*").eq("manual_game_id", manualGameId).order("player_index");
+        const { data: mgRounds } = await supabase.from("manual_game_rounds").select("*").eq("manual_game_id", manualGameId).order("round");
+        if (!mgPlayers || mgPlayers.length === 0) return json({ error: "Keine Spieler erfasst" }, 400);
+        if (!mgRounds || mgRounds.length === 0) return json({ error: "Keine Runden erfasst" }, 400);
+
+        const totals = mgPlayers.map(p => {
+          let score = 0, bidSum = 0, gotSum = 0;
+          for (const r of mgRounds) {
+            const entry = (r.results ?? []).find((e: any) => e.playerIndex === p.player_index);
+            if (entry) { score += entry.delta ?? 0; bidSum += entry.bid ?? 0; gotSum += entry.got ?? 0; }
+          }
+          return { playerIndex: p.player_index, userId: p.user_id, score, bidSum, gotSum };
+        });
+        const sorted = [...totals].sort((a, b) => b.score - a.score);
+        for (const t of totals) {
+          if (!t.userId) continue; // guest, no account to attribute stats to
+          const placement = sorted.findIndex(s => s.playerIndex === t.playerIndex) + 1;
+          await upd(supabase.from("game_stats").insert({
+            room_id: null, user_id: t.userId, placement, final_score: t.score,
+            total_rounds: mgRounds.length, tricks_bid: t.bidSum, tricks_won: t.gotSum,
+          }), "finishManualGame.stats");
+        }
+        await upd(supabase.from("manual_games").update({ finished_at: new Date().toISOString() }).eq("id", manualGameId), "finishManualGame.finish");
+        return json({ ok: true });
+      }
       case "createRoom": {
         const code = Array.from({ length: 5 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
         const uname = (body.username ?? "Spieler").toString().slice(0, 24);

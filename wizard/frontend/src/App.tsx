@@ -715,9 +715,349 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
   );
 }
 
+// ─── Manual Scoreboard ("Rechenblock") ─────────────────────────────────────────
+// Digital replacement for the paper scoresheet: tracks a game played at the
+// table (not through the app's own dealing/bidding/trick logic). One host
+// enters bid/tricks per round for everyone; linked players' results feed
+// into the normal game_stats/user_stats via the finishManualGame action.
+
+function ManualPlayerSlot({ index, slot, excludeIds, onChange }: {
+  index: number;
+  slot: { userId: string | null; name: string };
+  excludeIds: string[];
+  onChange: (slot: { userId: string | null; name: string }) => void;
+}) {
+  const [query, setQuery] = useState(slot.userId ? "" : slot.name);
+  const [results, setResults] = useState<{ id: string; username: string }[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (slot.userId || q.length < 2) { setResults([]); return; }
+    const t = setTimeout(() => {
+      supabase.from("profiles").select("id, username").ilike("username", `%${q}%`).limit(6)
+        .then(({ data }) => setResults((data ?? []).filter(p => !excludeIds.includes(p.id))));
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, slot.userId, excludeIds.join(",")]);
+
+  if (slot.userId) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, ...glass({ padding: "9px 12px" }) }}>
+        <div style={{ flex: 1, fontSize: 13, color: C.ivory }}>{slot.name}</div>
+        <button onClick={() => { onChange({ userId: null, name: "" }); setQuery(""); }}
+          style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        value={query}
+        onChange={e => { setQuery(e.target.value); onChange({ userId: null, name: e.target.value }); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={`Spieler ${index + 1}: Name eintragen oder Nutzer suchen…`}
+        style={{ ...inputStyle, fontSize: 13, padding: "9px 12px" }}
+        maxLength={24}
+      />
+      {open && results.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 10, ...glass({ padding: 4 }), maxHeight: 170, overflowY: "auto" }}>
+          {results.map(r => (
+            <button key={r.id} onMouseDown={() => { onChange({ userId: r.id, name: r.username }); setQuery(r.username); setOpen(false); }}
+              style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.ivory, padding: "8px 10px", fontSize: 13, cursor: "pointer", borderRadius: 6 }}>
+              {r.username}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames: any[]; onCreated: () => void }) {
+  const [edition, setEdition] = useState<"classic" | "anniversary">("classic");
+  const [count, setCount] = useState(4);
+  const [slots, setSlots] = useState<{ userId: string | null; name: string }[]>(
+    Array.from({ length: 4 }, () => ({ userId: null, name: "" }))
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  function changeCount(n: number) {
+    setCount(n);
+    setSlots(prev => {
+      const next = [...prev];
+      while (next.length < n) next.push({ userId: null, name: "" });
+      return next.slice(0, n);
+    });
+  }
+
+  const excludeIds = slots.map(s => s.userId).filter((id): id is string => !!id);
+
+  async function start() {
+    setError("");
+    const names = slots.map(s => s.name.trim());
+    if (names.some(n => !n)) { setError("Bitte für jede Position einen Namen eintragen oder Spieler wählen"); return; }
+    setLoading(true);
+    const maxRounds = Math.floor(60 / count);
+    const { data: game, error: gErr } = await supabase.from("manual_games")
+      .insert({ host_id: uid, edition, max_rounds: maxRounds }).select().single();
+    if (gErr || !game) { setError("Spiel konnte nicht erstellt werden"); setLoading(false); return; }
+    const rows = slots.map((s, i) => ({
+      manual_game_id: game.id, player_index: i, user_id: s.userId, display_name: s.name.trim(),
+    }));
+    const { error: pErr } = await supabase.from("manual_game_players").insert(rows);
+    setLoading(false);
+    if (pErr) { setError("Spieler konnten nicht gespeichert werden"); await supabase.from("manual_games").delete().eq("id", game.id); return; }
+    onCreated();
+  }
+
+  return (
+    <>
+      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ ...cinzel, fontSize: 13, color: C.gold }}>Neues Spiel erfassen</div>
+
+        <div>
+          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>EDITION</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setEdition("classic")} style={{ ...goldBtn(edition === "classic"), flex: 1, padding: "8px 0", fontSize: 12 }}>Classic</button>
+            <button onClick={() => setEdition("anniversary")} style={{ ...goldBtn(edition === "anniversary"), flex: 1, padding: "8px 0", fontSize: 12 }}>30 Jahre</button>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>SPIELERANZAHL</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[2, 3, 4, 5, 6].map(n => (
+              <button key={n} onClick={() => changeCount(n)} style={{ ...goldBtn(count === n), flex: 1, padding: "8px 0", fontSize: 13 }}>{n}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10.5, color: C.ivoryDim, marginTop: 6 }}>{Math.floor(60 / count)} Runden</div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2 }}>MITSPIELER</div>
+          {slots.map((s, i) => (
+            <ManualPlayerSlot key={i} index={i} slot={s} excludeIds={excludeIds}
+              onChange={v => setSlots(prev => prev.map((p, pi) => pi === i ? v : p))} />
+          ))}
+        </div>
+
+        <button onClick={start} disabled={loading} style={{ ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
+          {loading ? "…" : "✦ Spiel starten"}
+        </button>
+        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
+      </div>
+
+      {pastGames.length > 0 && (
+        <div style={{ ...glass({ padding: 16 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2 }}>FRÜHERE SPIELE</div>
+          {pastGames.slice(0, 8).map(g => (
+            <div key={g.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.ivoryDim, padding: "4px 0" }}>
+              <span>{new Date(g.created_at).toLocaleDateString("de-DE")}</span>
+              <span>{g.edition === "anniversary" ? "30 Jahre" : "Classic"} · {g.max_rounds} Runden</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ManualGamePlay({ session, game, players, rounds, onChange }: {
+  session: Session; game: any; players: any[]; rounds: any[]; onChange: () => void;
+}) {
+  const currentRoundNum = rounds.length + 1;
+  const isDone = currentRoundNum > game.max_rounds;
+  const [bids, setBids] = useState<Record<number, string>>({});
+  const [gots, setGots] = useState<Record<number, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => { setBids({}); setGots({}); setError(""); }, [currentRoundNum]);
+
+  const totals = players.map(p => {
+    let score = 0;
+    for (const r of rounds) {
+      const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
+      if (e) score += e.delta ?? 0;
+    }
+    return { ...p, score };
+  });
+  const gotSum = players.reduce((s, p) => s + (Number(gots[p.player_index]) || 0), 0);
+
+  async function saveRound() {
+    setError("");
+    for (const p of players) {
+      const b = bids[p.player_index], g = gots[p.player_index];
+      if (b === undefined || b === "" || g === undefined || g === "") {
+        setError("Bitte für jeden Spieler Ansage und Stiche eintragen"); return;
+      }
+    }
+    setSaving(true);
+    const results = players.map(p => {
+      const bid = Number(bids[p.player_index]);
+      const got = Number(gots[p.player_index]);
+      const delta = bid === got ? 20 + bid * 10 : -Math.abs(bid - got) * 10;
+      return { playerIndex: p.player_index, name: p.display_name, bid, got, delta };
+    });
+    const { error: rErr } = await supabase.from("manual_game_rounds")
+      .insert({ manual_game_id: game.id, round: currentRoundNum, results });
+    setSaving(false);
+    if (rErr) { setError("Runde konnte nicht gespeichert werden"); return; }
+    onChange();
+  }
+
+  async function finish() {
+    setFinishing(true);
+    const res = await callGameAction("", "finishManualGame", { manualGameId: game.id });
+    setFinishing(false);
+    if (!res?.ok) { setError(res?.error ?? "Konnte nicht abgeschlossen werden"); return; }
+    onChange();
+  }
+
+  async function discard() {
+    if (!confirm("Dieses Spiel wirklich verwerfen? Alle bisher erfassten Runden gehen verloren.")) return;
+    await supabase.from("manual_games").delete().eq("id", game.id);
+    onChange();
+  }
+
+  return (
+    <>
+      <div style={{ ...glass({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ ...cinzel, fontSize: 11, color: C.ivoryDim, letterSpacing: 2, textTransform: "uppercase" as const }}>
+            {game.edition === "anniversary" ? "30 Jahre" : "Classic"} · Runde {Math.min(currentRoundNum, game.max_rounds)}/{game.max_rounds}
+          </div>
+          <button onClick={discard} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 11 }}>Verwerfen</button>
+        </div>
+        <table style={{ borderCollapse: "collapse", width: "100%", fontVariantNumeric: "tabular-nums" as const }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "6px 8px", textAlign: "left", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, borderBottom: `1px solid rgba(201,168,76,0.12)`, whiteSpace: "nowrap" }}>Runde</th>
+              {players.map(p => (
+                <th key={p.id} style={{ padding: "6px 8px", textAlign: "right", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, borderBottom: `1px solid rgba(201,168,76,0.12)`, whiteSpace: "nowrap" }}>{p.display_name}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rounds.map(r => (
+              <tr key={r.round}>
+                <td style={{ padding: "8px", borderTop: `1px solid rgba(201,168,76,0.10)`, fontSize: 12, color: C.ivory, whiteSpace: "nowrap" }}>R{r.round}</td>
+                {players.map(p => {
+                  const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
+                  const hit = e && e.bid === e.got;
+                  return (
+                    <td key={p.id} style={{ padding: "8px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
+                      {e ? `${e.bid}/${e.got} ` : "–"}
+                      {e && <span style={{ fontWeight: 600, color: hit ? C.success : C.error }}>{e.delta > 0 ? "+" : ""}{e.delta}</span>}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {!isDone && (
+              <tr>
+                <td style={{ padding: "8px", background: "rgba(201,168,76,0.045)", fontSize: 12, color: C.goldLight, whiteSpace: "nowrap" }}>R{currentRoundNum} ▶</td>
+                {players.map(p => (
+                  <td key={p.id} style={{ padding: "6px 4px", background: "rgba(201,168,76,0.045)" }}>
+                    <div style={{ display: "flex", gap: 3, justifyContent: "flex-end" }}>
+                      <input type="number" min={0} max={currentRoundNum} placeholder="Ans." value={bids[p.player_index] ?? ""}
+                        onChange={e => setBids(prev => ({ ...prev, [p.player_index]: e.target.value }))}
+                        style={{ ...inputStyle, width: 44, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
+                      <input type="number" min={0} max={currentRoundNum} placeholder="Sti." value={gots[p.player_index] ?? ""}
+                        onChange={e => setGots(prev => ({ ...prev, [p.player_index]: e.target.value }))}
+                        style={{ ...inputStyle, width: 44, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            )}
+            <tr>
+              <td style={{ padding: "8px", borderTop: `2px solid rgba(201,168,76,0.2)`, fontSize: 12, color: C.gold, fontWeight: 700, whiteSpace: "nowrap" }}>Σ</td>
+              {totals.map(p => (
+                <td key={p.id} style={{ padding: "8px", borderTop: `2px solid rgba(201,168,76,0.2)`, textAlign: "right", fontSize: 14, color: C.gold, fontWeight: 700, whiteSpace: "nowrap" }}>{p.score}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+        {!isDone && currentRoundNum > 1 && gotSum > 0 && gotSum !== currentRoundNum && (
+          <div style={{ fontSize: 10.5, color: C.ivoryDim, marginTop: 8 }}>Hinweis: Summe der Stiche ({gotSum}) weicht von der Rundenzahl ({currentRoundNum}) ab - bei einer Bombe (30-Jahre-Edition) ist das normal.</div>
+        )}
+      </div>
+
+      {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
+
+      <div style={{ display: "flex", gap: 10, width: "min(460px, 96vw)" }}>
+        {!isDone && (
+          <button onClick={saveRound} disabled={saving} style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: saving ? 0.5 : 1 }}>
+            {saving ? "…" : "Runde speichern"}
+          </button>
+        )}
+        <button onClick={finish} disabled={finishing || rounds.length === 0} style={{ ...goldBtn(isDone), flex: 1, padding: "12px 0", fontSize: 14, opacity: (finishing || rounds.length === 0) ? 0.5 : 1 }}>
+          {finishing ? "…" : "🏁 Spiel abschließen"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function ManualScoreboardScreen({ session, onBack }: { session: Session; onBack: () => void }) {
+  const uid = session.user.id;
+  const [loading, setLoading] = useState(true);
+  const [activeGame, setActiveGame] = useState<any | null>(null);
+  const [pastGames, setPastGames] = useState<any[]>([]);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [rounds, setRounds] = useState<any[]>([]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    supabase.from("manual_games").select("*").eq("host_id", uid).order("created_at", { ascending: false })
+      .then(async ({ data }) => {
+        const games = data ?? [];
+        const active = games.find((g: any) => !g.finished_at) ?? null;
+        setPastGames(games.filter((g: any) => g.finished_at));
+        setActiveGame(active);
+        if (active) {
+          const [{ data: p }, { data: r }] = await Promise.all([
+            supabase.from("manual_game_players").select("*").eq("manual_game_id", active.id).order("player_index"),
+            supabase.from("manual_game_rounds").select("*").eq("manual_game_id", active.id).order("round"),
+          ]);
+          setPlayers(p ?? []);
+          setRounds(r ?? []);
+        } else {
+          setPlayers([]); setRounds([]);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [uid]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
+      <button onClick={onBack} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
+      <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconClipboardList size={17} /> Rechenblock</div>
+
+      {loading ? (
+        <div className="skeleton" style={{ width: 200, height: 40, borderRadius: 8 }} />
+      ) : activeGame ? (
+        <ManualGamePlay session={session} game={activeGame} players={players} rounds={rounds} onChange={load} />
+      ) : (
+        <ManualGameSetup uid={uid} pastGames={pastGames} onCreated={load} />
+      )}
+    </div>
+  );
+}
+
 // ─── Lobby ────────────────────────────────────────────────────────────────────
 function LobbyScreen({ session }: { session: Session }) {
-  const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile">("home");
+  const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile" | "scoreboard">("home");
   const [showFriendsPanel, setShowFriendsPanel] = useState(false);
   const [reconnectRoom, setReconnectRoom] = useState<{ roomId: string; code: string; phase: string } | null>(null);
 
@@ -885,6 +1225,8 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
+  if (view === "scoreboard") return <ManualScoreboardScreen session={session} onBack={() => setView("home")} />;
+
   if (roomId) return <GameRoom roomId={roomId} session={session} edition={edition} onlineUserIds={onlineUserIds} voice={voice} onLeave={() => { setRoomId(null); checkReconnect(); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
@@ -945,6 +1287,10 @@ function LobbyScreen({ session }: { session: Session }) {
           <button onClick={() => setView("rules")} style={tileBtn}>
             <span style={{ fontSize: 18 }}>📖</span>
             Regeln
+          </button>
+          <button onClick={() => setView("scoreboard")} style={tileBtn}>
+            <IconClipboardList size={18} />
+            Rechenblock
           </button>
         </div>
       </div>
