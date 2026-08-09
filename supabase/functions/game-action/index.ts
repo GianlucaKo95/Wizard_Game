@@ -593,8 +593,13 @@ async function advanceTrick(supabase, roomId, room, players) {
     phase: "trickEnd",
     // If both Jongleur (7½) and Wolke (9¾) are in the trick,
     // Jongleur resolves first (official FAQ). Defer rainbow9 until after rainbow7 is done.
-    pending_rainbow9: (has9Active && !has7) ? winnerIdx : null,
-    pending_rainbow9_deferred: (has9Active && has7) ? winnerIdx : null,
+    // On the last trick there are no cards left to pass, so Jongleur's
+    // effect never actually happens (rainbow7Players is null below too) -
+    // Wolke must resolve immediately in that case instead of deferring to a
+    // pass-completion event that can now never fire, which otherwise left
+    // pending_rainbow9_deferred set forever with no way to clear it.
+    pending_rainbow9: (has9Active && (!has7 || isLastTrick)) ? winnerIdx : null,
+    pending_rainbow9_deferred: (has9Active && has7 && !isLastTrick) ? winnerIdx : null,
     pending_rainbow7: rainbow7Players,
     pending_witch: pendingWitch,
     log: room.log
@@ -645,8 +650,11 @@ async function advanceTrick(supabase, roomId, room, players) {
   const roundOver = allHandsEmpty || totalTricksPlayed >= currentRound;
   dbg("[advanceTrick] totalTricksPlayed:", totalTricksPlayed, "currentRound:", currentRound, "allHandsEmpty:", allHandsEmpty, "roundOver:", roundOver);
 
-  // If the 9¾ winner is an AI, resolve it automatically right away
-  if (has9Active && updatedPlayers2[winnerIdx]?.is_ai) {
+  // If the 9¾ winner is an AI, resolve it automatically right away - but
+  // only in the same cases pending_rainbow9 (not _deferred) was actually
+  // set above, or this double-adjusts once passCard's deferred-resolution
+  // block also runs for the same event.
+  if (has9Active && (!has7 || isLastTrick) && updatedPlayers2[winnerIdx]?.is_ai) {
     const winnerPlayer = updatedPlayers2[winnerIdx];
     const tricksWon = winnerPlayer.tricks_won ?? 0;
     const currentBid = winnerPlayer.bid ?? 0;
@@ -1111,6 +1119,7 @@ serve(async (req) => {
       const { specialAction: sa, cardId, suit, takeCardId, giveCardId, choice } = body;
 
       if (sa === "witch" && takeCardId && giveCardId) {
+        if (room.pending_witch !== callerIdx) return json({ error: "Nicht dein Zug" }, 400);
         const lastTrick = room.last_trick_cards ?? [];
         const takenCard = lastTrick.find(t => t.card.id === takeCardId)?.card;
         if (!takenCard) return json({ error: "Karte nicht gefunden" }, 400);
@@ -1133,6 +1142,8 @@ serve(async (req) => {
       }
 
       if (sa === "wizardfool") {
+        if (room.phase !== "playing") return json({ error: "Falscher Status" }, 400);
+        if (room.current_player !== callerIdx) return json({ error: "Nicht dein Zug" }, 403);
         const card = callerPlayer.hand.find(c => c.id === cardId);
         if (!card) return json({ error: "Karte nicht gefunden" }, 400);
         const newHand = callerPlayer.hand.filter(c => c.id !== cardId);
