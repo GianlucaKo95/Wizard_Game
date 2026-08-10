@@ -831,7 +831,7 @@ function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames
         <div>
           <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>SPIELERANZAHL</div>
           <div style={{ display: "flex", gap: 6 }}>
-            {[2, 3, 4, 5, 6].map(n => (
+            {[3, 4, 5, 6].map(n => (
               <button key={n} onClick={() => changeCount(n)} style={{ ...goldBtn(count === n), flex: 1, padding: "8px 0", fontSize: 13 }}>{n}</button>
             ))}
           </div>
