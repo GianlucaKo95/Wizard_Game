@@ -3,7 +3,7 @@ import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
-import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart, IconMic, IconMicOff, IconBell, IconBellOff, IconGripVertical } from "./Icons";
+import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart, IconMic, IconMicOff, IconBell, IconBellOff, IconGripVertical, IconPencil } from "./Icons";
 import { WizardArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -795,6 +795,24 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
 // enters bid/tricks per round for everyone; linked players' results feed
 // into the normal game_stats/user_stats via the finishManualGame action.
 
+// Running total after each round, not just one final sum at the bottom -
+// that's how a real paper Rechenblock works: every round's own line shows
+// the score-so-far. Shared by the Rechenblock's live/finished-game tables
+// and the online game_rooms Spielblatt, which all need the identical scan.
+function computeRunningTotals(playerIndexes: number[], rounds: { round: number; results?: any[] }[]): Record<number, Record<number, number>> {
+  const out: Record<number, Record<number, number>> = {};
+  const acc: Record<number, number> = {};
+  for (const pi of playerIndexes) acc[pi] = 0;
+  for (const r of rounds) {
+    for (const pi of playerIndexes) {
+      const e = (r.results ?? []).find((x: any) => x.playerIndex === pi);
+      if (e) acc[pi] += e.delta ?? 0;
+    }
+    out[r.round] = { ...acc };
+  }
+  return out;
+}
+
 function ManualPlayerSlot({ index, slot, excludeIds, onChange }: {
   index: number;
   slot: { userId: string | null; name: string };
@@ -851,7 +869,7 @@ function ManualPlayerSlot({ index, slot, excludeIds, onChange }: {
   );
 }
 
-function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames: any[]; onCreated: () => void }) {
+function ManualGameSetup({ uid, pastGames, onCreated, onViewGame }: { uid: string; pastGames: any[]; onCreated: () => void; onViewGame: (game: any) => void }) {
   // Two steps: pick who's playing, then fix the seating/turn order they'll
   // actually sit in - that order drives dealer rotation and bidding order
   // once the game starts, so it needs to be explicit rather than just
@@ -1061,10 +1079,11 @@ function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames
         <div style={{ ...paperPanel({ padding: 16 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim, letterSpacing: 1 }}>FRÜHERE SPIELE</div>
           {pastGames.slice(0, 8).map(g => (
-            <div key={g.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: PAPER.inkDim, padding: "4px 0", borderTop: `1px solid ${PAPER.lineFaint}` }}>
+            <button key={g.id} onClick={() => onViewGame(g)}
+              style={{ display: "flex", justifyContent: "space-between", width: "100%", background: "none", border: "none", borderTop: `1px solid ${PAPER.lineFaint}`, fontSize: 12, color: PAPER.inkDim, padding: "6px 0", cursor: "pointer", textAlign: "left", font: "inherit" }}>
               <span>{new Date(g.created_at).toLocaleDateString("de-DE")}</span>
               <span>{g.edition === "anniversary" ? "30 Jahre" : "Classic"} · {g.max_rounds} Runden</span>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -1090,27 +1109,27 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
   const [error, setError] = useState("");
   const [wolkePicking, setWolkePicking] = useState(false);
   const [wolkePlayer, setWolkePlayer] = useState<number | null>(null);
+  // Correcting an already-saved round - a mis-tap during entry is otherwise
+  // permanent, since Stiche entry auto-saves the instant the last player's
+  // is tapped.
+  const [editingRound, setEditingRound] = useState<number | null>(null);
+  const [editBid, setEditBid] = useState<Record<number, string>>({});
+  const [editGot, setEditGot] = useState<Record<number, string>>({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
   const dealerIdx = (currentRoundNum - 1) % players.length;
   const dealer = players[dealerIdx];
 
   useEffect(() => { setBids({}); setGots({}); setError(""); setWolkePicking(false); setWolkePlayer(null); }, [currentRoundNum, !!pendingBids]);
 
-  // Running total after each round, not just one final sum at the bottom -
-  // that's how a real paper Rechenblock works: every round's own line shows
-  // the score-so-far, so you can see the game's shape at a glance instead of
-  // only the current standing.
-  const runningByRound: Record<number, Record<number, number>> = {};
-  {
-    const acc: Record<number, number> = {};
-    for (const p of players) acc[p.player_index] = 0;
-    for (const r of rounds) {
-      for (const p of players) {
-        const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
-        if (e) acc[p.player_index] += e.delta ?? 0;
-      }
-      runningByRound[r.round] = { ...acc };
-    }
-  }
+  const runningByRound = computeRunningTotals(players.map(p => p.player_index), rounds);
+  const lastRoundNum = rounds.length ? rounds[rounds.length - 1].round : null;
+  // Crown the current leader, but only once scores have actually diverged
+  // from the 0-0 starting tie.
+  const latestTotals = lastRoundNum !== null ? runningByRound[lastRoundNum] : null;
+  const maxTotal = latestTotals ? Math.max(0, ...Object.values(latestTotals)) : 0;
+  const isLeaderAt = (round: number, playerIndex: number) =>
+    round === lastRoundNum && maxTotal > 0 && runningByRound[round]?.[playerIndex] === maxTotal;
   const gotSum = players.reduce((s, p) => s + (Number(gots[p.player_index]) || 0), 0);
 
   // Bidding proceeds one player at a time, in real turn order (left of the
@@ -1147,6 +1166,23 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
     setLocking(false);
     if (bErr) { setError("Ansagen konnten nicht gespeichert werden"); return; }
     onChange();
+  }
+
+  // Step back to correct a mis-tap, one player at a time - only reaches
+  // back through bids/Stiche not yet committed to the server (the dealer's
+  // bid locks immediately, and the last Stiche auto-saves the round, so at
+  // that point there's nothing local left to undo).
+  function undoLastBid() {
+    const entered = biddingOrder.filter(p => bids[p.player_index] !== undefined);
+    if (entered.length === 0) return;
+    const last = entered[entered.length - 1];
+    setBids(prev => { const next = { ...prev }; delete next[last.player_index]; return next; });
+  }
+  function undoLastGot() {
+    const entered = players.filter(p => gots[p.player_index] !== undefined);
+    if (entered.length === 0) return;
+    const last = entered[entered.length - 1];
+    setGots(prev => { const next = { ...prev }; delete next[last.player_index]; return next; });
   }
 
   // Bid displayed/edited for a player once bids are locked in (Phase B) -
@@ -1218,6 +1254,46 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
     onChange();
   }
 
+  function startEditRound(r: any) {
+    const eb: Record<number, string> = {};
+    const eg: Record<number, string> = {};
+    for (const p of players) {
+      const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
+      eb[p.player_index] = e ? String(e.bid) : "";
+      eg[p.player_index] = e ? String(e.got) : "";
+    }
+    setEditBid(eb);
+    setEditGot(eg);
+    setEditError("");
+    setEditingRound(r.round);
+  }
+
+  function cancelEditRound() {
+    setEditingRound(null);
+    setEditError("");
+  }
+
+  async function saveEditedRound(r: any) {
+    setEditError("");
+    for (const p of players) {
+      if (editBid[p.player_index] === "" || editGot[p.player_index] === undefined || editGot[p.player_index] === "") {
+        setEditError("Bitte für jeden Spieler Ansage und Stiche eintragen"); return;
+      }
+    }
+    setEditSaving(true);
+    const results = players.map(p => {
+      const bid = Number(editBid[p.player_index]);
+      const got = Number(editGot[p.player_index]);
+      const delta = bid === got ? 20 + bid * 10 : -Math.abs(bid - got) * 10;
+      return { playerIndex: p.player_index, name: p.display_name, bid, got, delta };
+    });
+    const { error: uErr } = await supabase.from("manual_game_rounds").update({ results }).eq("id", r.id);
+    setEditSaving(false);
+    if (uErr) { setEditError("Runde konnte nicht aktualisiert werden"); return; }
+    setEditingRound(null);
+    onChange();
+  }
+
   return (
     <>
       <div style={{ ...paperPanel({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto" }}>
@@ -1238,20 +1314,27 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
           </thead>
           <tbody>
             {rounds.map(r => (
-              <tr key={r.round}>
+              <tr key={r.round} style={{ background: editingRound === r.round ? PAPER.panelAlt : undefined }}>
                 <td style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, fontSize: 12, color: PAPER.ink, whiteSpace: "nowrap" }}>
-                  R{r.round}
+                  <button onClick={() => editingRound === r.round ? cancelEditRound() : startEditRound(r)}
+                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, color: "inherit", font: "inherit" }}>
+                    R{r.round}
+                    <IconPencil size={10} style={{ color: PAPER.inkDim }} />
+                  </button>
                   <div style={{ fontSize: 9, color: PAPER.inkDim, fontWeight: 400, marginTop: 1 }}>{players[(r.round - 1) % players.length]?.display_name} gibt</div>
                 </td>
                 {players.map(p => {
                   const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
                   const total = runningByRound[r.round]?.[p.player_index];
+                  const leader = isLeaderAt(r.round, p.player_index);
                   return (
                     <td key={p.id} style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
                       {/* Total first, Ansage after it - matches the real paper
                           block's layout (score in the wide column, bid in the
                           narrow one next to it). */}
-                      {e && <span style={{ fontWeight: 700, color: PAPER.goldDeep }}>{total}</span>}
+                      {e && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontWeight: 700, color: leader ? PAPER.gold : PAPER.goldDeep }}>
+                        {leader && <IconTrophy size={11} />}{total}
+                      </span>}
                       <span style={{ marginLeft: 6, color: PAPER.inkDim }}>{e ? e.bid : "–"}</span>
                     </td>
                   );
@@ -1311,10 +1394,47 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
             )}
           </tbody>
         </table>
+        {editingRound !== null && (() => {
+          const r = rounds.find(x => x.round === editingRound);
+          if (!r) return null;
+          return (
+            <div style={{ marginTop: 10, ...paperPanel({ padding: 12 }), background: PAPER.panelAlt }}>
+              <div style={{ ...paperHand, fontSize: 14, color: PAPER.goldDeep, marginBottom: 8 }}>Runde {editingRound} korrigieren</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {players.map(p => (
+                  <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ flex: 1, fontSize: 12.5, color: PAPER.ink }}>{p.display_name}</span>
+                    <input type="number" min={0} max={editingRound} placeholder="Ansage" value={editBid[p.player_index] ?? ""}
+                      onChange={e => setEditBid(prev => ({ ...prev, [p.player_index]: e.target.value }))}
+                      style={{ ...paperInput, width: 52, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
+                    <span style={{ fontSize: 11.5, color: PAPER.inkDim }}>/</span>
+                    <input type="number" min={0} max={editingRound} placeholder="Stiche" value={editGot[p.player_index] ?? ""}
+                      onChange={e => setEditGot(prev => ({ ...prev, [p.player_index]: e.target.value }))}
+                      style={{ ...paperInput, width: 52, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
+                  </div>
+                ))}
+              </div>
+              {editError && <div style={{ color: PAPER.danger, fontSize: 11, marginTop: 8 }}>{editError}</div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button onClick={cancelEditRound} style={{ ...paperBtn(false), flex: 1, padding: "8px 0", fontSize: 12.5 }}>Abbrechen</button>
+                <button onClick={() => saveEditedRound(r)} disabled={editSaving} style={{ ...paperBtn(), flex: 1, padding: "8px 0", fontSize: 12.5, opacity: editSaving ? 0.5 : 1 }}>
+                  {editSaving ? "…" : "Speichern"}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
         {!isDone && pendingBids && nextGoter && (
           <div style={{ marginTop: 10 }}>
-            <div style={{ ...paperHand, fontSize: 15, color: PAPER.goldDeep, marginBottom: 8 }}>
-              WIE VIELE STICHE HAT <span style={{ color: PAPER.ink }}>{nextGoter.display_name}</span> GEHOLT? (0–{currentRoundNum})
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
+              <div style={{ ...paperHand, fontSize: 15, color: PAPER.goldDeep }}>
+                WIE VIELE STICHE HAT <span style={{ color: PAPER.ink }}>{nextGoter.display_name}</span> GEHOLT? (0–{currentRoundNum})
+              </div>
+              {players.some(p => gots[p.player_index] !== undefined) && (
+                <button onClick={undoLastGot} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11, padding: "2px 0", display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+                  <IconArrowLeft size={11} /> zurück
+                </button>
+              )}
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
               {Array.from({ length: currentRoundNum + 1 }, (_, i) => (
@@ -1328,8 +1448,15 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
         )}
         {!isDone && !pendingBids && nextBidder && (
           <div style={{ marginTop: 10 }}>
-            <div style={{ ...paperHand, fontSize: 15, color: PAPER.goldDeep, marginBottom: 8 }}>
-              WIE VIELE STICHE? (0–{currentRoundNum}) – <span style={{ color: PAPER.ink }}>{nextBidder.display_name}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
+              <div style={{ ...paperHand, fontSize: 15, color: PAPER.goldDeep }}>
+                WIE VIELE STICHE? (0–{currentRoundNum}) – <span style={{ color: PAPER.ink }}>{nextBidder.display_name}</span>
+              </div>
+              {biddingOrder.some(p => bids[p.player_index] !== undefined) && (
+                <button onClick={undoLastBid} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11, padding: "2px 0", display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+                  <IconArrowLeft size={11} /> zurück
+                </button>
+              )}
             </div>
             {dealerForbiddenBid !== null && (
               <div style={{ color: PAPER.danger, fontSize: 10.5, marginBottom: 8, background: "rgba(162,58,46,0.1)", border: `1px solid rgba(162,58,46,0.35)`, borderRadius: 6, padding: "5px 9px" }}>
@@ -1408,6 +1535,84 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
   );
 }
 
+// Read-only round-by-round history for a finished game - tapping into what
+// was so far only a summary line ("Classic · 15 Runden") in the past-games
+// list. Editing is intentionally not offered here: finishManualGame already
+// recorded this game's final scores into game_stats, so changing rounds
+// after the fact would desync the two.
+function ManualFinishedGameView({ game, onBack }: { game: any; onBack: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [rounds, setRounds] = useState<any[]>([]);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      supabase.from("manual_game_players").select("*").eq("manual_game_id", game.id).order("player_index"),
+      supabase.from("manual_game_rounds").select("*").eq("manual_game_id", game.id).order("round"),
+    ]).then(([{ data: p }, { data: r }]) => {
+      setPlayers(p ?? []);
+      setRounds(r ?? []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [game.id]);
+
+  const runningByRound = computeRunningTotals(players.map(p => p.player_index), rounds);
+  const lastRoundNum = rounds.length ? rounds[rounds.length - 1].round : null;
+  const latestTotals = lastRoundNum !== null ? runningByRound[lastRoundNum] : null;
+  const maxTotal = latestTotals ? Math.max(0, ...Object.values(latestTotals)) : 0;
+  const isLeaderAt = (round: number, playerIndex: number) =>
+    round === lastRoundNum && maxTotal > 0 && runningByRound[round]?.[playerIndex] === maxTotal;
+
+  return (
+    <div style={{ ...paperPanel({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={12} /> Zurück</button>
+        <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim }}>
+          {game.edition === "anniversary" ? "30 Jahre" : "Classic"} · {new Date(game.created_at).toLocaleDateString("de-DE")}
+        </div>
+      </div>
+      {loading ? (
+        <div className="skeleton" style={{ width: "100%", height: 120, borderRadius: 8 }} />
+      ) : (
+        <table style={{ borderCollapse: "collapse", width: "100%", fontVariantNumeric: "tabular-nums" as const }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "6px 8px", textAlign: "left", color: PAPER.inkDim, fontWeight: 600, fontSize: 10.5, borderBottom: `1.5px solid ${PAPER.line}`, whiteSpace: "nowrap" }}>Runde</th>
+              {players.map(p => (
+                <th key={p.id} style={{ padding: "6px 8px", textAlign: "right", color: PAPER.inkDim, fontWeight: 600, fontSize: 10.5, borderBottom: `1.5px solid ${PAPER.line}`, whiteSpace: "nowrap" }}>{p.display_name}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rounds.map(r => (
+              <tr key={r.round}>
+                <td style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, fontSize: 12, color: PAPER.ink, whiteSpace: "nowrap" }}>
+                  R{r.round}
+                  <div style={{ fontSize: 9, color: PAPER.inkDim, fontWeight: 400, marginTop: 1 }}>{players[(r.round - 1) % players.length]?.display_name} gibt</div>
+                </td>
+                {players.map(p => {
+                  const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
+                  const total = runningByRound[r.round]?.[p.player_index];
+                  const leader = isLeaderAt(r.round, p.player_index);
+                  return (
+                    <td key={p.id} style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
+                      {e && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontWeight: 700, color: leader ? PAPER.gold : PAPER.goldDeep }}>
+                        {leader && <IconTrophy size={11} />}{total}
+                      </span>}
+                      <span style={{ marginLeft: 6, color: PAPER.inkDim }}>{e ? e.bid : "–"}</span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function ManualScoreboardScreen({ session, onBack }: { session: Session; onBack: () => void }) {
   const uid = session.user.id;
   const [loading, setLoading] = useState(true);
@@ -1415,6 +1620,7 @@ function ManualScoreboardScreen({ session, onBack }: { session: Session; onBack:
   const [pastGames, setPastGames] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
   const [rounds, setRounds] = useState<any[]>([]);
+  const [viewingGame, setViewingGame] = useState<any | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1452,10 +1658,12 @@ function ManualScoreboardScreen({ session, onBack }: { session: Session; onBack:
 
       {loading ? (
         <div className="skeleton" style={{ width: 200, height: 40, borderRadius: 8 }} />
+      ) : viewingGame ? (
+        <ManualFinishedGameView game={viewingGame} onBack={() => setViewingGame(null)} />
       ) : activeGame ? (
         <ManualGamePlay session={session} game={activeGame} players={players} rounds={rounds} onChange={load} />
       ) : (
-        <ManualGameSetup uid={uid} pastGames={pastGames} onCreated={load} />
+        <ManualGameSetup uid={uid} pastGames={pastGames} onCreated={load} onViewGame={setViewingGame} />
       )}
     </div>
   );
@@ -2884,21 +3092,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     // from the 0-0 starting tie.
     const maxScore = Math.max(0, ...players.map((p: any) => p.score));
     const isLeader = (p: any) => maxScore > 0 && p.score === maxScore;
-    // Running total after each round, not just one final sum at the bottom -
-    // that's how a real paper scoresheet works: every round's own line shows
-    // the score-so-far, so the game's shape is visible at a glance.
-    const runningByRound: Record<number, Record<number, number>> = {};
-    {
-      const acc: Record<number, number> = {};
-      for (const p of players) acc[p.player_index] = 0;
-      for (const rh of roundHistory) {
-        for (const p of players) {
-          const r = rh.results?.find((x: any) => x.playerIndex === p.player_index);
-          if (r) acc[p.player_index] += r.delta ?? 0;
-        }
-        runningByRound[rh.round] = { ...acc };
-      }
-    }
+    const runningByRound = computeRunningTotals(players.map((p: any) => p.player_index), roundHistory);
     const lastRoundNum = roundHistory.length ? roundHistory[roundHistory.length - 1].round : null;
 
     return (
