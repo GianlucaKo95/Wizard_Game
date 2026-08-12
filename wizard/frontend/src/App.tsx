@@ -1095,14 +1095,22 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
 
   useEffect(() => { setBids({}); setGots({}); setError(""); setWolkePicking(false); setWolkePlayer(null); }, [currentRoundNum, !!pendingBids]);
 
-  const totals = players.map(p => {
-    let score = 0;
+  // Running total after each round, not just one final sum at the bottom -
+  // that's how a real paper Rechenblock works: every round's own line shows
+  // the score-so-far, so you can see the game's shape at a glance instead of
+  // only the current standing.
+  const runningByRound: Record<number, Record<number, number>> = {};
+  {
+    const acc: Record<number, number> = {};
+    for (const p of players) acc[p.player_index] = 0;
     for (const r of rounds) {
-      const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
-      if (e) score += e.delta ?? 0;
+      for (const p of players) {
+        const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
+        if (e) acc[p.player_index] += e.delta ?? 0;
+      }
+      runningByRound[r.round] = { ...acc };
     }
-    return { ...p, score };
-  });
+  }
   const gotSum = players.reduce((s, p) => s + (Number(gots[p.player_index]) || 0), 0);
 
   // Bidding proceeds one player at a time, in real turn order (left of the
@@ -1238,10 +1246,13 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                 {players.map(p => {
                   const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
                   const hit = e && e.bid === e.got;
+                  const total = runningByRound[r.round]?.[p.player_index];
                   return (
                     <td key={p.id} style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
-                      {e ? `${e.bid}/${e.got} ` : "–"}
-                      {e && <span style={{ fontWeight: 600, color: hit ? PAPER.success : PAPER.danger }}>{e.delta > 0 ? "+" : ""}{e.delta}</span>}
+                      {e
+                        ? <span style={{ color: hit ? PAPER.success : PAPER.ink }}>{e.bid}/{e.got}</span>
+                        : <span style={{ color: PAPER.inkDim }}>–</span>}
+                      {e && <span style={{ marginLeft: 6, fontWeight: 700, color: PAPER.goldDeep }}>{total}</span>}
                     </td>
                   );
                 })}
@@ -1298,12 +1309,6 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                 })}
               </tr>
             )}
-            <tr>
-              <td style={{ padding: "8px", borderTop: `2px solid ${PAPER.line}`, fontSize: 12, color: PAPER.goldDeep, fontWeight: 700, whiteSpace: "nowrap" }}>Σ</td>
-              {totals.map(p => (
-                <td key={p.id} style={{ padding: "8px", borderTop: `2px solid ${PAPER.line}`, textAlign: "right", fontSize: 14, color: PAPER.goldDeep, fontWeight: 700, whiteSpace: "nowrap" }}>{p.score}</td>
-              ))}
-            </tr>
           </tbody>
         </table>
         {!isDone && pendingBids && nextGoter && (
@@ -2879,6 +2884,22 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     // from the 0-0 starting tie.
     const maxScore = Math.max(0, ...players.map((p: any) => p.score));
     const isLeader = (p: any) => maxScore > 0 && p.score === maxScore;
+    // Running total after each round, not just one final sum at the bottom -
+    // that's how a real paper scoresheet works: every round's own line shows
+    // the score-so-far, so the game's shape is visible at a glance.
+    const runningByRound: Record<number, Record<number, number>> = {};
+    {
+      const acc: Record<number, number> = {};
+      for (const p of players) acc[p.player_index] = 0;
+      for (const rh of roundHistory) {
+        for (const p of players) {
+          const r = rh.results?.find((x: any) => x.playerIndex === p.player_index);
+          if (r) acc[p.player_index] += r.delta ?? 0;
+        }
+        runningByRound[rh.round] = { ...acc };
+      }
+    }
+    const lastRoundNum = roundHistory.length ? roundHistory[roundHistory.length - 1].round : null;
 
     return (
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}
@@ -2920,12 +2941,12 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                     {players.map((p: any) => {
                       const r = rh.results?.find((x: any) => x.playerIndex === p.player_index);
                       const hit = r && r.bid === r.got;
+                      const total = runningByRound[rh.round]?.[p.player_index];
+                      const leaderHere = rh.round === lastRoundNum && isLeader(p);
                       return (
-                        <td key={p.id} style={{ padding: "11px 16px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", fontSize: 13.5, color: C.ivory, whiteSpace: "nowrap" }}>
-                          {r ? `${r.bid}/${r.got}` : "–"}{" "}
-                          <span style={{ fontWeight: 600, color: hit ? C.success : C.error }}>
-                            {r ? (r.delta > 0 ? "+" : "") + r.delta : ""}
-                          </span>
+                        <td key={p.id} style={{ padding: "11px 16px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", fontSize: 13.5, whiteSpace: "nowrap" }}>
+                          <span style={{ color: r ? (hit ? C.success : C.ivory) : C.ivoryDim }}>{r ? `${r.bid}/${r.got}` : "–"}</span>{" "}
+                          {r && <span style={{ fontWeight: 700, color: leaderHere ? C.gold : C.ivory }}>{total}</span>}
                         </td>
                       );
                     })}
@@ -2965,16 +2986,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                     })}
                   </tr>
                 )}
-
-                {/* Total row */}
-                <tr>
-                  <td style={{ padding: "14px 16px", borderTop: `1px solid rgba(201,168,76,0.10)`, ...cinzel, fontSize: 10.5, letterSpacing: 1, color: C.ivoryDim, textTransform: "uppercase" as const }}>Gesamt</td>
-                  {players.map((p: any) => (
-                    <td key={p.id} style={{ padding: "14px 16px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", fontSize: 16, fontWeight: 700, color: isLeader(p) ? C.gold : C.ivory }}>
-                      {p.score}
-                    </td>
-                  ))}
-                </tr>
               </tbody>
             </table>
           </div>
