@@ -778,6 +778,11 @@ function ManualPlayerSlot({ index, slot, excludeIds, onChange }: {
 }
 
 function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames: any[]; onCreated: () => void }) {
+  // Two steps: pick who's playing, then fix the seating/turn order they'll
+  // actually sit in - that order drives dealer rotation and bidding order
+  // once the game starts, so it needs to be explicit rather than just
+  // "whatever order you happened to type names in".
+  const [stage, setStage] = useState<"roster" | "order">("roster");
   const [edition, setEdition] = useState<"classic" | "anniversary">("classic");
   const [count, setCount] = useState(4);
   const [slots, setSlots] = useState<{ userId: string | null; name: string }[]>(
@@ -795,12 +800,27 @@ function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames
     });
   }
 
+  function moveSlot(i: number, dir: -1 | 1) {
+    setSlots(prev => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
   const excludeIds = slots.map(s => s.userId).filter((id): id is string => !!id);
 
-  async function start() {
+  function goToOrder() {
     setError("");
     const names = slots.map(s => s.name.trim());
     if (names.some(n => !n)) { setError("Bitte für jede Position einen Namen eintragen oder Spieler wählen"); return; }
+    setStage("order");
+  }
+
+  async function start() {
+    setError("");
     setLoading(true);
     const maxRounds = Math.floor(60 / count);
     const { data: game, error: gErr } = await supabase.from("manual_games")
@@ -813,6 +833,32 @@ function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames
     setLoading(false);
     if (pErr) { setError("Spieler konnten nicht gespeichert werden"); await supabase.from("manual_games").delete().eq("id", game.id); return; }
     onCreated();
+  }
+
+  if (stage === "order") {
+    return (
+      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+        <button onClick={() => setStage("roster")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={12} /> Zurück</button>
+        <div style={{ ...cinzel, fontSize: 13, color: C.gold }}>Reihenfolge festlegen</div>
+        <div style={{ fontSize: 11, color: C.ivoryDim }}>So wie ihr am Tisch sitzt - bestimmt Geber- und Bietreihenfolge.</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {slots.map((s, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, ...glass({ padding: "8px 12px" }) }}>
+              <span style={{ ...cinzel, fontSize: 11, color: C.ivoryDim, minWidth: 14 }}>{i + 1}.</span>
+              <span style={{ flex: 1, fontSize: 13, color: C.ivory }}>{s.name}</span>
+              <button onClick={() => moveSlot(i, -1)} disabled={i === 0}
+                style={{ background: "none", border: "none", color: C.ivoryDim, cursor: i === 0 ? "default" : "pointer", fontSize: 15, padding: 4, opacity: i === 0 ? 0.3 : 1 }}>↑</button>
+              <button onClick={() => moveSlot(i, 1)} disabled={i === slots.length - 1}
+                style={{ background: "none", border: "none", color: C.ivoryDim, cursor: i === slots.length - 1 ? "default" : "pointer", fontSize: 15, padding: 4, opacity: i === slots.length - 1 ? 0.3 : 1 }}>↓</button>
+            </div>
+          ))}
+        </div>
+        <button onClick={start} disabled={loading} style={{ ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
+          {loading ? "…" : "✦ Spiel starten"}
+        </button>
+        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
+      </div>
+    );
   }
 
   return (
@@ -846,8 +892,8 @@ function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames
           ))}
         </div>
 
-        <button onClick={start} disabled={loading} style={{ ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
-          {loading ? "…" : "✦ Spiel starten"}
+        <button onClick={goToOrder} style={{ ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14 }}>
+          Weiter → Reihenfolge
         </button>
         {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
       </div>
@@ -885,7 +931,8 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
   const [error, setError] = useState("");
   const [wolkePicking, setWolkePicking] = useState(false);
   const [wolkePlayer, setWolkePlayer] = useState<number | null>(null);
-  const dealer = players[(currentRoundNum - 1) % players.length];
+  const dealerIdx = (currentRoundNum - 1) % players.length;
+  const dealer = players[dealerIdx];
 
   useEffect(() => { setBids({}); setGots({}); setError(""); setWolkePicking(false); setWolkePlayer(null); }, [currentRoundNum, !!pendingBids]);
 
@@ -899,16 +946,32 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
   });
   const gotSum = players.reduce((s, p) => s + (Number(gots[p.player_index]) || 0), 0);
 
-  async function lockBids() {
-    setError("");
-    for (const p of players) {
-      if (bids[p.player_index] === undefined || bids[p.player_index] === "") {
-        setError("Bitte für jeden Spieler eine Ansage eintragen"); return;
-      }
-    }
+  // Bidding proceeds one player at a time, in real turn order (left of the
+  // dealer first, dealer last) - matching how bidding actually works at the
+  // table and in the online game_rooms flow, instead of everyone filling in
+  // a shared row at once.
+  const biddingOrder = !isDone && !pendingBids
+    ? Array.from({ length: players.length }, (_, i) => players[(dealerIdx + 1 + i) % players.length])
+    : [];
+  const nextBidder = biddingOrder.find(p => bids[p.player_index] === undefined) ?? null;
+  // Stichzwang: only the dealer (last to bid) faces this - the one total
+  // that would make all bids exactly equal the round's trick count.
+  const dealerForbiddenBid = nextBidder?.player_index === dealerIdx
+    ? (() => {
+        const sum = players.reduce((acc, p) => p.player_index === dealerIdx ? acc : acc + (Number(bids[p.player_index]) || 0), 0);
+        const f = currentRoundNum - sum;
+        return f >= 0 && f <= currentRoundNum ? f : null;
+      })()
+    : null;
+
+  async function recordBid(playerIndex: number, value: number) {
+    const next = { ...bids, [playerIndex]: String(value) };
+    setBids(next);
+    if (playerIndex !== dealerIdx) return; // more players still to bid
+    // Dealer just bid last - everyone's in, lock it in immediately.
     setLocking(true);
     const asObject: Record<string, number> = {};
-    for (const p of players) asObject[p.player_index] = Number(bids[p.player_index]);
+    for (const p of players) asObject[p.player_index] = Number(next[p.player_index]);
     const { error: bErr } = await supabase.from("manual_games").update({ pending_bids: asObject }).eq("id", game.id);
     setLocking(false);
     if (bErr) { setError("Ansagen konnten nicht gespeichert werden"); return; }
@@ -992,7 +1055,10 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
           <tbody>
             {rounds.map(r => (
               <tr key={r.round}>
-                <td style={{ padding: "8px", borderTop: `1px solid rgba(201,168,76,0.10)`, fontSize: 12, color: C.ivory, whiteSpace: "nowrap" }}>R{r.round}</td>
+                <td style={{ padding: "8px", borderTop: `1px solid rgba(201,168,76,0.10)`, fontSize: 12, color: C.ivory, whiteSpace: "nowrap" }}>
+                  R{r.round}
+                  <div style={{ fontSize: 9, color: C.ivoryDim, fontWeight: 400, marginTop: 1 }}>{players[(r.round - 1) % players.length]?.display_name} gibt</div>
+                </td>
                 {players.map(p => {
                   const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
                   const hit = e && e.bid === e.got;
@@ -1011,18 +1077,27 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                   R{currentRoundNum} ▶
                   <div style={{ fontSize: 9.5, color: C.ivoryDim, fontWeight: 400, marginTop: 1 }}>{dealer?.display_name} gibt</div>
                 </td>
-                {players.map(p => (
-                  <td key={p.id} style={{ padding: "6px 4px", background: "rgba(201,168,76,0.045)" }}>
-                    <input type="number" min={0} max={currentRoundNum} placeholder="Ansage" value={bids[p.player_index] ?? ""}
-                      onChange={e => setBids(prev => ({ ...prev, [p.player_index]: e.target.value }))}
-                      style={{ ...inputStyle, width: 56, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
-                  </td>
-                ))}
+                {players.map(p => {
+                  const has = bids[p.player_index] !== undefined;
+                  const isNext = nextBidder?.player_index === p.player_index;
+                  return (
+                    <td key={p.id} style={{ padding: "8px", background: "rgba(201,168,76,0.045)", textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
+                      {has
+                        ? <span style={{ color: C.ivory }}>{bids[p.player_index]}</span>
+                        : isNext
+                          ? <span style={{ color: C.gold, fontWeight: 700 }}>●</span>
+                          : <span style={{ color: C.ivoryDim }}>…</span>}
+                    </td>
+                  );
+                })}
               </tr>
             )}
             {!isDone && pendingBids && (
               <tr>
-                <td style={{ padding: "8px", background: "rgba(201,168,76,0.045)", fontSize: 12, color: C.goldLight, whiteSpace: "nowrap" }}>R{currentRoundNum} ▶</td>
+                <td style={{ padding: "8px", background: "rgba(201,168,76,0.045)", fontSize: 12, color: C.goldLight, whiteSpace: "nowrap" }}>
+                  R{currentRoundNum} ▶
+                  <div style={{ fontSize: 9.5, color: C.ivoryDim, fontWeight: 400, marginTop: 1 }}>{dealer?.display_name} gibt</div>
+                </td>
                 {players.map(p => (
                   <td key={p.id} style={{ padding: "6px 4px", background: "rgba(201,168,76,0.045)" }}>
                     <div style={{ display: "flex", gap: 3, justifyContent: "flex-end", alignItems: "center" }}>
@@ -1049,6 +1124,26 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
             </tr>
           </tbody>
         </table>
+        {!isDone && !pendingBids && nextBidder && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ ...cinzel, fontSize: 12, color: C.gold, marginBottom: 8 }}>
+              WIE VIELE STICHE? (0–{currentRoundNum}) – <span style={{ color: C.goldLight }}>{nextBidder.display_name}</span>
+            </div>
+            {dealerForbiddenBid !== null && (
+              <div style={{ color: "#F7DC6F", fontSize: 10.5, marginBottom: 8, background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "5px 9px" }}>
+                ⚠ Stichzwang: {dealerForbiddenBid} ist verboten
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+              {Array.from({ length: currentRoundNum + 1 }, (_, i) => (
+                <button key={i} onClick={() => recordBid(nextBidder.player_index, i)} disabled={i === dealerForbiddenBid || locking}
+                  style={{ ...goldBtn(i !== dealerForbiddenBid), padding: "9px 14px", fontSize: 15, opacity: i === dealerForbiddenBid ? 0.25 : locking ? 0.5 : 1, minWidth: 40 }}>
+                  {i}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {!isDone && pendingBids && currentRoundNum > 1 && gotSum > 0 && gotSum !== currentRoundNum && (
           <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
             <div style={{ fontSize: 10.5, color: C.ivoryDim, textAlign: "right" }}>Summe Stiche ({gotSum}) ≠ Runde ({currentRoundNum}) - bei einer Bombe normal.</div>
@@ -1098,11 +1193,6 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
       {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
 
       <div style={{ display: "flex", gap: 10, width: "min(460px, 96vw)" }}>
-        {!isDone && !pendingBids && (
-          <button onClick={lockBids} disabled={locking} style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: locking ? 0.5 : 1 }}>
-            {locking ? "…" : "Ansagen sperren"}
-          </button>
-        )}
         {!isDone && pendingBids && (
           <button onClick={saveRound} disabled={saving} style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: saving ? 0.5 : 1 }}>
             {saving ? "…" : "Runde abschließen"}
