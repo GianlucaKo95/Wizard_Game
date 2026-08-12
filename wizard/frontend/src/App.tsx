@@ -1248,8 +1248,11 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                   const total = runningByRound[r.round]?.[p.player_index];
                   return (
                     <td key={p.id} style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
-                      <span style={{ color: PAPER.inkDim }}>{e ? e.bid : "–"}</span>
-                      {e && <span style={{ marginLeft: 6, fontWeight: 700, color: PAPER.goldDeep }}>{total}</span>}
+                      {/* Total first, Ansage after it - matches the real paper
+                          block's layout (score in the wide column, bid in the
+                          narrow one next to it). */}
+                      {e && <span style={{ fontWeight: 700, color: PAPER.goldDeep }}>{total}</span>}
+                      <span style={{ marginLeft: 6, color: PAPER.inkDim }}>{e ? e.bid : "–"}</span>
                     </td>
                   );
                 })}
@@ -2941,8 +2944,11 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                       const leaderHere = rh.round === lastRoundNum && isLeader(p);
                       return (
                         <td key={p.id} style={{ padding: "11px 16px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", fontSize: 13.5, whiteSpace: "nowrap" }}>
-                          <span style={{ color: C.ivoryDim }}>{r ? r.bid : "–"}</span>{" "}
-                          {r && <span style={{ fontWeight: 700, color: leaderHere ? C.gold : C.ivory }}>{total}</span>}
+                          {/* Total first, Ansage after it - matches the real paper
+                              block's layout (score in the wide column, bid in the
+                              narrow one next to it). */}
+                          {r && <span style={{ fontWeight: 700, color: leaderHere ? C.gold : C.ivory }}>{total}</span>}{" "}
+                          <span style={{ color: C.ivoryDim }}>{r ? r.bid : "–"}</span>
                         </td>
                       );
                     })}
