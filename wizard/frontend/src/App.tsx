@@ -1113,6 +1113,10 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
     ? Array.from({ length: players.length }, (_, i) => players[(dealerIdx + 1 + i) % players.length])
     : [];
   const nextBidder = biddingOrder.find(p => bids[p.player_index] === undefined) ?? null;
+  // Recording tricks won happens after the round is played, in normal seat
+  // order (not dealer-relative) - at the table you just go around and note
+  // each person's tricks, the same order they sit in on screen.
+  const nextGoter = !isDone && pendingBids ? players.find(p => gots[p.player_index] === undefined) ?? null : null;
   // Stichzwang: only the dealer (last to bid) faces this - the one total
   // that would make all bids exactly equal the round's trick count.
   const dealerForbiddenBid = nextBidder?.player_index === dealerIdx
@@ -1156,18 +1160,19 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
     setBids(prev => ({ ...prev, [playerIndex]: String(next) }));
   }
 
-  async function saveRound() {
+  async function saveRound(gotsOverride?: Record<number, string>) {
     if (!pendingBids) return;
+    const g = gotsOverride ?? gots;
     setError("");
     for (const p of players) {
-      if (effectiveBid(p.player_index) === "" || gots[p.player_index] === undefined || gots[p.player_index] === "") {
+      if (effectiveBid(p.player_index) === "" || g[p.player_index] === undefined || g[p.player_index] === "") {
         setError("Bitte für jeden Spieler Ansage und Stiche eintragen"); return;
       }
     }
     setSaving(true);
     const results = players.map(p => {
       const bid = Number(effectiveBid(p.player_index));
-      const got = Number(gots[p.player_index]);
+      const got = Number(g[p.player_index]);
       const delta = bid === got ? 20 + bid * 10 : -Math.abs(bid - got) * 10;
       return { playerIndex: p.player_index, name: p.display_name, bid, got, delta };
     });
@@ -1177,6 +1182,18 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
     await supabase.from("manual_games").update({ pending_bids: null }).eq("id", game.id);
     setSaving(false);
     onChange();
+  }
+
+  // Tricks won are tapped in one player at a time, same button-picker
+  // pattern as the Ansage above, instead of typing numbers into small
+  // inputs - once the last player's is tapped, the round saves itself
+  // immediately, same auto-advance as the dealer's bid locking in above.
+  async function recordGot(playerIndex: number, value: number) {
+    const next = { ...gots, [playerIndex]: String(value) };
+    setGots(next);
+    const stillMissing = players.some(p => next[p.player_index] === undefined || next[p.player_index] === "");
+    if (stillMissing) return;
+    await saveRound(next);
   }
 
   async function finish() {
@@ -1257,22 +1274,28 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                   R{currentRoundNum} ▶
                   <div style={{ fontSize: 9.5, color: PAPER.inkDim, fontWeight: 400, marginTop: 1 }}>{dealer?.display_name} gibt</div>
                 </td>
-                {players.map(p => (
-                  <td key={p.id} style={{ padding: "6px 4px", background: PAPER.panelAlt }}>
-                    <div style={{ display: "flex", gap: 3, justifyContent: "flex-end", alignItems: "center" }}>
-                      {/* Ansage stays editable here (not just plain text) - Wolke (9¾)
-                          forces the trick winner to adjust it mid-round, after bids
-                          are already locked in above. */}
-                      <input type="number" min={0} max={currentRoundNum} value={effectiveBid(p.player_index)}
-                        onChange={e => setBids(prev => ({ ...prev, [p.player_index]: e.target.value }))}
-                        style={{ ...paperInput, width: 36, padding: "5px 2px", fontSize: 12, textAlign: "center" }} />
-                      <span style={{ fontSize: 11.5, color: PAPER.inkDim }}>/</span>
-                      <input type="number" min={0} max={currentRoundNum} placeholder="Sti." value={gots[p.player_index] ?? ""}
-                        onChange={e => setGots(prev => ({ ...prev, [p.player_index]: e.target.value }))}
-                        style={{ ...paperInput, width: 44, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
-                    </div>
-                  </td>
-                ))}
+                {players.map(p => {
+                  const gotEntered = gots[p.player_index] !== undefined;
+                  const isNextGoter = nextGoter?.player_index === p.player_index;
+                  return (
+                    <td key={p.id} style={{ padding: "6px 4px", background: PAPER.panelAlt }}>
+                      <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", alignItems: "center" }}>
+                        {/* Ansage stays editable here (not just plain text) - Wolke (9¾)
+                            forces the trick winner to adjust it mid-round, after bids
+                            are already locked in above. */}
+                        <input type="number" min={0} max={currentRoundNum} value={effectiveBid(p.player_index)}
+                          onChange={e => setBids(prev => ({ ...prev, [p.player_index]: e.target.value }))}
+                          style={{ ...paperInput, width: 36, padding: "5px 2px", fontSize: 12, textAlign: "center" }} />
+                        <span style={{ fontSize: 11.5, color: PAPER.inkDim }}>/</span>
+                        {/* Stiche get tapped in below (button picker), not typed here -
+                            this just reflects tap status: entered, up next, or waiting. */}
+                        <span style={{ fontSize: 12.5, minWidth: 16, textAlign: "center", fontWeight: gotEntered ? 400 : 700, color: gotEntered ? PAPER.ink : isNextGoter ? PAPER.gold : PAPER.inkDim }}>
+                          {gotEntered ? gots[p.player_index] : isNextGoter ? "●" : "…"}
+                        </span>
+                      </div>
+                    </td>
+                  );
+                })}
               </tr>
             )}
             <tr>
@@ -1283,6 +1306,21 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
             </tr>
           </tbody>
         </table>
+        {!isDone && pendingBids && nextGoter && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ ...paperHand, fontSize: 15, color: PAPER.goldDeep, marginBottom: 8 }}>
+              WIE VIELE STICHE HAT <span style={{ color: PAPER.ink }}>{nextGoter.display_name}</span> GEHOLT? (0–{currentRoundNum})
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+              {Array.from({ length: currentRoundNum + 1 }, (_, i) => (
+                <button key={i} onClick={() => recordGot(nextGoter.player_index, i)} disabled={saving}
+                  style={{ ...paperBtn(), padding: "9px 14px", fontSize: 15, opacity: saving ? 0.5 : 1, minWidth: 40 }}>
+                  {i}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {!isDone && !pendingBids && nextBidder && (
           <div style={{ marginTop: 10 }}>
             <div style={{ ...paperHand, fontSize: 15, color: PAPER.goldDeep, marginBottom: 8 }}>
@@ -1353,7 +1391,7 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
 
       <div style={{ display: "flex", gap: 10, width: "min(460px, 96vw)" }}>
         {!isDone && pendingBids && (
-          <button onClick={saveRound} disabled={saving} style={{ ...paperBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: saving ? 0.5 : 1 }}>
+          <button onClick={() => saveRound()} disabled={saving} style={{ ...paperBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: saving ? 0.5 : 1 }}>
             {saving ? "…" : "Runde abschließen"}
           </button>
         )}
