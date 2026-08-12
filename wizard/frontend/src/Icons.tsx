@@ -176,3 +176,14 @@ export const IconBellOff = ({ size = 16, style }: IconProps) => (
     <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
   </svg>
 );
+
+export const IconGripVertical = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style} fill="currentColor" stroke="none">
+    <circle cx="9" cy="5" r="1.6" />
+    <circle cx="15" cy="5" r="1.6" />
+    <circle cx="9" cy="12" r="1.6" />
+    <circle cx="15" cy="12" r="1.6" />
+    <circle cx="9" cy="19" r="1.6" />
+    <circle cx="15" cy="19" r="1.6" />
+  </svg>
+);

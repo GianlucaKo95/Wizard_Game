@@ -3,7 +3,7 @@ import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
 import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
-import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart, IconMic, IconMicOff, IconBell, IconBellOff } from "./Icons";
+import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart, IconMic, IconMicOff, IconBell, IconBellOff, IconGripVertical } from "./Icons";
 import { WizardArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
@@ -109,6 +109,80 @@ const tableStyle: React.CSSProperties = {
 function GoldDivider() {
   return <div style={{ width: "100%", maxWidth: 680, height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />;
 }
+
+// ─── "Rechenblock" Paper Design Tokens ─────────────────────────────────────
+// The manual scoring feature replaces a physical paper scoresheet, so it
+// gets its own warm, hand-ruled parchment skin instead of the app's usual
+// dark fantasy theme - scoped ONLY to ManualScoreboardScreen/ManualGameSetup/
+// ManualPlayerSlot/ManualGamePlay below, never used elsewhere.
+const PAPER = {
+  bg: "#EAE0C4",
+  panel: "#F8F1DC",
+  panelAlt: "#F1E7C9",
+  ink: "#3B2A16",
+  inkDim: "#8A7350",
+  line: "rgba(90,68,38,0.3)",
+  lineFaint: "rgba(90,68,38,0.14)",
+  gold: "#A6772C",
+  goldDeep: "#8A5E1F",
+  goldLight: "#C99A44",
+  danger: "#A23A2E",
+  success: "#3D7A45",
+  shadow: "rgba(59,42,22,0.28)",
+};
+
+const paperHand: React.CSSProperties = { fontFamily: "'Kalam', cursive" };
+
+const paperBg: React.CSSProperties = {
+  minHeight: "100dvh",
+  backgroundColor: PAPER.bg,
+  backgroundImage: [
+    "radial-gradient(ellipse at 15% 8%, rgba(255,252,240,0.55), transparent 55%)",
+    "radial-gradient(ellipse at 88% 92%, rgba(110,82,45,0.14), transparent 55%)",
+    `repeating-linear-gradient(${PAPER.lineFaint} 0, ${PAPER.lineFaint} 1px, transparent 1px, transparent 30px)`,
+  ].join(", "),
+};
+
+const paperPanel = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+  background: PAPER.panel,
+  border: `1px solid ${PAPER.line}`,
+  borderRadius: RADIUS.md,
+  boxShadow: `0 6px 18px ${PAPER.shadow}, inset 0 0 0 1px rgba(255,255,255,0.35)`,
+  ...extra,
+});
+
+const paperBtn = (active = true): React.CSSProperties => ({
+  fontFamily: "'Inter', sans-serif",
+  background: active ? `linear-gradient(135deg, ${PAPER.gold}, ${PAPER.goldDeep})` : "rgba(59,42,22,0.07)",
+  color: active ? "#FBF4E2" : PAPER.inkDim,
+  border: active ? "none" : `1px solid ${PAPER.line}`,
+  borderRadius: RADIUS.lg,
+  padding: "clamp(8px,2vw,12px) clamp(12px,3vw,20px)",
+  fontSize: "clamp(13px, 2vw, 15px)",
+  cursor: "pointer",
+  letterSpacing: "0.01em",
+  transition: "all 0.2s",
+  fontWeight: 700,
+  boxShadow: active ? `0 4px 12px ${PAPER.shadow}` : "none",
+  WebkitTapHighlightColor: "transparent",
+  touchAction: "manipulation",
+  minHeight: 44,
+  userSelect: "none",
+  WebkitUserSelect: "none",
+});
+
+const paperInput: React.CSSProperties = {
+  background: "rgba(255,255,255,0.55)",
+  border: `1px solid ${PAPER.line}`,
+  borderRadius: RADIUS.sm,
+  color: PAPER.ink,
+  padding: "clamp(10px,2vw,14px) clamp(12px,3vw,18px)",
+  fontSize: 16,
+  width: "100%",
+  outline: "none",
+  fontFamily: "Inter, sans-serif",
+  WebkitAppearance: "none",
+};
 
 // Small framed portrait, keeping the card art's native 100:140 aspect ratio
 // (no cropping) - used wherever we'd otherwise reach for an emoji as a stand-in
@@ -744,10 +818,10 @@ function ManualPlayerSlot({ index, slot, excludeIds, onChange }: {
 
   if (slot.userId) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, ...glass({ padding: "9px 12px" }) }}>
-        <div style={{ flex: 1, fontSize: 13, color: C.ivory }}>{slot.name}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, ...paperPanel({ padding: "9px 12px" }), background: PAPER.panelAlt }}>
+        <div style={{ flex: 1, fontSize: 13, color: PAPER.ink }}>{slot.name}</div>
         <button onClick={() => { onChange({ userId: null, name: "" }); setQuery(""); }}
-          style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
+          style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
       </div>
     );
   }
@@ -760,14 +834,14 @@ function ManualPlayerSlot({ index, slot, excludeIds, onChange }: {
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={`Spieler ${index + 1}: Name eintragen oder Nutzer suchen…`}
-        style={{ ...inputStyle, fontSize: 13, padding: "9px 12px" }}
+        style={{ ...paperInput, fontSize: 13, padding: "9px 12px" }}
         maxLength={24}
       />
       {open && results.length > 0 && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 10, ...glass({ padding: 4 }), maxHeight: 170, overflowY: "auto" }}>
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 10, ...paperPanel({ padding: 4 }), maxHeight: 170, overflowY: "auto" }}>
           {results.map(r => (
             <button key={r.id} onMouseDown={() => { onChange({ userId: r.id, name: r.username }); setQuery(r.username); setOpen(false); }}
-              style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.ivory, padding: "8px 10px", fontSize: 13, cursor: "pointer", borderRadius: 6 }}>
+              style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: PAPER.ink, padding: "8px 10px", fontSize: 13, cursor: "pointer", borderRadius: 6 }}>
               {r.username}
             </button>
           ))}
@@ -785,8 +859,13 @@ function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames
   const [stage, setStage] = useState<"roster" | "order">("roster");
   const [edition, setEdition] = useState<"classic" | "anniversary">("classic");
   const [count, setCount] = useState(4);
-  const [slots, setSlots] = useState<{ userId: string | null; name: string }[]>(
-    Array.from({ length: 4 }, () => ({ userId: null, name: "" }))
+  // Stable per-slot ids (independent of array position) so React keeps
+  // reusing the same DOM node for a slot as it moves during drag-and-drop -
+  // a positional key would make React treat the slot in the DOM as "the
+  // same" and just swap its rendered content, which breaks drag continuity.
+  const nextId = useRef(4);
+  const [slots, setSlots] = useState<{ id: number; userId: string | null; name: string }[]>(
+    Array.from({ length: 4 }, (_, i) => ({ id: i, userId: null, name: "" }))
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -795,22 +874,86 @@ function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames
     setCount(n);
     setSlots(prev => {
       const next = [...prev];
-      while (next.length < n) next.push({ userId: null, name: "" });
+      while (next.length < n) next.push({ id: nextId.current++, userId: null, name: "" });
       return next.slice(0, n);
     });
   }
 
-  function moveSlot(i: number, dir: -1 | 1) {
+  const excludeIds = slots.map(s => s.userId).filter((id): id is string => !!id);
+
+  // Touch-friendly drag-and-drop for the seating-order screen. Native HTML5
+  // drag-and-drop (draggable/dragstart/dragover) doesn't work reliably on
+  // touch devices, so this uses the Pointer Events API instead, which covers
+  // mouse, touch and pen uniformly.
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const dragStartY = useRef(0);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+
+  function startDrag(id: number, e: React.PointerEvent<HTMLDivElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragStartY.current = e.clientY;
+    setDragId(id);
+    setDragOffsetY(0);
+  }
+
+  function swapSlots(i: number, j: number) {
+    const rowEl = rowRefs.current[j];
+    const rowHeight = rowEl ? rowEl.getBoundingClientRect().height + 6 : 0;
+    // Compensate the drag origin by the row's natural-position shift so the
+    // dragged row's on-screen position stays continuous under the pointer
+    // instead of jumping when its index (and therefore its natural flex
+    // position) changes underneath it.
+    dragStartY.current += (j > i ? 1 : -1) * rowHeight;
     setSlots(prev => {
-      const j = i + dir;
-      if (j < 0 || j >= prev.length) return prev;
       const next = [...prev];
       [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
   }
 
-  const excludeIds = slots.map(s => s.userId).filter((id): id is string => !!id);
+  function onDragMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (dragId === null) return;
+    const current = slotsRef.current;
+    const idx = current.findIndex(s => s.id === dragId);
+    if (idx < 0) return;
+    if (e.clientY < dragStartY.current && idx > 0) {
+      const aboveEl = rowRefs.current[idx - 1];
+      if (aboveEl) {
+        const r = aboveEl.getBoundingClientRect();
+        if (e.clientY < r.top + r.height / 2) swapSlots(idx, idx - 1);
+      }
+    } else if (e.clientY > dragStartY.current && idx < current.length - 1) {
+      const belowEl = rowRefs.current[idx + 1];
+      if (belowEl) {
+        const r = belowEl.getBoundingClientRect();
+        if (e.clientY > r.top + r.height / 2) swapSlots(idx, idx + 1);
+      }
+    }
+    let offset = e.clientY - dragStartY.current;
+    // Keep the dragged row inside the list's own bounds, even on a fast or
+    // overshot drag - otherwise it can visually overlap the screen's header
+    // above the list.
+    const rowEl = rowRefs.current[idx];
+    const listEl = listRef.current;
+    if (rowEl && listEl) {
+      const rowRect = rowEl.getBoundingClientRect();
+      const listRect = listEl.getBoundingClientRect();
+      const naturalTop = rowRect.top - dragOffsetY;
+      const minOffset = listRect.top - naturalTop;
+      const maxOffset = listRect.bottom - rowRect.height - naturalTop;
+      offset = Math.min(Math.max(offset, minOffset), maxOffset);
+    }
+    setDragOffsetY(offset);
+  }
+
+  function endDrag() {
+    setDragId(null);
+    setDragOffsetY(0);
+  }
 
   function goToOrder() {
     setError("");
@@ -837,72 +980,88 @@ function ManualGameSetup({ uid, pastGames, onCreated }: { uid: string; pastGames
 
   if (stage === "order") {
     return (
-      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        <button onClick={() => setStage("roster")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={12} /> Zurück</button>
-        <div style={{ ...cinzel, fontSize: 13, color: C.gold }}>Reihenfolge festlegen</div>
-        <div style={{ fontSize: 11, color: C.ivoryDim }}>So wie ihr am Tisch sitzt - bestimmt Geber- und Bietreihenfolge.</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {slots.map((s, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, ...glass({ padding: "8px 12px" }) }}>
-              <span style={{ ...cinzel, fontSize: 11, color: C.ivoryDim, minWidth: 14 }}>{i + 1}.</span>
-              <span style={{ flex: 1, fontSize: 13, color: C.ivory }}>{s.name}</span>
-              <button onClick={() => moveSlot(i, -1)} disabled={i === 0}
-                style={{ background: "none", border: "none", color: C.ivoryDim, cursor: i === 0 ? "default" : "pointer", fontSize: 15, padding: 4, opacity: i === 0 ? 0.3 : 1 }}>↑</button>
-              <button onClick={() => moveSlot(i, 1)} disabled={i === slots.length - 1}
-                style={{ background: "none", border: "none", color: C.ivoryDim, cursor: i === slots.length - 1 ? "default" : "pointer", fontSize: 15, padding: 4, opacity: i === slots.length - 1 ? 0.3 : 1 }}>↓</button>
-            </div>
-          ))}
+      <div style={{ ...paperPanel({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+        <button onClick={() => setStage("roster")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={12} /> Zurück</button>
+        <div style={{ ...paperHand, fontSize: 20, color: PAPER.ink }}>Reihenfolge festlegen</div>
+        <div style={{ fontSize: 11.5, color: PAPER.inkDim }}>So wie ihr am Tisch sitzt - bestimmt Geber- und Bietreihenfolge. Zum Sortieren ziehen.</div>
+        <div ref={listRef} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {slots.map((s, i) => {
+            const isDragging = dragId === s.id;
+            return (
+              <div key={s.id} ref={el => { rowRefs.current[i] = el; }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10, ...paperPanel({ padding: "8px 12px" }),
+                  background: PAPER.panelAlt,
+                  position: isDragging ? "relative" : undefined,
+                  transform: isDragging ? `translateY(${dragOffsetY}px)` : undefined,
+                  zIndex: isDragging ? 10 : undefined,
+                  boxShadow: isDragging ? `0 10px 26px ${PAPER.shadow}` : undefined,
+                }}>
+                <span style={{ ...paperHand, fontSize: 15, color: PAPER.gold, minWidth: 16 }}>{i + 1}.</span>
+                <span style={{ flex: 1, fontSize: 13, color: PAPER.ink }}>{s.name}</span>
+                <div
+                  onPointerDown={e => startDrag(s.id, e)}
+                  onPointerMove={onDragMove}
+                  onPointerUp={endDrag}
+                  onPointerCancel={endDrag}
+                  style={{ touchAction: "none", cursor: isDragging ? "grabbing" : "grab", color: PAPER.inkDim, padding: 4, display: "flex" }}
+                >
+                  <IconGripVertical size={18} />
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <button onClick={start} disabled={loading} style={{ ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
+        <button onClick={start} disabled={loading} style={{ ...paperBtn(), width: "100%", padding: "12px 0", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
           {loading ? "…" : "✦ Spiel starten"}
         </button>
-        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
+        {error && <div style={{ color: PAPER.danger, fontSize: 12, textAlign: "center" }}>{error}</div>}
       </div>
     );
   }
 
   return (
     <>
-      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ ...cinzel, fontSize: 13, color: C.gold }}>Neues Spiel erfassen</div>
+      <div style={{ ...paperPanel({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ ...paperHand, fontSize: 20, color: PAPER.ink }}>Neues Spiel erfassen</div>
 
         <div>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>EDITION</div>
+          <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim, letterSpacing: 1, marginBottom: 8 }}>EDITION</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setEdition("classic")} style={{ ...goldBtn(edition === "classic"), flex: 1, padding: "8px 0", fontSize: 12 }}>Classic</button>
-            <button onClick={() => setEdition("anniversary")} style={{ ...goldBtn(edition === "anniversary"), flex: 1, padding: "8px 0", fontSize: 12 }}>30 Jahre</button>
+            <button onClick={() => setEdition("classic")} style={{ ...paperBtn(edition === "classic"), flex: 1, padding: "8px 0", fontSize: 12 }}>Classic</button>
+            <button onClick={() => setEdition("anniversary")} style={{ ...paperBtn(edition === "anniversary"), flex: 1, padding: "8px 0", fontSize: 12 }}>30 Jahre</button>
           </div>
         </div>
 
         <div>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>SPIELERANZAHL</div>
+          <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim, letterSpacing: 1, marginBottom: 8 }}>SPIELERANZAHL</div>
           <div style={{ display: "flex", gap: 6 }}>
             {[3, 4, 5, 6].map(n => (
-              <button key={n} onClick={() => changeCount(n)} style={{ ...goldBtn(count === n), flex: 1, padding: "8px 0", fontSize: 13 }}>{n}</button>
+              <button key={n} onClick={() => changeCount(n)} style={{ ...paperBtn(count === n), flex: 1, padding: "8px 0", fontSize: 13 }}>{n}</button>
             ))}
           </div>
-          <div style={{ fontSize: 10.5, color: C.ivoryDim, marginTop: 6 }}>{Math.floor(60 / count)} Runden</div>
+          <div style={{ fontSize: 10.5, color: PAPER.inkDim, marginTop: 6 }}>{Math.floor(60 / count)} Runden</div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2 }}>MITSPIELER</div>
+          <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim, letterSpacing: 1 }}>MITSPIELER</div>
           {slots.map((s, i) => (
-            <ManualPlayerSlot key={i} index={i} slot={s} excludeIds={excludeIds}
-              onChange={v => setSlots(prev => prev.map((p, pi) => pi === i ? v : p))} />
+            <ManualPlayerSlot key={s.id} index={i} slot={s} excludeIds={excludeIds}
+              onChange={v => setSlots(prev => prev.map((p, pi) => pi === i ? { ...p, ...v } : p))} />
           ))}
         </div>
 
-        <button onClick={goToOrder} style={{ ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14 }}>
+        <button onClick={goToOrder} style={{ ...paperBtn(), width: "100%", padding: "12px 0", fontSize: 14 }}>
           Weiter → Reihenfolge
         </button>
-        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
+        {error && <div style={{ color: PAPER.danger, fontSize: 12, textAlign: "center" }}>{error}</div>}
       </div>
 
       {pastGames.length > 0 && (
-        <div style={{ ...glass({ padding: 16 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2 }}>FRÜHERE SPIELE</div>
+        <div style={{ ...paperPanel({ padding: 16 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim, letterSpacing: 1 }}>FRÜHERE SPIELE</div>
           {pastGames.slice(0, 8).map(g => (
-            <div key={g.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.ivoryDim, padding: "4px 0" }}>
+            <div key={g.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: PAPER.inkDim, padding: "4px 0", borderTop: `1px solid ${PAPER.lineFaint}` }}>
               <span>{new Date(g.created_at).toLocaleDateString("de-DE")}</span>
               <span>{g.edition === "anniversary" ? "30 Jahre" : "Classic"} · {g.max_rounds} Runden</span>
             </div>
@@ -1036,36 +1195,36 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
 
   return (
     <>
-      <div style={{ ...glass({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto" }}>
+      <div style={{ ...paperPanel({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ ...cinzel, fontSize: 11, color: C.ivoryDim, letterSpacing: 2, textTransform: "uppercase" as const }}>
+          <div style={{ ...paperHand, fontSize: 15, color: PAPER.inkDim, letterSpacing: 0.5 }}>
             {game.edition === "anniversary" ? "30 Jahre" : "Classic"} · Runde {Math.min(currentRoundNum, game.max_rounds)}/{game.max_rounds}
           </div>
-          <button onClick={discard} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 11 }}>Verwerfen</button>
+          <button onClick={discard} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11 }}>Verwerfen</button>
         </div>
         <table style={{ borderCollapse: "collapse", width: "100%", fontVariantNumeric: "tabular-nums" as const }}>
           <thead>
             <tr>
-              <th style={{ padding: "6px 8px", textAlign: "left", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, borderBottom: `1px solid rgba(201,168,76,0.12)`, whiteSpace: "nowrap" }}>Runde</th>
+              <th style={{ padding: "6px 8px", textAlign: "left", color: PAPER.inkDim, fontWeight: 600, fontSize: 10.5, borderBottom: `1.5px solid ${PAPER.line}`, whiteSpace: "nowrap" }}>Runde</th>
               {players.map(p => (
-                <th key={p.id} style={{ padding: "6px 8px", textAlign: "right", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, borderBottom: `1px solid rgba(201,168,76,0.12)`, whiteSpace: "nowrap" }}>{p.display_name}</th>
+                <th key={p.id} style={{ padding: "6px 8px", textAlign: "right", color: PAPER.inkDim, fontWeight: 600, fontSize: 10.5, borderBottom: `1.5px solid ${PAPER.line}`, whiteSpace: "nowrap" }}>{p.display_name}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rounds.map(r => (
               <tr key={r.round}>
-                <td style={{ padding: "8px", borderTop: `1px solid rgba(201,168,76,0.10)`, fontSize: 12, color: C.ivory, whiteSpace: "nowrap" }}>
+                <td style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, fontSize: 12, color: PAPER.ink, whiteSpace: "nowrap" }}>
                   R{r.round}
-                  <div style={{ fontSize: 9, color: C.ivoryDim, fontWeight: 400, marginTop: 1 }}>{players[(r.round - 1) % players.length]?.display_name} gibt</div>
+                  <div style={{ fontSize: 9, color: PAPER.inkDim, fontWeight: 400, marginTop: 1 }}>{players[(r.round - 1) % players.length]?.display_name} gibt</div>
                 </td>
                 {players.map(p => {
                   const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
                   const hit = e && e.bid === e.got;
                   return (
-                    <td key={p.id} style={{ padding: "8px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
+                    <td key={p.id} style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
                       {e ? `${e.bid}/${e.got} ` : "–"}
-                      {e && <span style={{ fontWeight: 600, color: hit ? C.success : C.error }}>{e.delta > 0 ? "+" : ""}{e.delta}</span>}
+                      {e && <span style={{ fontWeight: 600, color: hit ? PAPER.success : PAPER.danger }}>{e.delta > 0 ? "+" : ""}{e.delta}</span>}
                     </td>
                   );
                 })}
@@ -1073,20 +1232,20 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
             ))}
             {!isDone && !pendingBids && (
               <tr>
-                <td style={{ padding: "8px", background: "rgba(201,168,76,0.045)", fontSize: 12, color: C.goldLight, whiteSpace: "nowrap" }}>
+                <td style={{ padding: "8px", background: PAPER.panelAlt, fontSize: 12, color: PAPER.goldDeep, whiteSpace: "nowrap" }}>
                   R{currentRoundNum} ▶
-                  <div style={{ fontSize: 9.5, color: C.ivoryDim, fontWeight: 400, marginTop: 1 }}>{dealer?.display_name} gibt</div>
+                  <div style={{ fontSize: 9.5, color: PAPER.inkDim, fontWeight: 400, marginTop: 1 }}>{dealer?.display_name} gibt</div>
                 </td>
                 {players.map(p => {
                   const has = bids[p.player_index] !== undefined;
                   const isNext = nextBidder?.player_index === p.player_index;
                   return (
-                    <td key={p.id} style={{ padding: "8px", background: "rgba(201,168,76,0.045)", textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
+                    <td key={p.id} style={{ padding: "8px", background: PAPER.panelAlt, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
                       {has
-                        ? <span style={{ color: C.ivory }}>{bids[p.player_index]}</span>
+                        ? <span style={{ color: PAPER.ink }}>{bids[p.player_index]}</span>
                         : isNext
-                          ? <span style={{ color: C.gold, fontWeight: 700 }}>●</span>
-                          : <span style={{ color: C.ivoryDim }}>…</span>}
+                          ? <span style={{ color: PAPER.gold, fontWeight: 700 }}>●</span>
+                          : <span style={{ color: PAPER.inkDim }}>…</span>}
                     </td>
                   );
                 })}
@@ -1094,50 +1253,50 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
             )}
             {!isDone && pendingBids && (
               <tr>
-                <td style={{ padding: "8px", background: "rgba(201,168,76,0.045)", fontSize: 12, color: C.goldLight, whiteSpace: "nowrap" }}>
+                <td style={{ padding: "8px", background: PAPER.panelAlt, fontSize: 12, color: PAPER.goldDeep, whiteSpace: "nowrap" }}>
                   R{currentRoundNum} ▶
-                  <div style={{ fontSize: 9.5, color: C.ivoryDim, fontWeight: 400, marginTop: 1 }}>{dealer?.display_name} gibt</div>
+                  <div style={{ fontSize: 9.5, color: PAPER.inkDim, fontWeight: 400, marginTop: 1 }}>{dealer?.display_name} gibt</div>
                 </td>
                 {players.map(p => (
-                  <td key={p.id} style={{ padding: "6px 4px", background: "rgba(201,168,76,0.045)" }}>
+                  <td key={p.id} style={{ padding: "6px 4px", background: PAPER.panelAlt }}>
                     <div style={{ display: "flex", gap: 3, justifyContent: "flex-end", alignItems: "center" }}>
                       {/* Ansage stays editable here (not just plain text) - Wolke (9¾)
                           forces the trick winner to adjust it mid-round, after bids
                           are already locked in above. */}
                       <input type="number" min={0} max={currentRoundNum} value={effectiveBid(p.player_index)}
                         onChange={e => setBids(prev => ({ ...prev, [p.player_index]: e.target.value }))}
-                        style={{ ...inputStyle, width: 36, padding: "5px 2px", fontSize: 12, textAlign: "center" }} />
-                      <span style={{ fontSize: 11.5, color: C.ivoryDim }}>/</span>
+                        style={{ ...paperInput, width: 36, padding: "5px 2px", fontSize: 12, textAlign: "center" }} />
+                      <span style={{ fontSize: 11.5, color: PAPER.inkDim }}>/</span>
                       <input type="number" min={0} max={currentRoundNum} placeholder="Sti." value={gots[p.player_index] ?? ""}
                         onChange={e => setGots(prev => ({ ...prev, [p.player_index]: e.target.value }))}
-                        style={{ ...inputStyle, width: 44, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
+                        style={{ ...paperInput, width: 44, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
                     </div>
                   </td>
                 ))}
               </tr>
             )}
             <tr>
-              <td style={{ padding: "8px", borderTop: `2px solid rgba(201,168,76,0.2)`, fontSize: 12, color: C.gold, fontWeight: 700, whiteSpace: "nowrap" }}>Σ</td>
+              <td style={{ padding: "8px", borderTop: `2px solid ${PAPER.line}`, fontSize: 12, color: PAPER.goldDeep, fontWeight: 700, whiteSpace: "nowrap" }}>Σ</td>
               {totals.map(p => (
-                <td key={p.id} style={{ padding: "8px", borderTop: `2px solid rgba(201,168,76,0.2)`, textAlign: "right", fontSize: 14, color: C.gold, fontWeight: 700, whiteSpace: "nowrap" }}>{p.score}</td>
+                <td key={p.id} style={{ padding: "8px", borderTop: `2px solid ${PAPER.line}`, textAlign: "right", fontSize: 14, color: PAPER.goldDeep, fontWeight: 700, whiteSpace: "nowrap" }}>{p.score}</td>
               ))}
             </tr>
           </tbody>
         </table>
         {!isDone && !pendingBids && nextBidder && (
           <div style={{ marginTop: 10 }}>
-            <div style={{ ...cinzel, fontSize: 12, color: C.gold, marginBottom: 8 }}>
-              WIE VIELE STICHE? (0–{currentRoundNum}) – <span style={{ color: C.goldLight }}>{nextBidder.display_name}</span>
+            <div style={{ ...paperHand, fontSize: 15, color: PAPER.goldDeep, marginBottom: 8 }}>
+              WIE VIELE STICHE? (0–{currentRoundNum}) – <span style={{ color: PAPER.ink }}>{nextBidder.display_name}</span>
             </div>
             {dealerForbiddenBid !== null && (
-              <div style={{ color: "#F7DC6F", fontSize: 10.5, marginBottom: 8, background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "5px 9px" }}>
+              <div style={{ color: PAPER.danger, fontSize: 10.5, marginBottom: 8, background: "rgba(162,58,46,0.1)", border: `1px solid rgba(162,58,46,0.35)`, borderRadius: 6, padding: "5px 9px" }}>
                 ⚠ Stichzwang: {dealerForbiddenBid} ist verboten
               </div>
             )}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
               {Array.from({ length: currentRoundNum + 1 }, (_, i) => (
                 <button key={i} onClick={() => recordBid(nextBidder.player_index, i)} disabled={i === dealerForbiddenBid || locking}
-                  style={{ ...goldBtn(i !== dealerForbiddenBid), padding: "9px 14px", fontSize: 15, opacity: i === dealerForbiddenBid ? 0.25 : locking ? 0.5 : 1, minWidth: 40 }}>
+                  style={{ ...paperBtn(i !== dealerForbiddenBid), padding: "9px 14px", fontSize: 15, opacity: i === dealerForbiddenBid ? 0.25 : locking ? 0.5 : 1, minWidth: 40 }}>
                   {i}
                 </button>
               ))}
@@ -1146,23 +1305,23 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
         )}
         {!isDone && pendingBids && currentRoundNum > 1 && gotSum > 0 && gotSum !== currentRoundNum && (
           <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
-            <div style={{ fontSize: 10.5, color: C.ivoryDim, textAlign: "right" }}>Summe Stiche ({gotSum}) ≠ Runde ({currentRoundNum}) - bei einer Bombe normal.</div>
+            <div style={{ fontSize: 10.5, color: PAPER.inkDim, textAlign: "right" }}>Summe Stiche ({gotSum}) ≠ Runde ({currentRoundNum}) - bei einer Bombe normal.</div>
           </div>
         )}
         {!isDone && pendingBids && !wolkePicking && (
-          <button onClick={() => setWolkePicking(true)} style={{ marginTop: 10, background: "none", border: `1px solid ${C.glassBorder}`, borderRadius: RADIUS.sm, color: C.ivoryDim, cursor: "pointer", fontSize: 11.5, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <button onClick={() => setWolkePicking(true)} style={{ marginTop: 10, background: "none", border: `1px solid ${PAPER.line}`, borderRadius: RADIUS.sm, color: PAPER.inkDim, cursor: "pointer", fontSize: 11.5, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}>
             🚂 9¾ – Vorhersage anpassen
           </button>
         )}
         {!isDone && pendingBids && wolkePicking && wolkePlayer === null && (
           <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 11, color: C.ivoryDim, marginBottom: 6 }}>Wer hat den Stich mit der Wolke gewonnen?</div>
+            <div style={{ fontSize: 11, color: PAPER.inkDim, marginBottom: 6 }}>Wer hat den Stich mit der Wolke gewonnen?</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {players.map(p => (
                 <button key={p.id} onClick={() => setWolkePlayer(p.player_index)}
-                  style={{ ...goldBtn(false), padding: "7px 12px", fontSize: 12 }}>{p.display_name}</button>
+                  style={{ ...paperBtn(false), padding: "7px 12px", fontSize: 12 }}>{p.display_name}</button>
               ))}
-              <button onClick={() => setWolkePicking(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 11.5, padding: "7px 4px" }}>Abbrechen</button>
+              <button onClick={() => setWolkePicking(false)} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11.5, padding: "7px 4px" }}>Abbrechen</button>
             </div>
           </div>
         )}
@@ -1171,34 +1330,34 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
           const current = Number(effectiveBid(wolkePlayer) || 0);
           return (
             <div style={{ marginTop: 10 }}>
-              <div style={{ fontSize: 11, color: C.ivoryDim, marginBottom: 6 }}>
-                <span style={{ color: C.gold }}>{p?.display_name}</span> - aktuelle Ansage: <span style={{ color: C.gold, fontWeight: 700 }}>{current}</span>
+              <div style={{ fontSize: 11, color: PAPER.inkDim, marginBottom: 6 }}>
+                <span style={{ color: PAPER.goldDeep }}>{p?.display_name}</span> - aktuelle Ansage: <span style={{ color: PAPER.goldDeep, fontWeight: 700 }}>{current}</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => { adjustBid(wolkePlayer, -1); setWolkePicking(false); setWolkePlayer(null); }} disabled={current === 0}
-                  style={{ ...goldBtn(false), flex: 1, padding: "9px 0", fontSize: 13, opacity: current === 0 ? 0.4 : 1 }}>
+                  style={{ ...paperBtn(false), flex: 1, padding: "9px 0", fontSize: 13, opacity: current === 0 ? 0.4 : 1 }}>
                   −1 → {Math.max(0, current - 1)}
                 </button>
                 <button onClick={() => { adjustBid(wolkePlayer, 1); setWolkePicking(false); setWolkePlayer(null); }}
-                  style={{ ...goldBtn(), flex: 1, padding: "9px 0", fontSize: 13 }}>
+                  style={{ ...paperBtn(), flex: 1, padding: "9px 0", fontSize: 13 }}>
                   +1 → {current + 1}
                 </button>
               </div>
-              <button onClick={() => setWolkePlayer(null)} style={{ marginTop: 6, background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10.5, padding: 0 }}>Anderer Spieler</button>
+              <button onClick={() => setWolkePlayer(null)} style={{ marginTop: 6, background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 10.5, padding: 0 }}>Anderer Spieler</button>
             </div>
           );
         })()}
       </div>
 
-      {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
+      {error && <div style={{ color: PAPER.danger, fontSize: 12, textAlign: "center" }}>{error}</div>}
 
       <div style={{ display: "flex", gap: 10, width: "min(460px, 96vw)" }}>
         {!isDone && pendingBids && (
-          <button onClick={saveRound} disabled={saving} style={{ ...goldBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: saving ? 0.5 : 1 }}>
+          <button onClick={saveRound} disabled={saving} style={{ ...paperBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: saving ? 0.5 : 1 }}>
             {saving ? "…" : "Runde abschließen"}
           </button>
         )}
-        <button onClick={finish} disabled={finishing || rounds.length === 0} style={{ ...goldBtn(isDone), flex: 1, padding: "12px 0", fontSize: 14, opacity: (finishing || rounds.length === 0) ? 0.5 : 1 }}>
+        <button onClick={finish} disabled={finishing || rounds.length === 0} style={{ ...paperBtn(isDone), flex: 1, padding: "12px 0", fontSize: 14, opacity: (finishing || rounds.length === 0) ? 0.5 : 1 }}>
           {finishing ? "…" : "🏁 Spiel abschließen"}
         </button>
       </div>
@@ -1240,9 +1399,13 @@ function ManualScoreboardScreen({ session, onBack }: { session: Session; onBack:
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
-      <button onClick={onBack} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-      <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconClipboardList size={17} /> Rechenblock</div>
+    <div style={{
+      ...paperBg, display: "flex", flexDirection: "column", alignItems: "center",
+      padding: `max(16px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left))`,
+      gap: "clamp(8px, 1.5vw, 16px)", justifyContent: "flex-start", paddingTop: "max(20px, env(safe-area-inset-top))",
+    }} className="fade-in">
+      <button onClick={onBack} style={{ alignSelf: "flex-start", background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
+      <div style={{ ...paperHand, fontSize: "clamp(20px,6vw,28px)", color: PAPER.ink, display: "flex", alignItems: "center", gap: 8 }}><IconClipboardList size={17} /> Rechenblock</div>
 
       {loading ? (
         <div className="skeleton" style={{ width: 200, height: 40, borderRadius: 8 }} />
