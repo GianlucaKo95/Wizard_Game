@@ -1628,7 +1628,21 @@ function ManualScoreboardScreen({ session, onBack }: { session: Session; onBack:
       .then(async ({ data }) => {
         const games = data ?? [];
         const active = games.find((g: any) => !g.finished_at) ?? null;
-        setPastGames(games.filter((g: any) => g.finished_at));
+        // "Frühere Spiele" is a history of finished games, not a graveyard of
+        // ones that got cut short - "Spiel abschließen" is allowed anytime
+        // rounds.length > 0, so an early-ended game still gets finished_at
+        // and still counts toward stats, it just doesn't clutter this list
+        // unless every round up to max_rounds was actually played.
+        const finished = games.filter((g: any) => g.finished_at);
+        if (finished.length > 0) {
+          const { data: roundRows } = await supabase.from("manual_game_rounds")
+            .select("manual_game_id").in("manual_game_id", finished.map((g: any) => g.id));
+          const counts: Record<string, number> = {};
+          for (const r of roundRows ?? []) counts[r.manual_game_id] = (counts[r.manual_game_id] ?? 0) + 1;
+          setPastGames(finished.filter((g: any) => (counts[g.id] ?? 0) >= g.max_rounds));
+        } else {
+          setPastGames([]);
+        }
         setActiveGame(active);
         if (active) {
           const [{ data: p }, { data: r }] = await Promise.all([
