@@ -1245,13 +1245,10 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                 </td>
                 {players.map(p => {
                   const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
-                  const hit = e && e.bid === e.got;
                   const total = runningByRound[r.round]?.[p.player_index];
                   return (
                     <td key={p.id} style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
-                      {e
-                        ? <span style={{ color: hit ? PAPER.success : PAPER.ink }}>{e.bid}/{e.got}</span>
-                        : <span style={{ color: PAPER.inkDim }}>–</span>}
+                      <span style={{ color: PAPER.inkDim }}>{e ? e.bid : "–"}</span>
                       {e && <span style={{ marginLeft: 6, fontWeight: 700, color: PAPER.goldDeep }}>{total}</span>}
                     </td>
                   );
@@ -2940,12 +2937,11 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                     </td>
                     {players.map((p: any) => {
                       const r = rh.results?.find((x: any) => x.playerIndex === p.player_index);
-                      const hit = r && r.bid === r.got;
                       const total = runningByRound[rh.round]?.[p.player_index];
                       const leaderHere = rh.round === lastRoundNum && isLeader(p);
                       return (
                         <td key={p.id} style={{ padding: "11px 16px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", fontSize: 13.5, whiteSpace: "nowrap" }}>
-                          <span style={{ color: r ? (hit ? C.success : C.ivory) : C.ivoryDim }}>{r ? `${r.bid}/${r.got}` : "–"}</span>{" "}
+                          <span style={{ color: C.ivoryDim }}>{r ? r.bid : "–"}</span>{" "}
                           {r && <span style={{ fontWeight: 700, color: leaderHere ? C.gold : C.ivory }}>{total}</span>}
                         </td>
                       );
