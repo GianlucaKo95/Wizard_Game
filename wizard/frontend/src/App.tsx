@@ -131,7 +131,11 @@ const PAPER = {
   shadow: "rgba(59,42,22,0.28)",
 };
 
-const paperHand: React.CSSProperties = { fontFamily: "'Kalam', cursive" };
+const paperHand: React.CSSProperties = { fontFamily: "'Shadows Into Light', cursive" };
+
+// Fine paper grain, tinted toward the ink-brown rather than neutral gray so it
+// reads as texture instead of TV static - reused on every paper surface below.
+const PAPER_GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.23  0 0 0 0 0.16  0 0 0 0 0.08  0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
 const paperBg: React.CSSProperties = {
   minHeight: "100dvh",
@@ -144,7 +148,12 @@ const paperBg: React.CSSProperties = {
 };
 
 const paperPanel = (extra: React.CSSProperties = {}): React.CSSProperties => ({
-  background: PAPER.panel,
+  backgroundColor: PAPER.panel,
+  backgroundImage: [
+    "radial-gradient(120% 90% at 12% 0%, rgba(255,255,255,0.5), transparent 60%)",
+    PAPER_GRAIN,
+  ].join(", "),
+  backgroundBlendMode: "normal, multiply",
   border: `1px solid ${PAPER.line}`,
   borderRadius: RADIUS.md,
   boxShadow: `0 6px 18px ${PAPER.shadow}, inset 0 0 0 1px rgba(255,255,255,0.35)`,
@@ -813,6 +822,13 @@ function computeRunningTotals(playerIndexes: number[], rounds: { round: number; 
   return out;
 }
 
+// A small deterministic tilt per cell, not random per render - the same
+// round+player always tilts the same way instead of jittering on re-render,
+// so a saved round's entries look hand-written rather than animated.
+function handTilt(seed: number): number {
+  return ((seed * 37) % 7 - 3) * 0.35;
+}
+
 function ManualPlayerSlot({ index, slot, excludeIds, onChange }: {
   index: number;
   slot: { userId: string | null; name: string };
@@ -998,7 +1014,7 @@ function ManualGameSetup({ uid, pastGames, onCreated, onViewGame }: { uid: strin
 
   if (stage === "order") {
     return (
-      <div style={{ ...paperPanel({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="paper-sheet" style={{ ...paperPanel({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
         <button onClick={() => setStage("roster")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={12} /> Zurück</button>
         <div style={{ ...paperHand, fontSize: 20, color: PAPER.ink }}>Reihenfolge festlegen</div>
         <div style={{ fontSize: 11.5, color: PAPER.inkDim }}>So wie ihr am Tisch sitzt - bestimmt Geber- und Bietreihenfolge. Zum Sortieren ziehen.</div>
@@ -1040,7 +1056,7 @@ function ManualGameSetup({ uid, pastGames, onCreated, onViewGame }: { uid: strin
 
   return (
     <>
-      <div style={{ ...paperPanel({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="paper-sheet" style={{ ...paperPanel({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ ...paperHand, fontSize: 20, color: PAPER.ink }}>Neues Spiel erfassen</div>
 
         <div>
@@ -1296,7 +1312,7 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
 
   return (
     <>
-      <div style={{ ...paperPanel({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto" }}>
+      <div className="paper-sheet" style={{ ...paperPanel({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ ...paperHand, fontSize: 15, color: PAPER.inkDim, letterSpacing: 0.5 }}>
             {game.edition === "anniversary" ? "30 Jahre" : "Classic"} · Runde {Math.min(currentRoundNum, game.max_rounds)}/{game.max_rounds}
@@ -1318,7 +1334,7 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                 <td style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, fontSize: 12, color: PAPER.ink, whiteSpace: "nowrap" }}>
                   <button onClick={() => editingRound === r.round ? cancelEditRound() : startEditRound(r)}
                     style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, color: "inherit", font: "inherit" }}>
-                    R{r.round}
+                    <span style={{ ...paperHand, fontSize: 16, display: "inline-block", transform: `rotate(${handTilt(r.round)}deg)` }}>R{r.round}</span>
                     <IconPencil size={10} style={{ color: PAPER.inkDim }} />
                   </button>
                   <div style={{ fontSize: 9, color: PAPER.inkDim, fontWeight: 400, marginTop: 1 }}>{players[(r.round - 1) % players.length]?.display_name} gibt</div>
@@ -1327,15 +1343,17 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                   const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
                   const total = runningByRound[r.round]?.[p.player_index];
                   const leader = isLeaderAt(r.round, p.player_index);
+                  const seed = r.round * 5 + p.player_index;
                   return (
                     <td key={p.id} style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
                       {/* Total first, Ansage after it - matches the real paper
                           block's layout (score in the wide column, bid in the
-                          narrow one next to it). */}
-                      {e && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontWeight: 700, color: leader ? PAPER.gold : PAPER.goldDeep }}>
-                        {leader && <IconTrophy size={11} />}{total}
+                          narrow one next to it). Written in the "hand" font,
+                          same as it'd be scribbled on a real paper block. */}
+                      {e && <span style={{ ...paperHand, display: "inline-block", fontSize: 18, color: leader ? PAPER.gold : PAPER.goldDeep, transform: `rotate(${handTilt(seed)}deg)` }}>
+                        {total}
                       </span>}
-                      <span style={{ marginLeft: 6, color: PAPER.inkDim }}>{e ? e.bid : "–"}</span>
+                      <span style={{ ...paperHand, marginLeft: 6, display: "inline-block", fontSize: 15, color: PAPER.inkDim, transform: `rotate(${handTilt(seed + 2)}deg)` }}>{e ? e.bid : "–"}</span>
                     </td>
                   );
                 })}
@@ -1565,7 +1583,7 @@ function ManualFinishedGameView({ game, onBack }: { game: any; onBack: () => voi
     round === lastRoundNum && maxTotal > 0 && runningByRound[round]?.[playerIndex] === maxTotal;
 
   return (
-    <div style={{ ...paperPanel({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+    <div className="paper-sheet" style={{ ...paperPanel({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={12} /> Zurück</button>
         <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim }}>
@@ -1588,19 +1606,20 @@ function ManualFinishedGameView({ game, onBack }: { game: any; onBack: () => voi
             {rounds.map(r => (
               <tr key={r.round}>
                 <td style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, fontSize: 12, color: PAPER.ink, whiteSpace: "nowrap" }}>
-                  R{r.round}
+                  <span style={{ ...paperHand, fontSize: 16, display: "inline-block", transform: `rotate(${handTilt(r.round)}deg)` }}>R{r.round}</span>
                   <div style={{ fontSize: 9, color: PAPER.inkDim, fontWeight: 400, marginTop: 1 }}>{players[(r.round - 1) % players.length]?.display_name} gibt</div>
                 </td>
                 {players.map(p => {
                   const e = (r.results ?? []).find((x: any) => x.playerIndex === p.player_index);
                   const total = runningByRound[r.round]?.[p.player_index];
                   const leader = isLeaderAt(r.round, p.player_index);
+                  const seed = r.round * 5 + p.player_index;
                   return (
                     <td key={p.id} style={{ padding: "8px", borderTop: `1px solid ${PAPER.lineFaint}`, textAlign: "right", fontSize: 12.5, whiteSpace: "nowrap" }}>
-                      {e && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontWeight: 700, color: leader ? PAPER.gold : PAPER.goldDeep }}>
-                        {leader && <IconTrophy size={11} />}{total}
+                      {e && <span style={{ ...paperHand, display: "inline-block", fontSize: 18, color: leader ? PAPER.gold : PAPER.goldDeep, transform: `rotate(${handTilt(seed)}deg)` }}>
+                        {total}
                       </span>}
-                      <span style={{ marginLeft: 6, color: PAPER.inkDim }}>{e ? e.bid : "–"}</span>
+                      <span style={{ ...paperHand, marginLeft: 6, display: "inline-block", fontSize: 15, color: PAPER.inkDim, transform: `rotate(${handTilt(seed + 2)}deg)` }}>{e ? e.bid : "–"}</span>
                     </td>
                   );
                 })}
