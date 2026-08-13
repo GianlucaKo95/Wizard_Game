@@ -207,6 +207,21 @@ input:focus, select:focus, textarea:focus {
 }
 .log-panel::-webkit-scrollbar { display: none; }
 
+/* ─── Rechenblock paper texture ──────────────────────────────────────────────── */
+/* A deckled edge + slight tilt, for the one card per screen that represents
+   "the actual sheet of paper" (not every button or pill - those stay clean,
+   this is reserved for the main writing surface). */
+.paper-sheet {
+  position: relative;
+  transform: rotate(-0.35deg);
+  clip-path: polygon(
+    0% 1.2%, 4% 0%, 9% 0.8%, 15% 0%, 22% 1%, 29% 0.2%, 36% 1.1%, 44% 0%, 52% 0.9%,
+    60% 0.1%, 68% 1%, 76% 0.2%, 84% 0.9%, 92% 0%, 100% 0.9%,
+    100% 98.8%, 95% 100%, 90% 99%, 84% 100%, 77% 99.1%, 70% 100%, 62% 98.9%,
+    55% 100%, 47% 99.1%, 39% 100%, 31% 99%, 23% 100%, 16% 99.1%, 8% 100%, 0% 98.8%
+  );
+}
+
 /* ─── Scoresheet table ───────────────────────────────────────────────────────── */
 .scoresheet-table {
   width: 100%;

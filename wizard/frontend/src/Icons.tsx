@@ -187,3 +187,9 @@ export const IconGripVertical = ({ size = 16, style }: IconProps) => (
     <circle cx="15" cy="19" r="1.6" />
   </svg>
 );
+
+export const IconPencil = ({ size = 16, style }: IconProps) => (
+  <svg {...base(size)} style={style}>
+    <path d="M17 3a2.83 2.83 0 0 1 4 4L7 21l-4 1 1-4Z" />
+  </svg>
+);
