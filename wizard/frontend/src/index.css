@@ -208,9 +208,9 @@ input:focus, select:focus, textarea:focus {
 .log-panel::-webkit-scrollbar { display: none; }
 
 /* ─── Rechenblock paper texture ──────────────────────────────────────────────── */
-/* A deckled edge + slight tilt + a coffee-ring stain, for the one card per
-   screen that represents "the actual sheet of paper" (not every button or
-   pill - those stay clean, this is reserved for the main writing surface). */
+/* A deckled edge + slight tilt, for the one card per screen that represents
+   "the actual sheet of paper" (not every button or pill - those stay clean,
+   this is reserved for the main writing surface). */
 .paper-sheet {
   position: relative;
   transform: rotate(-0.35deg);
@@ -220,13 +220,6 @@ input:focus, select:focus, textarea:focus {
     100% 98.8%, 95% 100%, 90% 99%, 84% 100%, 77% 99.1%, 70% 100%, 62% 98.9%,
     55% 100%, 47% 99.1%, 39% 100%, 31% 99%, 23% 100%, 16% 99.1%, 8% 100%, 0% 98.8%
   );
-}
-.paper-sheet::after {
-  content: "";
-  position: absolute; right: -18px; bottom: -22px; width: 130px; height: 130px;
-  border-radius: 50%; pointer-events: none;
-  background: radial-gradient(circle, transparent 56%, rgba(107,63,25,0.14) 60%, rgba(107,63,25,0.14) 66%, transparent 70%);
-  opacity: 0.8;
 }
 
 /* ─── Scoresheet table ───────────────────────────────────────────────────────── */
