@@ -110,6 +110,48 @@ function GoldDivider() {
   return <div style={{ width: "100%", maxWidth: 680, height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />;
 }
 
+// A small fanned pile of face-down mini cards next to a player's seat pill -
+// like the real-table habit of laying won tricks face-down in front of you
+// so everyone can see the count at a glance, instead of only a "2/3" text
+// ratio. Caps at 5 fanned cards (a round can run up to 20 tricks); beyond
+// that only the badge number keeps climbing. The badge itself carries the
+// bid comparison (green=hit, red=busted, gold=still in progress) since the
+// fan alone no longer shows the bid the way the old "2/3" text did.
+function TrickPile({ tricksWon, bid }: { tricksWon: number; bid: number | null }) {
+  if (bid === null) return null;
+  if (tricksWon === 0) return <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>–</span>;
+  const shown = Math.min(tricksWon, 5);
+  const hit = tricksWon === bid, bust = tricksWon > bid;
+  const badgeColor = hit ? C.success : bust ? C.error : C.gold;
+  const CARD_W = 12, OFFSET = 6.5, SPREAD = 22;
+  return (
+    <div style={{ position: "relative", height: 19, width: CARD_W + (shown - 1) * OFFSET + 5, flexShrink: 0 }}>
+      {Array.from({ length: shown }, (_, i) => {
+        const t = shown > 1 ? i / (shown - 1) - 0.5 : 0;
+        const rot = t * SPREAD;
+        return (
+          <svg key={i} viewBox="0 0 44 66" style={{
+            position: "absolute", left: i * OFFSET, bottom: 0, width: CARD_W, height: 18,
+            transformOrigin: "bottom center", transform: `rotate(${rot}deg)`,
+            filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.55))",
+          }}>
+            <rect width="44" height="66" rx="5" fill={C.bgDark} />
+            <rect x="2" y="2" width="40" height="62" rx="4" fill="none" stroke="rgba(201,168,76,0.35)" strokeWidth="1.5" />
+            <text x="22" y="39" textAnchor="middle" fontSize="20" fill="rgba(201,168,76,0.35)">⚡</text>
+          </svg>
+        );
+      })}
+      <span style={{
+        position: "absolute", top: -5, right: -3,
+        background: badgeColor, color: "#0A0F08", ...cinzel, fontWeight: 700,
+        fontSize: 8.5, width: 12, height: 12, borderRadius: "50%",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.5)",
+      }}>{tricksWon}</span>
+    </div>
+  );
+}
+
 // ─── "Rechenblock" Paper Design Tokens ─────────────────────────────────────
 // The manual scoring feature replaces a physical paper scoresheet, so it
 // gets its own warm, hand-ruled parchment skin instead of the app's usual
@@ -3362,12 +3404,10 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                   {hasPlayed && <span style={{ fontSize: 9, color: C.gold }}>✓</span>}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <span style={{ ...cinzel, fontSize: "clamp(11px,2vmin,18px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
                 {hasBid ? (
-                  <span style={{ ...cinzel, fontSize: "clamp(9px,1.5vmin,15px)", color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : "rgba(255,255,255,0.7)" }}>
-                    {p.tricks_won}/{p.bid}
-                  </span>
+                  <TrickPile tricksWon={p.tricks_won} bid={p.bid} />
                 ) : room.phase === "bidding" ? (
                   <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>…</span>
                 ) : null}
@@ -3534,12 +3574,10 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                 )}
                 {hasPlayed && <span style={{ fontSize: 9, color: C.gold }}>✓</span>}
               </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "baseline", justifyContent: "center" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "center" }}>
                 <span style={{ ...cinzel, fontSize: "clamp(11px,2vmin,18px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
                 {hasBid ? (
-                  <span style={{ ...cinzel, fontSize: "clamp(9px,1.5vmin,15px)", color: p.tricks_won === p.bid ? C.success : p.tricks_won > p.bid ? C.error : "rgba(255,255,255,0.7)" }}>
-                    {p.tricks_won}/{p.bid}
-                  </span>
+                  <TrickPile tricksWon={p.tricks_won} bid={p.bid} />
                 ) : room.phase === "bidding" ? (
                   <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>…</span>
                 ) : null}
