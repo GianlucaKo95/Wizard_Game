@@ -2183,6 +2183,13 @@ function useVoiceChat(roomId: string | null, session: Session) {
   const iceServersRef = useRef<RTCIceServer[]>([{ urls: "stun:stun.l.google.com:19302" }]);
   const rafsRef = useRef<Map<string, number>>(new Map());
   const audioCtxsRef = useRef<Map<string, AudioContext>>(new Map());
+  // Trickle ICE candidates can arrive (and with 3+ peers all signaling at
+  // once, routinely do arrive) before setRemoteDescription() has run for
+  // that peer - addIceCandidate() throws in that case, and with more peers
+  // negotiating concurrently the odds of losing a candidate (and with it,
+  // sometimes the only viable network path) go up accordingly. Queue them
+  // per peer and flush once the remote description is actually set.
+  const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const roomIdRef = useRef(roomId);
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
 
@@ -2237,6 +2244,13 @@ function useVoiceChat(roomId: string | null, session: Session) {
       if (!el) {
         el = document.createElement("audio");
         el.autoplay = true;
+        // Playback of a detached (never-appended) audio element is
+        // unreliable on Safari/iOS once more than one is active at a time -
+        // it's the difference between "voice chat works with 2 people" and
+        // "the 3rd person's audio silently never starts". Kept out of
+        // layout/view but genuinely in the DOM.
+        el.style.display = "none";
+        document.body.appendChild(el);
         audioElsRef.current.set(otherId, el);
       }
       el.srcObject = e.streams[0];
@@ -2261,8 +2275,16 @@ function useVoiceChat(roomId: string | null, session: Session) {
     audioElsRef.current.get(otherId)?.remove();
     audioElsRef.current.delete(otherId);
     stopSpeakingDetection(otherId);
+    pendingCandidatesRef.current.delete(otherId);
     setParticipantIds(prev => { const next = new Set(prev); next.delete(otherId); return next; });
     setSpeakingIds(prev => { const next = new Set(prev); next.delete(otherId); return next; });
+  }
+
+  async function flushPendingCandidates(otherId: string, pc: RTCPeerConnection) {
+    const queued = pendingCandidatesRef.current.get(otherId);
+    if (!queued?.length) return;
+    pendingCandidatesRef.current.delete(otherId);
+    for (const c of queued) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
   }
 
   function send(payload: any) {
@@ -2304,13 +2326,25 @@ function useVoiceChat(roomId: string | null, session: Session) {
       if (payload.type === "offer") {
         const pc = getOrCreatePeer(payload.from);
         await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        await flushPendingCandidates(payload.from, pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         send({ type: "answer", from: session.user.id, to: payload.from, sdp: answer });
       } else if (payload.type === "answer") {
-        await peersRef.current.get(payload.from)?.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        const pc = peersRef.current.get(payload.from);
+        if (pc) {
+          await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+          await flushPendingCandidates(payload.from, pc);
+        }
       } else if (payload.type === "ice") {
-        await peersRef.current.get(payload.from)?.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+        const pc = peersRef.current.get(payload.from);
+        if (!pc?.remoteDescription) {
+          const queue = pendingCandidatesRef.current.get(payload.from) ?? [];
+          queue.push(payload.candidate);
+          pendingCandidatesRef.current.set(payload.from, queue);
+        } else {
+          await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+        }
       }
     } catch {
       // Negotiation gescheitert (z.B. ein verspätetes/doppeltes Offer trifft
@@ -2370,6 +2404,7 @@ function useVoiceChat(roomId: string | null, session: Session) {
   function disableVoice() {
     send({ type: "leave", from: session.user.id });
     peersRef.current.forEach((_, id) => removePeer(id));
+    pendingCandidatesRef.current.clear();
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
     stopSpeakingDetection(session.user.id);
@@ -2420,6 +2455,21 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   // with nothing to correct it until the next unrelated event touches it.
   const playersGuard = useRef(makeSeqGuard()).current;
   const roomGuard = useRef(makeSeqGuard()).current;
+  // Temporary diagnostic: a reported "played card stays in hand" bug has
+  // survived two rounds of fixes for plausible-but-unconfirmed causes.
+  // Logs every time the caller's own hand actually changes, tagged by which
+  // of the several setPlayers() call sites produced it - if it happens
+  // again, the browser console will show which write path was responsible
+  // instead of another round of static-code guessing.
+  const handDebugRef = useRef<string>("");
+  const logHandChange = (source: string, playersArr: any[]) => {
+    const own = playersArr.find((p: any) => p.user_id === session.user.id);
+    const ids = (own?.hand ?? []).map((c: any) => c.id).sort().join(",");
+    if (ids !== handDebugRef.current) {
+      console.log(`[handDebug] ${source}:`, handDebugRef.current || "(none)", "->", ids || "(empty)");
+      handDebugRef.current = ids;
+    }
+  };
   const [showLog, setShowLog] = useState(false);
   const [modalMinimized, setModalMinimized] = useState(true);
   const [room, setRoom] = useState<any>(null);
@@ -2620,6 +2670,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     loadPlayersSecure(roomId, session.user.id).then(data => {
       if (data) {
         if (!playersGuard.isCurrent(playersToken)) return; // superseded by a newer update
+        logHandChange("initial-mount", data);
         setPlayers(data);
         const mine = data.find((p: any) => p.user_id === session.user.id);
         if (mine) setMyIdx(mine.player_index);
@@ -2644,6 +2695,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
       loadPlayersSecure(roomId, session.user.id).then(data => {
         if (!data) { console.error("[refreshState] players fetch failed"); return; }
         if (!playersGuard.isCurrent(playersToken)) return; // superseded by a newer update
+        logHandChange("poll/refreshState", data);
         setPlayers(data);
       });
     };
@@ -2675,7 +2727,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
             // still use this (still-reasonably-current) data for the one-shot
             // AI/clearTrick scheduling checks below, which are independently
             // guarded against double-firing.
-            if (playersGuard.isCurrent(mySeq)) setPlayers(data);
+            if (playersGuard.isCurrent(mySeq)) { logHandChange("rooms:UPDATE-refetch", data); setPlayers(data); }
             if (newRoom.phase === "playing" && data[newRoom.current_player]?.is_ai) {
               // Unique key: player index + current trick length to prevent duplicate triggers
               // for the same turn (multiple room updates fire for one state change)
@@ -2717,8 +2769,11 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         if (payload.eventType === "UPDATE" && payload.new) {
           setPlayers(prev => {
             const exists = prev.some(p => p.id === payload.new.id);
-            if (exists) return prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p);
-            return [...prev, payload.new].sort((a,b) => a.player_index - b.player_index);
+            const next = exists
+              ? prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p)
+              : [...prev, payload.new].sort((a,b) => a.player_index - b.player_index);
+            logHandChange("room_players:merge", next);
+            return next;
           });
         } else if (payload.eventType === "INSERT") {
           setPlayers(prev => {
