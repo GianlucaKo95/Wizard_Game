@@ -119,9 +119,18 @@ function GoldDivider() {
 // fan alone no longer shows the bid the way the old "2/3" text did.
 function TrickPile({ tricksWon, bid }: { tricksWon: number; bid: number | null }) {
   if (bid === null) return null;
-  if (tricksWon === 0) return <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>–</span>;
-  const shown = Math.min(tricksWon, 5);
   const hit = tricksWon === bid, bust = tricksWon > bid;
+  // Before the first trick there's nothing to fan out yet, but the Ansage
+  // itself still needs to stay visible - that's the whole point of showing
+  // it - so this falls back to the old "0/3" text instead of going blank.
+  if (tricksWon === 0) {
+    return (
+      <span style={{ ...cinzel, fontSize: "clamp(9px,1.5vmin,15px)", color: hit ? C.success : bust ? C.error : "rgba(255,255,255,0.7)" }}>
+        {tricksWon}/{bid}
+      </span>
+    );
+  }
+  const shown = Math.min(tricksWon, 5);
   const badgeColor = hit ? C.success : bust ? C.error : C.gold;
   const CARD_W = 12, OFFSET = 6.5, SPREAD = 22;
   return (
