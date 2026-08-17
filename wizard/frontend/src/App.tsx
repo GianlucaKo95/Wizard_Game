@@ -2121,11 +2121,15 @@ function sortHand(hand: any[]): any[] {
 // face-down placeholders sized by hand_count; in round 1 visible_hand shows
 // their real cards (Indian poker).
 async function loadPlayersSecure(roomId: string, myUserId: string) {
-  const [{ data: pub }, { data: mine }] = await Promise.all([
+  const [{ data: pub, error: pubErr }, { data: mine, error: mineErr }] = await Promise.all([
     supabase.from("room_players_view").select("*").eq("room_id", roomId).order("player_index"),
     supabase.from("room_players").select("player_index, hand").eq("room_id", roomId).eq("user_id", myUserId).maybeSingle(),
   ]);
-  if (!pub) return null;
+  if (!pub || pubErr) return null;
+  // A failed own-row fetch must not silently fall through to "isMe" being
+  // false for every row below - that would replace the caller's real hand
+  // with fake face-down placeholders instead of surfacing the failure.
+  if (mineErr) { console.error("[loadPlayersSecure] own hand fetch failed:", mineErr.message); return null; }
   return pub.map((p: any) => {
     const isMe = p.player_index === mine?.player_index;
     const hand = isMe
@@ -2133,6 +2137,20 @@ async function loadPlayersSecure(roomId: string, myUserId: string) {
       : (p.visible_hand ?? Array.from({ length: p.hand_count ?? 0 }, (_, i) => ({ id: `hidden-${p.player_index}-${i}`, type: "hidden" })));
     return { ...p, hand };
   });
+}
+
+// Guards a piece of state against out-of-order async writers: several
+// independent fetches (initial mount, a realtime-triggered refetch, a
+// polling fallback) can all resolve a full overwrite of the same state, and
+// nothing stops a slow one from landing after a fresher update and reverting
+// it. `next()` tokens a fetch when it's *started*; `bump()` marks that state
+// moved forward some other way (e.g. an incremental realtime merge applied
+// directly, bypassing this fetch path entirely); `isCurrent(token)` tells a
+// resolved fetch whether it's still the newest thing in flight before it's
+// allowed to apply its result.
+function makeSeqGuard() {
+  let seq = 0;
+  return { next: () => ++seq, bump: () => { seq++; }, isCurrent: (token: number) => token === seq };
 }
 
 // ─── Voice Chat ───────────────────────────────────────────────────────────────
@@ -2393,24 +2411,27 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   const aiTriggerPending = useRef(false);
   const aiTriggerLastKey = useRef<string>("");
   const clearTrickPending = useRef(false);
-  // Guards against out-of-order network responses clobbering fresher state:
-  // the 5s poll, the "rooms changed" refetch, and the initial-mount fetch
-  // all independently call loadPlayersSecure() and overwrite `players`
-  // wholesale. Nothing stops one from resolving late (e.g. the poll request
-  // was in flight exactly when a card was played) and landing AFTER a newer
-  // update - silently reverting the just-played card back into the hand
-  // (and any other player's bid along with it, since it's a full overwrite).
-  // Every fetch captures the counter when it's *initiated*; every applied
-  // update (fetch or incremental realtime merge) bumps it. A fetch only
-  // applies its result if the counter hasn't moved on since - otherwise it's
-  // stale and silently dropped, trusting whatever newer update already won.
-  const playersSeqRef = useRef(0);
+  // Guards against out-of-order network responses clobbering fresher state -
+  // see makeSeqGuard(). Both `players` and `room` are overwritten wholesale
+  // from several independent async call sites (initial mount, the "rooms
+  // changed" refetch, the 5s poll), so both need this: a slow response
+  // landing after a newer update would otherwise silently revert a just-
+  // played card back into the hand, or current_player/phase back a step,
+  // with nothing to correct it until the next unrelated event touches it.
+  const playersGuard = useRef(makeSeqGuard()).current;
+  const roomGuard = useRef(makeSeqGuard()).current;
   const [showLog, setShowLog] = useState(false);
   const [modalMinimized, setModalMinimized] = useState(true);
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [myIdx, setMyIdx] = useState(-1);
   const [selected, setSelected] = useState<string | null>(null);
+  // Card ids are derived purely from suit+value (see buildDeck()), not per-
+  // deal, so the SAME id can recur in a later round's hand. Without this,
+  // a leftover `selected` from a previous round's card could make the very
+  // first tap on a same-id card in a new round skip the "lift, then confirm"
+  // step and play it immediately.
+  useEffect(() => { setSelected(null); }, [room?.round]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showScoresheet, setShowScoresheet] = useState(false);
@@ -2590,11 +2611,15 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   }, [roomId]);
 
   useEffect(() => {
-    supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data, error }) => { if (data) setRoom(data); else if (error) console.error("[GameRoom] initial room fetch failed:", error.message); });
-    const mySeq = ++playersSeqRef.current;
+    const roomToken = roomGuard.next();
+    supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data, error }) => {
+      if (data) { if (roomGuard.isCurrent(roomToken)) setRoom(data); }
+      else if (error) console.error("[GameRoom] initial room fetch failed:", error.message);
+    });
+    const playersToken = playersGuard.next();
     loadPlayersSecure(roomId, session.user.id).then(data => {
       if (data) {
-        if (mySeq !== playersSeqRef.current) return; // superseded by a newer update
+        if (!playersGuard.isCurrent(playersToken)) return; // superseded by a newer update
         setPlayers(data);
         const mine = data.find((p: any) => p.user_id === session.user.id);
         if (mine) setMyIdx(mine.player_index);
@@ -2610,11 +2635,15 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     // a stuck "card didn't leave my hand" report has something to look at
     // instead of only static code reading next time.
     const refreshState = () => {
-      supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data, error }) => { if (data) setRoom(data); else if (error) console.error("[refreshState] room fetch failed:", error.message); });
-      const mySeq = ++playersSeqRef.current;
+      const roomToken = roomGuard.next();
+      supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data, error }) => {
+        if (data) { if (roomGuard.isCurrent(roomToken)) setRoom(data); }
+        else if (error) console.error("[refreshState] room fetch failed:", error.message);
+      });
+      const playersToken = playersGuard.next();
       loadPlayersSecure(roomId, session.user.id).then(data => {
         if (!data) { console.error("[refreshState] players fetch failed"); return; }
-        if (mySeq !== playersSeqRef.current) return; // superseded by a newer update
+        if (!playersGuard.isCurrent(playersToken)) return; // superseded by a newer update
         setPlayers(data);
       });
     };
@@ -2634,15 +2663,19 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => {
         const newRoom = payload.new;
+        // Bump first: a realtime payload is always at least as fresh as any
+        // REST fetch still in flight from before this event arrived, so an
+        // older room fetch resolving after this must not revert it.
+        roomGuard.bump();
         setRoom(newRoom);
-        const mySeq = ++playersSeqRef.current;
+        const mySeq = playersGuard.next();
         loadPlayersSecure(roomId, session.user.id).then(data => {
           if (data) {
             // Superseded by a newer update - don't clobber fresher state, but
             // still use this (still-reasonably-current) data for the one-shot
             // AI/clearTrick scheduling checks below, which are independently
             // guarded against double-firing.
-            if (mySeq === playersSeqRef.current) setPlayers(data);
+            if (playersGuard.isCurrent(mySeq)) setPlayers(data);
             if (newRoom.phase === "playing" && data[newRoom.current_player]?.is_ai) {
               // Unique key: player index + current trick length to prevent duplicate triggers
               // for the same turn (multiple room updates fire for one state change)
@@ -2680,7 +2713,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         // in flight, so any loadPlayersSecure() fetch still pending from
         // before it (poll, "rooms changed" refetch, initial mount) must not
         // be allowed to overwrite the merge below once it resolves.
-        playersSeqRef.current++;
+        playersGuard.bump();
         if (payload.eventType === "UPDATE" && payload.new) {
           setPlayers(prev => {
             const exists = prev.some(p => p.id === payload.new.id);
@@ -2712,7 +2745,17 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     // Force an immediate resync the moment the page is foregrounded again,
     // instead of waiting on the throttled poll to eventually catch up.
     const poll = setInterval(refreshState, 5000);
-    const onVisible = () => { if (document.visibilityState === "visible") refreshState(); };
+    // Most browsers fire both visibilitychange and focus back-to-back when a
+    // backgrounded tab/PWA is reopened - debounce so that doesn't double the
+    // REST round-trips on every single foreground event.
+    let lastForegroundResync = 0;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastForegroundResync < 1000) return;
+      lastForegroundResync = now;
+      refreshState();
+    };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
 
