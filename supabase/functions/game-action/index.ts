@@ -1282,7 +1282,14 @@ serve(async (req) => {
         .from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id)
         .contains("hand", [{ id: card.id }]).select("id");
       if (handClaimErr) {
+        // Used to log-and-continue into advanceTrick() below, which appended
+        // the card to current_trick regardless - the card visibly played
+        // (on the table, turn advanced) while the hand write silently never
+        // happened, permanently leaving it stuck in the hand with no error
+        // shown anywhere. Fail the whole action instead: better a visible
+        // error the player can retry than state that's quietly wrong forever.
         console.error("[playCard] hand claim failed:", handClaimErr.message);
+        return json({ error: `Karte konnte nicht gespielt werden: ${handClaimErr.message}` }, 500);
       } else if (!handClaim || handClaim.length === 0) {
         return json({ ok: true }); // lost the race - another request already played this card
       }
@@ -1332,7 +1339,11 @@ serve(async (req) => {
           .from("room_players").update({ hand: newHand }).eq("id", callerPlayer.id)
           .contains("hand", [{ id: card.id }]).select("id");
         if (wfHandClaimErr) {
+          // Same reasoning as playCard's identical guard - fail loudly
+          // instead of silently advancing the trick with a hand write that
+          // never actually happened.
           console.error("[playSpecial:wizardfool] hand claim failed:", wfHandClaimErr.message);
+          return json({ error: `Karte konnte nicht gespielt werden: ${wfHandClaimErr.message}` }, 500);
         } else if (!wfHandClaim || wfHandClaim.length === 0) {
           return json({ ok: true }); // lost the race - another request already played this card
         }
