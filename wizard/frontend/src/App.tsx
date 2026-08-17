@@ -7,6 +7,10 @@ import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
 import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart, IconMic, IconMicOff, IconBell, IconBellOff, IconGripVertical, IconPencil } from "./Icons";
 import { WizardArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";
 
+// Injected at build time by vite.config.ts - see BuildBadge below.
+declare const __APP_VERSION__: string;
+declare const __BUILD_SHA__: string;
+
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
   bgDark: "#10161A",
@@ -4098,6 +4102,21 @@ export default function App() {
     <>
       {session ? <LobbyScreen session={session} /> : <AuthScreen />}
       <InstallBanner />
+      <BuildBadge />
     </>
+  );
+}
+
+// Answers "did my update actually arrive on this device" from a screenshot -
+// deployment-vs-code-bug confusion has repeatedly derailed debugging real
+// issues in this app. Always on, deliberately unobtrusive.
+function BuildBadge() {
+  return (
+    <div style={{
+      position: "fixed" as const, bottom: "max(2px, env(safe-area-inset-bottom))", right: 4, zIndex: 9998,
+      fontSize: 8, color: "rgba(255,255,255,0.25)", fontFamily: "monospace", pointerEvents: "none" as const,
+    }}>
+      v{__APP_VERSION__} · {__BUILD_SHA__}
+    </div>
   );
 }
