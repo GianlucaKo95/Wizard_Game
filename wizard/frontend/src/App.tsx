@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
@@ -2458,16 +2459,22 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   // Temporary diagnostic: a reported "played card stays in hand" bug has
   // survived two rounds of fixes for plausible-but-unconfirmed causes.
   // Logs every time the caller's own hand actually changes, tagged by which
-  // of the several setPlayers() call sites produced it - if it happens
-  // again, the browser console will show which write path was responsible
-  // instead of another round of static-code guessing.
+  // of the several setPlayers() call sites produced it. The user only plays
+  // on a phone, with no practical access to a browser console mid-game - so
+  // this renders on-screen (see handDebugLog below) instead of console.log,
+  // so a screenshot at the moment of the bug is enough to see which write
+  // path was responsible, instead of another round of static-code guessing.
   const handDebugRef = useRef<string>("");
+  const [handDebugLog, setHandDebugLog] = useState<string[]>([]);
   const logHandChange = (source: string, playersArr: any[]) => {
     const own = playersArr.find((p: any) => p.user_id === session.user.id);
     const ids = (own?.hand ?? []).map((c: any) => c.id).sort().join(",");
     if (ids !== handDebugRef.current) {
-      console.log(`[handDebug] ${source}:`, handDebugRef.current || "(none)", "->", ids || "(empty)");
+      const from = handDebugRef.current || "(none)";
+      const to = ids || "(empty)";
+      const t = new Date().toLocaleTimeString("de-DE", { hour12: false }) + "." + String(new Date().getMilliseconds()).padStart(3, "0");
       handDebugRef.current = ids;
+      setHandDebugLog(prev => [...prev.slice(-5), `${t} ${source}: ${from} → ${to}`]);
     }
   };
   const [showLog, setShowLog] = useState(false);
@@ -3504,6 +3511,23 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: "4px 7px", borderRadius: 6, display: "flex" }} title="Verlassen"><IconX size={15} /></button>
         </div>
       </div>
+
+      {/* Temporary diagnostic overlay for the "played card stays in hand" bug
+          report - see logHandChange() above. Portaled straight to <body> so
+          it always sits fixed to the real viewport regardless of any
+          transformed ancestor in the card-table layout below. Remove once
+          the bug is confirmed fixed. */}
+      {handDebugLog.length > 0 && createPortal(
+        <div style={{
+          position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
+          background: "rgba(0,0,0,0.82)", color: "#8FE3A0", fontFamily: "monospace",
+          fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
+          pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+        }}>
+          {handDebugLog.map((line, i) => <div key={i}>{line}</div>)}
+        </div>,
+        document.body
+      )}
 
       {/* Full screen table with seated players */}
       {(() => {
