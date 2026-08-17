@@ -2198,6 +2198,19 @@ function useVoiceChat(roomId: string | null, session: Session) {
   const roomIdRef = useRef(roomId);
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
 
+  // Diagnostic: two rounds of fixes for plausible causes ("works with 2,
+  // 3rd person silent") didn't change the reported symptom at all - rather
+  // than guess a third time, log the mesh's actual signaling/connection
+  // lifecycle per peer, on-screen (the user only plays on a phone), so the
+  // next 3-person repro shows exactly which pair's negotiation never
+  // completes and at what stage. Remove once the bug is confirmed fixed.
+  const [voiceLog, setVoiceLog] = useState<string[]>([]);
+  const logVoice = (line: string) => {
+    const t = new Date().toLocaleTimeString("de-DE", { hour12: false }) + "." + String(new Date().getMilliseconds()).padStart(3, "0");
+    setVoiceLog(prev => [...prev.slice(-9), `${t} ${line}`]);
+  };
+  const shortId = (id: string) => id.slice(0, 6);
+
   function stopSpeakingDetection(id: string) {
     const raf = rafsRef.current.get(id);
     if (raf) cancelAnimationFrame(raf);
@@ -2239,12 +2252,14 @@ function useVoiceChat(roomId: string | null, session: Session) {
   function getOrCreatePeer(otherId: string): RTCPeerConnection {
     let pc = peersRef.current.get(otherId);
     if (pc) return pc;
+    logVoice(`peer(${shortId(otherId)}): created`);
     pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
     localStreamRef.current?.getTracks().forEach(t => pc!.addTrack(t, localStreamRef.current!));
     pc.onicecandidate = (e) => {
       if (e.candidate) send({ type: "ice", from: session.user.id, to: otherId, candidate: e.candidate });
     };
     pc.ontrack = (e) => {
+      logVoice(`peer(${shortId(otherId)}): ontrack fired`);
       let el = audioElsRef.current.get(otherId);
       if (!el) {
         el = document.createElement("audio");
@@ -2263,12 +2278,16 @@ function useVoiceChat(roomId: string | null, session: Session) {
       startSpeakingDetection(e.streams[0], otherId);
     };
     pc.onconnectionstatechange = () => {
+      logVoice(`peer(${shortId(otherId)}): connectionState=${pc!.connectionState}`);
       // "disconnected" can persist for a long time (or indefinitely, on some
       // browsers) without ever escalating to "failed" - since there's no
       // ICE-restart/reconnect logic here to recover it either way, treat it
       // the same as a hard failure rather than leaving a dead peer marked
       // as connected forever.
       if (pc && (pc.connectionState === "failed" || pc.connectionState === "closed" || pc.connectionState === "disconnected")) removePeer(otherId);
+    };
+    pc.oniceconnectionstatechange = () => {
+      logVoice(`peer(${shortId(otherId)}): iceConnectionState=${pc!.iceConnectionState}`);
     };
     peersRef.current.set(otherId, pc);
     return pc;
@@ -2302,44 +2321,52 @@ function useVoiceChat(roomId: string | null, session: Session) {
   // für jedes Paar immer genau eine Seite, unabhängig davon, wer wann
   // beigetreten ist.
   async function maybeOffer(otherId: string) {
-    if (session.user.id >= otherId) return;
+    if (session.user.id >= otherId) { logVoice(`peer(${shortId(otherId)}): not offering (their id is smaller)`); return; }
     const pc = getOrCreatePeer(otherId);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    logVoice(`peer(${shortId(otherId)}): offer sent`);
     send({ type: "offer", from: session.user.id, to: otherId, sdp: offer });
   }
 
   async function handleSignal(payload: any) {
     if (payload.from === session.user.id) return;
     if (payload.type === "join") {
+      logVoice(`signal: join from ${shortId(payload.from)}`);
       // Antworte immer mit "here", unabhängig davon ob wir selbst anbieten -
       // sonst erfährt ein neu Beigetretener mit kleinerer ID nie von einem
       // bereits anwesenden Peer mit größerer ID (der correctly nicht
       // anbietet), und keine Seite initiiert je einen Offer für dieses Paar.
       send({ type: "here", from: session.user.id, to: payload.from });
-      await maybeOffer(payload.from).catch(() => removePeer(payload.from));
+      await maybeOffer(payload.from).catch((e) => { logVoice(`peer(${shortId(payload.from)}): maybeOffer threw: ${e?.message ?? e}`); removePeer(payload.from); });
       return;
     }
     if (payload.type === "here") {
       if (payload.to !== session.user.id) return;
-      await maybeOffer(payload.from).catch(() => removePeer(payload.from));
+      logVoice(`signal: here from ${shortId(payload.from)}`);
+      await maybeOffer(payload.from).catch((e) => { logVoice(`peer(${shortId(payload.from)}): maybeOffer threw: ${e?.message ?? e}`); removePeer(payload.from); });
       return;
     }
-    if (payload.type === "leave") { removePeer(payload.from); return; }
+    if (payload.type === "leave") { logVoice(`signal: leave from ${shortId(payload.from)}`); removePeer(payload.from); return; }
     if (payload.to !== session.user.id) return;
     try {
       if (payload.type === "offer") {
+        logVoice(`signal: offer from ${shortId(payload.from)}`);
         const pc = getOrCreatePeer(payload.from);
         await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
         await flushPendingCandidates(payload.from, pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        logVoice(`peer(${shortId(payload.from)}): answer sent`);
         send({ type: "answer", from: session.user.id, to: payload.from, sdp: answer });
       } else if (payload.type === "answer") {
+        logVoice(`signal: answer from ${shortId(payload.from)}`);
         const pc = peersRef.current.get(payload.from);
         if (pc) {
           await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
           await flushPendingCandidates(payload.from, pc);
+        } else {
+          logVoice(`peer(${shortId(payload.from)}): answer arrived but no local peer exists!`);
         }
       } else if (payload.type === "ice") {
         const pc = peersRef.current.get(payload.from);
@@ -2351,11 +2378,12 @@ function useVoiceChat(roomId: string | null, session: Session) {
           await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
         }
       }
-    } catch {
+    } catch (e) {
       // Negotiation gescheitert (z.B. ein verspätetes/doppeltes Offer trifft
       // eine Connection im falschen Signaling-State) - Paar sauber
       // fallenlassen statt eines unbehandelten Rejections mit halb
       // ausgehandelter, nie wieder erholender Connection.
+      logVoice(`peer(${shortId(payload.from)}): ${payload.type} handling threw: ${(e as any)?.message ?? e} - dropping peer`);
       removePeer(payload.from);
     }
   }
@@ -2389,7 +2417,7 @@ function useVoiceChat(roomId: string | null, session: Session) {
       channelRef.current = ch;
       ch.on("broadcast", { event: "signal" }, ({ payload }: any) => handleSignal(payload));
       ch.subscribe((status: string) => {
-        if (status === "SUBSCRIBED") { send({ type: "join", from: session.user.id }); return; }
+        if (status === "SUBSCRIBED") { logVoice("channel subscribed, sending join"); send({ type: "join", from: session.user.id }); return; }
         // Same idea for the signaling channel itself - a network drop here
         // otherwise leaves the UI stuck on "connected" with no way to ever
         // exchange offers with anyone again.
@@ -2443,7 +2471,7 @@ function useVoiceChat(roomId: string | null, session: Session) {
     setMuted(next);
   }
 
-  return { enabled, connecting, muted, error, participantIds, speakingIds, enableVoice, disableVoice, toggleMute };
+  return { enabled, connecting, muted, error, participantIds, speakingIds, enableVoice, disableVoice, toggleMute, voiceLog };
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
@@ -3529,6 +3557,24 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
         }}>
           {handDebugLog.map((line, i) => <div key={i}>{line}</div>)}
+        </div>,
+        document.body
+      )}
+
+      {/* Temporary diagnostic overlay for the "3rd voice chat participant
+          can't be heard" bug report - see voiceLog in useVoiceChat above.
+          Two rounds of fixes for plausible causes didn't change the
+          reported symptom, so this logs the actual per-peer signaling and
+          connection-state lifecycle instead of guessing a third time.
+          Remove once the bug is confirmed fixed. */}
+      {voice.voiceLog.length > 0 && createPortal(
+        <div style={{
+          position: "fixed" as const, bottom: "max(70px, calc(env(safe-area-inset-bottom) + 70px))", left: 4, right: 4, zIndex: 9999,
+          background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
+          fontSize: 8.5, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
+          pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+        }}>
+          {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
         </div>,
         document.body
       )}
