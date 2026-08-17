@@ -2578,20 +2578,26 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   }, [roomId]);
 
   useEffect(() => {
-    supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
+    supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data, error }) => { if (data) setRoom(data); else if (error) console.error("[GameRoom] initial room fetch failed:", error.message); });
     loadPlayersSecure(roomId, session.user.id).then(data => {
       if (data) {
         setPlayers(data);
         const mine = data.find((p: any) => p.user_id === session.user.id);
         if (mine) setMyIdx(mine.player_index);
+      } else {
+        console.error("[GameRoom] initial players fetch failed");
       }
     });
   }, [roomId]);
 
   useEffect(() => {
+    // Both fetches below silently no-op on failure (RLS hiccup, transient
+    // network error, expiring session) instead of throwing - logging here so
+    // a stuck "card didn't leave my hand" report has something to look at
+    // instead of only static code reading next time.
     const refreshState = () => {
-      supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data }) => { if (data) setRoom(data); });
-      loadPlayersSecure(roomId, session.user.id).then(data => { if (data) setPlayers(data); });
+      supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data, error }) => { if (data) setRoom(data); else if (error) console.error("[refreshState] room fetch failed:", error.message); });
+      loadPlayersSecure(roomId, session.user.id).then(data => { if (data) setPlayers(data); else console.error("[refreshState] players fetch failed"); });
     };
 
     // A channel fires an initial "sync" as soon as it's subscribed, before
@@ -2640,6 +2646,8 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                 callGameAction(roomId, "witchRevealDone", {});
               }, 4000);
             }
+          } else {
+            console.error("[room:UPDATE] players refresh failed after room change");
           }
         });
       })
@@ -2667,8 +2675,17 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         });
       });
 
-    // Poll every 5 seconds as fallback for missed realtime events (read-only, no AI trigger)
+    // Poll every 5 seconds as fallback for missed realtime events (read-only, no AI trigger).
+    // Backgrounding a tab/PWA (screen lock, app switch - routine on mobile)
+    // commonly suspends the socket and throttles this interval far past 5s,
+    // so a card played (or any other state change) right before backgrounding
+    // could sit stale until something else happens to trigger a refresh.
+    // Force an immediate resync the moment the page is foregrounded again,
+    // instead of waiting on the throttled poll to eventually catch up.
     const poll = setInterval(refreshState, 5000);
+    const onVisible = () => { if (document.visibilityState === "visible") refreshState(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
 
     return () => {
       // Report our own departure immediately instead of waiting for the
@@ -2678,6 +2695,8 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
       callGameAction(roomId, "syncPresence", { presentUserIds: stillPresent });
       supabase.removeChannel(ch);
       clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
     };
   }, [roomId]);
 
