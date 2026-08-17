@@ -2393,6 +2393,18 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   const aiTriggerPending = useRef(false);
   const aiTriggerLastKey = useRef<string>("");
   const clearTrickPending = useRef(false);
+  // Guards against out-of-order network responses clobbering fresher state:
+  // the 5s poll, the "rooms changed" refetch, and the initial-mount fetch
+  // all independently call loadPlayersSecure() and overwrite `players`
+  // wholesale. Nothing stops one from resolving late (e.g. the poll request
+  // was in flight exactly when a card was played) and landing AFTER a newer
+  // update - silently reverting the just-played card back into the hand
+  // (and any other player's bid along with it, since it's a full overwrite).
+  // Every fetch captures the counter when it's *initiated*; every applied
+  // update (fetch or incremental realtime merge) bumps it. A fetch only
+  // applies its result if the counter hasn't moved on since - otherwise it's
+  // stale and silently dropped, trusting whatever newer update already won.
+  const playersSeqRef = useRef(0);
   const [showLog, setShowLog] = useState(false);
   const [modalMinimized, setModalMinimized] = useState(true);
   const [room, setRoom] = useState<any>(null);
@@ -2579,8 +2591,10 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
 
   useEffect(() => {
     supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data, error }) => { if (data) setRoom(data); else if (error) console.error("[GameRoom] initial room fetch failed:", error.message); });
+    const mySeq = ++playersSeqRef.current;
     loadPlayersSecure(roomId, session.user.id).then(data => {
       if (data) {
+        if (mySeq !== playersSeqRef.current) return; // superseded by a newer update
         setPlayers(data);
         const mine = data.find((p: any) => p.user_id === session.user.id);
         if (mine) setMyIdx(mine.player_index);
@@ -2597,7 +2611,12 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     // instead of only static code reading next time.
     const refreshState = () => {
       supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, original_trump_card, current_trick, last_trick_winner, last_trick_cards, pending_rainbow7, pending_rainbow7_buffer, pending_rainbow9, pending_rainbow9_deferred, pending_witch, pending_vampire_reveal, witch_swap, edition, log, created_at").eq("id", roomId).single().then(({ data, error }) => { if (data) setRoom(data); else if (error) console.error("[refreshState] room fetch failed:", error.message); });
-      loadPlayersSecure(roomId, session.user.id).then(data => { if (data) setPlayers(data); else console.error("[refreshState] players fetch failed"); });
+      const mySeq = ++playersSeqRef.current;
+      loadPlayersSecure(roomId, session.user.id).then(data => {
+        if (!data) { console.error("[refreshState] players fetch failed"); return; }
+        if (mySeq !== playersSeqRef.current) return; // superseded by a newer update
+        setPlayers(data);
+      });
     };
 
     // A channel fires an initial "sync" as soon as it's subscribed, before
@@ -2616,9 +2635,14 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, payload => {
         const newRoom = payload.new;
         setRoom(newRoom);
+        const mySeq = ++playersSeqRef.current;
         loadPlayersSecure(roomId, session.user.id).then(data => {
           if (data) {
-            setPlayers(data);
+            // Superseded by a newer update - don't clobber fresher state, but
+            // still use this (still-reasonably-current) data for the one-shot
+            // AI/clearTrick scheduling checks below, which are independently
+            // guarded against double-firing.
+            if (mySeq === playersSeqRef.current) setPlayers(data);
             if (newRoom.phase === "playing" && data[newRoom.current_player]?.is_ai) {
               // Unique key: player index + current trick length to prevent duplicate triggers
               // for the same turn (multiple room updates fire for one state change)
@@ -2652,6 +2676,11 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "room_players", filter: `room_id=eq.${roomId}` }, (payload) => {
+        // Bump first: this event is by definition newer than anything already
+        // in flight, so any loadPlayersSecure() fetch still pending from
+        // before it (poll, "rooms changed" refetch, initial mount) must not
+        // be allowed to overwrite the merge below once it resolves.
+        playersSeqRef.current++;
         if (payload.eventType === "UPDATE" && payload.new) {
           setPlayers(prev => {
             const exists = prev.some(p => p.id === payload.new.id);
