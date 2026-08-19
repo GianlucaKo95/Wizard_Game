@@ -3732,23 +3732,29 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                   else if (offset===1) pos = { top: "0%",    left: "30%", transform: "translateX(-50%)" };
                   else                 pos = { top: "0%",    left: "70%", transform: "translateX(-50%)" };
                 } else if (n === 4) {
+                  // Evenly spaced, all center-anchored (translate(-50%,...)) -
+                  // the previous version anchored left/right by their edge
+                  // and left the middle slot(s) at a fixed 25%/50%/75%
+                  // center, which for n=5/6 put an edge card's box almost
+                  // exactly on top of its neighbor's once the edge was
+                  // pushed inward for the screen-clipping fix.
                   if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
-                  else if (offset===1) pos = { top: "50%",   left: "16%",  transform: "translateY(-50%)" };
+                  else if (offset===1) pos = { top: "50%",   left: "8%",  transform: "translate(-50%,-50%)" };
                   else if (offset===2) pos = { top: "0%",    left: "50%", transform: "translateX(-50%)" };
-                  else                 pos = { top: "50%",   right: "16%", transform: "translateY(-50%)" };
+                  else                 pos = { top: "50%",   left: "92%", transform: "translate(-50%,-50%)" };
                 } else if (n === 5) {
                   if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
-                  else if (offset===1) pos = { top: "50%",   left: "16%",  transform: "translateY(-50%)" };
-                  else if (offset===2) pos = { top: "0%",    left: "25%", transform: "translateX(-50%)" };
-                  else if (offset===3) pos = { top: "0%",    left: "75%", transform: "translateX(-50%)" };
-                  else                 pos = { top: "50%",   right: "16%", transform: "translateY(-50%)" };
+                  else if (offset===1) pos = { top: "50%",   left: "8%",  transform: "translate(-50%,-50%)" };
+                  else if (offset===2) pos = { top: "0%",    left: "36%", transform: "translateX(-50%)" };
+                  else if (offset===3) pos = { top: "0%",    left: "64%", transform: "translateX(-50%)" };
+                  else                 pos = { top: "50%",   left: "92%", transform: "translate(-50%,-50%)" };
                 } else {
                   if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
-                  else if (offset===1) pos = { top: "50%",   left: "16%",  transform: "translateY(-50%)" };
-                  else if (offset===2) pos = { top: "0%",    left: "25%", transform: "translateX(-50%)" };
+                  else if (offset===1) pos = { top: "50%",   left: "8%",  transform: "translate(-50%,-50%)" };
+                  else if (offset===2) pos = { top: "0%",    left: "29%", transform: "translateX(-50%)" };
                   else if (offset===3) pos = { top: "0%",    left: "50%", transform: "translateX(-50%)" };
-                  else if (offset===4) pos = { top: "0%",    left: "75%", transform: "translateX(-50%)" };
-                  else                 pos = { top: "50%",   right: "16%", transform: "translateY(-50%)" };
+                  else if (offset===4) pos = { top: "0%",    left: "71%", transform: "translateX(-50%)" };
+                  else                 pos = { top: "50%",   left: "92%", transform: "translate(-50%,-50%)" };
                 }
                 const isWinner = room.phase === "trickEnd" && room.last_trick_winner === t.playerIndex;
                 const isBombed = room.phase === "trickEnd" && t.card.specialType === "bomb";
@@ -4390,23 +4396,28 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
               else if (offset === 1) pos = { top: "0%", left: "30%", transform: "translateX(-50%)" };
               else                   pos = { top: "0%", left: "70%", transform: "translateX(-50%)" };
             } else if (n === 4) {
+              // Evenly spaced, all center-anchored (translate(-50%,...)) -
+              // anchoring left/right by their edge while the middle slot(s)
+              // stayed at a fixed 25%/50%/75% center put an edge card's box
+              // almost exactly on top of its neighbor's once the edge was
+              // pushed inward for the screen-clipping fix.
               if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
-              else if (offset === 1) pos = { top: "50%", left: "16%", transform: "translateY(-50%)" };
+              else if (offset === 1) pos = { top: "50%", left: "8%", transform: "translate(-50%,-50%)" };
               else if (offset === 2) pos = { top: "0%", left: "50%", transform: "translateX(-50%)" };
-              else                   pos = { top: "50%", right: "16%", transform: "translateY(-50%)" };
+              else                   pos = { top: "50%", left: "92%", transform: "translate(-50%,-50%)" };
             } else if (n === 5) {
               if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
-              else if (offset === 1) pos = { top: "50%", left: "16%", transform: "translateY(-50%)" };
-              else if (offset === 2) pos = { top: "0%", left: "25%", transform: "translateX(-50%)" };
-              else if (offset === 3) pos = { top: "0%", left: "75%", transform: "translateX(-50%)" };
-              else                   pos = { top: "50%", right: "16%", transform: "translateY(-50%)" };
+              else if (offset === 1) pos = { top: "50%", left: "8%", transform: "translate(-50%,-50%)" };
+              else if (offset === 2) pos = { top: "0%", left: "36%", transform: "translateX(-50%)" };
+              else if (offset === 3) pos = { top: "0%", left: "64%", transform: "translateX(-50%)" };
+              else                   pos = { top: "50%", left: "92%", transform: "translate(-50%,-50%)" };
             } else {
               if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
-              else if (offset === 1) pos = { top: "50%", left: "16%", transform: "translateY(-50%)" };
-              else if (offset === 2) pos = { top: "0%", left: "25%", transform: "translateX(-50%)" };
+              else if (offset === 1) pos = { top: "50%", left: "8%", transform: "translate(-50%,-50%)" };
+              else if (offset === 2) pos = { top: "0%", left: "29%", transform: "translateX(-50%)" };
               else if (offset === 3) pos = { top: "0%", left: "50%", transform: "translateX(-50%)" };
-              else if (offset === 4) pos = { top: "0%", left: "75%", transform: "translateX(-50%)" };
-              else                   pos = { top: "50%", right: "16%", transform: "translateY(-50%)" };
+              else if (offset === 4) pos = { top: "0%", left: "71%", transform: "translateX(-50%)" };
+              else                   pos = { top: "50%", left: "92%", transform: "translate(-50%,-50%)" };
             }
             const isWinner = room.phase === "trickEnd" && room.last_trick_winner === t.playerIndex;
             const isBombed = room.phase === "trickEnd" && t.card.specialType === "bomb";
