@@ -3056,6 +3056,23 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     </div>
   );
 
+  // Voice-chat diagnostic overlay - see voiceLog in useVoiceChat. Was only
+  // ever rendered from the main in-game return below, so a Warteraum/
+  // Rundenende repro (this is where voice chat actually gets turned on, via
+  // voicePanel above) never had logs to look at. A portal, so identical
+  // regardless of which phase-specific return renders it from.
+  const voiceDiagnostics = voice.voiceLog.length > 0 && createPortal(
+    <div style={{
+      position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
+      background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
+      fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
+      pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+    }}>
+      {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
+    </div>,
+    document.body
+  );
+
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
     // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
@@ -3153,6 +3170,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         ) : <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf den Host…</div>}
         {error && <div style={{ color: "#FF8080", fontSize: 12 }}>{error}</div>}
         {voicePanel}
+        {voiceDiagnostics}
       </div>
     );
   }
@@ -3242,6 +3260,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           <button onClick={() => window.location.reload()} style={{ ...goldBtn(false), padding: "12px 20px", fontSize: 12 }}>Raum verlassen</button>
         </div>
         {voicePanel}
+        {voiceDiagnostics}
       </div>
     );
   }
@@ -3594,23 +3613,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         </div>
       </div>
 
-      {/* Temporary diagnostic overlay for the "3rd voice chat participant
-          can't be heard" bug report - see voiceLog in useVoiceChat above.
-          Two rounds of fixes for plausible causes didn't change the
-          reported symptom, so this logs the actual per-peer signaling and
-          connection-state lifecycle instead of guessing a third time.
-          Remove once the bug is confirmed fixed. */}
-      {voice.voiceLog.length > 0 && createPortal(
-        <div style={{
-          position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
-          background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
-          fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
-          pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
-        }}>
-          {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
-        </div>,
-        document.body
-      )}
+      {voiceDiagnostics}
 
       {/* Full screen table with seated players */}
       {(() => {
