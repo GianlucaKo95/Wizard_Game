@@ -2339,6 +2339,15 @@ function useVoiceChat(roomId: string | null, session: Session) {
         logVoice(`peer(${shortId(otherId)}): ice gathering complete`);
       }
     };
+    // Fires when the browser tried to reach a specific STUN/TURN server URL
+    // and failed - the one direct signal for "why no relay candidate showed
+    // up" instead of inferring it from a candidate that never arrives. A
+    // TURN entry timing out here (errorCode 701 = "unreachable/no response")
+    // points at the relay itself (down, wrong host/port, firewalled),
+    // separate from a genuine peer-to-peer connectivity failure.
+    (pc as any).onicecandidateerror = (e: any) => {
+      logVoice(`peer(${shortId(otherId)}): ICE candidate error - url=${e.url} errorCode=${e.errorCode} errorText=${e.errorText}`);
+    };
     pc.ontrack = (e) => {
       logVoice(`peer(${shortId(otherId)}): ontrack fired`);
       let el = audioElsRef.current.get(otherId);
