@@ -3616,8 +3616,8 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
             case "top":         return { top: "clamp(78px,11vh,140px)", left: "50%", transform: "translateX(-50%)" };
             case "top-left":    return { top: "clamp(78px,11vh,140px)", left: "22%", transform: "translateX(-50%)" };
             case "top-right":   return { top: "clamp(78px,11vh,140px)", left: "78%", transform: "translateX(-50%)" };
-            case "left":        return { top: "46%", left: "3%",  transform: "translateY(-50%)" };
-            case "right":       return { top: "46%", left: "97%", transform: "translate(-100%,-50%)" };
+            case "left":        return { top: "46%", left: "8%",  transform: "translateY(-50%)" };
+            case "right":       return { top: "46%", left: "92%", transform: "translate(-100%,-50%)" };
             default:            return { top: "clamp(78px,13vh,96px)", left: "50%", transform: "translateX(-50%)" };
           }
         };
@@ -3733,22 +3733,22 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                   else                 pos = { top: "0%",    left: "70%", transform: "translateX(-50%)" };
                 } else if (n === 4) {
                   if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
-                  else if (offset===1) pos = { top: "50%",   left: "0%",  transform: "translateY(-50%)" };
+                  else if (offset===1) pos = { top: "50%",   left: "10%",  transform: "translateY(-50%)" };
                   else if (offset===2) pos = { top: "0%",    left: "50%", transform: "translateX(-50%)" };
-                  else                 pos = { top: "50%",   right: "0%", transform: "translateY(-50%)" };
+                  else                 pos = { top: "50%",   right: "10%", transform: "translateY(-50%)" };
                 } else if (n === 5) {
                   if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
-                  else if (offset===1) pos = { top: "50%",   left: "0%",  transform: "translateY(-50%)" };
+                  else if (offset===1) pos = { top: "50%",   left: "10%",  transform: "translateY(-50%)" };
                   else if (offset===2) pos = { top: "0%",    left: "25%", transform: "translateX(-50%)" };
                   else if (offset===3) pos = { top: "0%",    left: "75%", transform: "translateX(-50%)" };
-                  else                 pos = { top: "50%",   right: "0%", transform: "translateY(-50%)" };
+                  else                 pos = { top: "50%",   right: "10%", transform: "translateY(-50%)" };
                 } else {
                   if (isMe)            pos = { bottom: "0%",  left: "50%", transform: "translateX(-50%)" };
-                  else if (offset===1) pos = { top: "50%",   left: "0%",  transform: "translateY(-50%)" };
+                  else if (offset===1) pos = { top: "50%",   left: "10%",  transform: "translateY(-50%)" };
                   else if (offset===2) pos = { top: "0%",    left: "25%", transform: "translateX(-50%)" };
                   else if (offset===3) pos = { top: "0%",    left: "50%", transform: "translateX(-50%)" };
                   else if (offset===4) pos = { top: "0%",    left: "75%", transform: "translateX(-50%)" };
-                  else                 pos = { top: "50%",   right: "0%", transform: "translateY(-50%)" };
+                  else                 pos = { top: "50%",   right: "10%", transform: "translateY(-50%)" };
                 }
                 const isWinner = room.phase === "trickEnd" && room.last_trick_winner === t.playerIndex;
                 const isBombed = room.phase === "trickEnd" && t.card.specialType === "bomb";
@@ -4264,8 +4264,8 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
       case "top":         return { top: "clamp(78px,11vh,140px)", left: "50%", transform: "translateX(-50%)" };
       case "top-left":    return { top: "clamp(78px,11vh,140px)", left: "22%", transform: "translateX(-50%)" };
       case "top-right":   return { top: "clamp(78px,11vh,140px)", left: "78%", transform: "translateX(-50%)" };
-      case "left":        return { top: "46%", left: "3%",  transform: "translateY(-50%)" };
-      case "right":       return { top: "46%", left: "97%", transform: "translate(-100%,-50%)" };
+      case "left":        return { top: "46%", left: "8%",  transform: "translateY(-50%)" };
+      case "right":       return { top: "46%", left: "92%", transform: "translate(-100%,-50%)" };
       default:             return { bottom: "clamp(18px,6vh,60px)", left: "50%", transform: "translateX(-50%)" };
     }
   };
@@ -4391,22 +4391,22 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
               else                   pos = { top: "0%", left: "70%", transform: "translateX(-50%)" };
             } else if (n === 4) {
               if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
-              else if (offset === 1) pos = { top: "50%", left: "0%", transform: "translateY(-50%)" };
+              else if (offset === 1) pos = { top: "50%", left: "10%", transform: "translateY(-50%)" };
               else if (offset === 2) pos = { top: "0%", left: "50%", transform: "translateX(-50%)" };
-              else                   pos = { top: "50%", right: "0%", transform: "translateY(-50%)" };
+              else                   pos = { top: "50%", right: "10%", transform: "translateY(-50%)" };
             } else if (n === 5) {
               if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
-              else if (offset === 1) pos = { top: "50%", left: "0%", transform: "translateY(-50%)" };
+              else if (offset === 1) pos = { top: "50%", left: "10%", transform: "translateY(-50%)" };
               else if (offset === 2) pos = { top: "0%", left: "25%", transform: "translateX(-50%)" };
               else if (offset === 3) pos = { top: "0%", left: "75%", transform: "translateX(-50%)" };
-              else                   pos = { top: "50%", right: "0%", transform: "translateY(-50%)" };
+              else                   pos = { top: "50%", right: "10%", transform: "translateY(-50%)" };
             } else {
               if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
-              else if (offset === 1) pos = { top: "50%", left: "0%", transform: "translateY(-50%)" };
+              else if (offset === 1) pos = { top: "50%", left: "10%", transform: "translateY(-50%)" };
               else if (offset === 2) pos = { top: "0%", left: "25%", transform: "translateX(-50%)" };
               else if (offset === 3) pos = { top: "0%", left: "50%", transform: "translateX(-50%)" };
               else if (offset === 4) pos = { top: "0%", left: "75%", transform: "translateX(-50%)" };
-              else                   pos = { top: "50%", right: "0%", transform: "translateY(-50%)" };
+              else                   pos = { top: "50%", right: "10%", transform: "translateY(-50%)" };
             }
             const isWinner = room.phase === "trickEnd" && room.last_trick_winner === t.playerIndex;
             const isBombed = room.phase === "trickEnd" && t.card.specialType === "bomb";
