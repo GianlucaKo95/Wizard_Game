@@ -2567,6 +2567,19 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   const [modalMinimized, setModalMinimized] = useState(true);
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
+  // Who's watching - "niemand wird unbemerkt beobachtet". room_spectators
+  // is now readable for any player seated in the same room (see migration
+  // 015), so this is a plain fetch, not a new security surface.
+  const [showSpectators, setShowSpectators] = useState(false);
+  const [spectators, setSpectators] = useState<{ user_id: string; username: string }[]>([]);
+  const loadSpectators = useCallback(async () => {
+    const { data: rows, error } = await supabase.from("room_spectators").select("user_id").eq("room_id", roomId);
+    if (error) { console.error("[loadSpectators] fetch failed:", error.message); return; }
+    if (!rows?.length) { setSpectators([]); return; }
+    const ids = rows.map((r: any) => r.user_id);
+    const { data: profs } = await supabase.from("profiles").select("id, username").in("id", ids);
+    setSpectators(ids.map(id => ({ user_id: id, username: profs?.find((p: any) => p.id === id)?.username ?? "Spieler" })));
+  }, [roomId]);
   const [myIdx, setMyIdx] = useState(-1);
   const [selected, setSelected] = useState<string | null>(null);
   // Card ids are derived purely from suit+value (see buildDeck()), not per-
@@ -2771,6 +2784,14 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
       }
     });
   }, [roomId]);
+
+  useEffect(() => {
+    loadSpectators();
+    const ch = supabase.channel(`spectator-watch:${roomId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "room_spectators", filter: `room_id=eq.${roomId}` }, () => loadSpectators())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [roomId, loadSpectators]);
 
   useEffect(() => {
     // Both fetches below silently no-op on failure (RLS hiccup, transient
@@ -3073,6 +3094,26 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     document.body
   );
 
+  // "Niemand wird unbemerkt beobachtet" - a small badge, present regardless
+  // of phase, so spectators are never invisible to the people they're
+  // watching. Tap to expand the names (loadSpectators() resolves them from
+  // profiles once, not per-render).
+  const spectatorBadge = spectators.length > 0 && (
+    <div style={{ position: "relative" as const }}>
+      <button onClick={() => setShowSpectators(s => !s)} style={{ ...goldBtn(showSpectators), padding: "4px 9px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 5 }}>
+        👁 {spectators.length}
+      </button>
+      {showSpectators && (
+        <div style={{ position: "absolute" as const, top: "calc(100% + 4px)", right: 0, zIndex: 25, ...glass({ padding: "8px 12px" }), whiteSpace: "nowrap" as const }}>
+          <div style={{ ...cinzel, fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 4 }}>ZUSCHAUER</div>
+          {spectators.map(s => (
+            <div key={s.user_id} style={{ fontSize: 12, color: C.ivory, padding: "2px 0" }}>{s.username}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
     // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
@@ -3093,6 +3134,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim, display: "flex", alignItems: "center", gap: 6 }}>
           {room?.edition === "anniversary" ? <>⚡ 30 Jahre Edition</> : <><CardIcon size={11}><WizardArt index={0} /></CardIcon> Classic Edition</>}
         </div>
+        {spectatorBadge}
 
         {!showInvite ? (
           <button onClick={openInvitePicker} style={{ ...goldBtn(false), padding: "7px 16px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><IconUsers size={13} /> Freund einladen</button>
@@ -3259,6 +3301,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           {!isHost && <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf Host…</div>}
           <button onClick={() => window.location.reload()} style={{ ...goldBtn(false), padding: "12px 20px", fontSize: 12 }}>Raum verlassen</button>
         </div>
+        {spectatorBadge}
         {voicePanel}
         {voiceDiagnostics}
       </div>
@@ -3609,6 +3652,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
             )}
           </button>
           <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 7px", display: "flex" }} title="Spielblatt"><IconClipboardList size={15} /></button>
+          {spectatorBadge}
           <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: "4px 7px", borderRadius: 6, display: "flex" }} title="Verlassen"><IconX size={15} /></button>
         </div>
       </div>
