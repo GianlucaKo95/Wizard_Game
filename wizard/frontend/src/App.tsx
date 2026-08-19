@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createPortal } from "react-dom";
 import { Session } from "@supabase/supabase-js";
 import { supabase, callGameAction } from "./supabase";
 import { CardView } from "./CardView";
@@ -2264,23 +2263,6 @@ function useVoiceChat(roomId: string | null, session: Session) {
   const roomIdRef = useRef(roomId);
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
 
-  // Diagnostic: two rounds of fixes for plausible causes ("works with 2,
-  // 3rd person silent") didn't change the reported symptom at all - rather
-  // than guess a third time, log the mesh's actual signaling/connection
-  // lifecycle per peer, on-screen (the user only plays on a phone), so the
-  // next 3-person repro shows exactly which pair's negotiation never
-  // completes and at what stage. Remove once the bug is confirmed fixed.
-  const [voiceLog, setVoiceLog] = useState<string[]>([]);
-  const logVoice = (line: string) => {
-    const t = new Date().toLocaleTimeString("de-DE", { hour12: false }) + "." + String(new Date().getMilliseconds()).padStart(3, "0");
-    // Candidate-type logging below can emit several lines in the first
-    // second alone - a 10-line buffer could scroll the actually-diagnostic
-    // "ICE servers:"/"connectionState=failed" lines out of view before
-    // there's a chance to screenshot them.
-    setVoiceLog(prev => [...prev.slice(-39), `${t} ${line}`]);
-  };
-  const shortId = (id: string) => id.slice(0, 6);
-
   function stopSpeakingDetection(id: string) {
     const raf = rafsRef.current.get(id);
     if (raf) cancelAnimationFrame(raf);
@@ -2322,34 +2304,12 @@ function useVoiceChat(roomId: string | null, session: Session) {
   function getOrCreatePeer(otherId: string): RTCPeerConnection {
     let pc = peersRef.current.get(otherId);
     if (pc) return pc;
-    logVoice(`peer(${shortId(otherId)}): created`);
     pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
     localStreamRef.current?.getTracks().forEach(t => pc!.addTrack(t, localStreamRef.current!));
     pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        // candidate.type tells us what kind of path was even found: "host"
-        // (local network), "srflx" (STUN, direct-but-NAT-mapped), or "relay"
-        // (TURN). If only "host"/"srflx" ever show up here for a pair on
-        // different networks, that's the whole story for why it later fails
-        // - no relay candidate means no fallback path exists once a direct
-        // route isn't reachable.
-        logVoice(`peer(${shortId(otherId)}): ice candidate type=${e.candidate.type}`);
-        send({ type: "ice", from: session.user.id, to: otherId, candidate: e.candidate });
-      } else {
-        logVoice(`peer(${shortId(otherId)}): ice gathering complete`);
-      }
-    };
-    // Fires when the browser tried to reach a specific STUN/TURN server URL
-    // and failed - the one direct signal for "why no relay candidate showed
-    // up" instead of inferring it from a candidate that never arrives. A
-    // TURN entry timing out here (errorCode 701 = "unreachable/no response")
-    // points at the relay itself (down, wrong host/port, firewalled),
-    // separate from a genuine peer-to-peer connectivity failure.
-    (pc as any).onicecandidateerror = (e: any) => {
-      logVoice(`peer(${shortId(otherId)}): ICE candidate error - url=${e.url} errorCode=${e.errorCode} errorText=${e.errorText}`);
+      if (e.candidate) send({ type: "ice", from: session.user.id, to: otherId, candidate: e.candidate });
     };
     pc.ontrack = (e) => {
-      logVoice(`peer(${shortId(otherId)}): ontrack fired`);
       let el = audioElsRef.current.get(otherId);
       if (!el) {
         el = document.createElement("audio");
@@ -2368,25 +2328,19 @@ function useVoiceChat(roomId: string | null, session: Session) {
       // outside the direct call stack of a user gesture (it's set here,
       // inside an async ontrack callback, not inside the click handler that
       // started the connection) - some browsers silently never start
-      // playback rather than throwing, which is indistinguishable from "no
-      // audio arrived" without this. Calling play() explicitly either starts
-      // it or surfaces the rejection (typically NotAllowedError) in the log
-      // instead of a permanently silent "connected" peer.
-      el.play().catch(err => logVoice(`peer(${shortId(otherId)}): audio play() failed: ${(err as any)?.name ?? err}`));
+      // playback rather than throwing. Calling play() explicitly either
+      // starts it or surfaces the rejection instead of a silently-dead peer.
+      el.play().catch(err => console.error("[voice] audio play() failed:", err));
       setParticipantIds(prev => new Set(prev).add(otherId));
       startSpeakingDetection(e.streams[0], otherId);
     };
     pc.onconnectionstatechange = () => {
-      logVoice(`peer(${shortId(otherId)}): connectionState=${pc!.connectionState}`);
       // "disconnected" can persist for a long time (or indefinitely, on some
       // browsers) without ever escalating to "failed" - since there's no
       // ICE-restart/reconnect logic here to recover it either way, treat it
       // the same as a hard failure rather than leaving a dead peer marked
       // as connected forever.
       if (pc && (pc.connectionState === "failed" || pc.connectionState === "closed" || pc.connectionState === "disconnected")) removePeer(otherId);
-    };
-    pc.oniceconnectionstatechange = () => {
-      logVoice(`peer(${shortId(otherId)}): iceConnectionState=${pc!.iceConnectionState}`);
     };
     peersRef.current.set(otherId, pc);
     return pc;
@@ -2420,52 +2374,44 @@ function useVoiceChat(roomId: string | null, session: Session) {
   // für jedes Paar immer genau eine Seite, unabhängig davon, wer wann
   // beigetreten ist.
   async function maybeOffer(otherId: string) {
-    if (session.user.id >= otherId) { logVoice(`peer(${shortId(otherId)}): not offering (their id is smaller)`); return; }
+    if (session.user.id >= otherId) return;
     const pc = getOrCreatePeer(otherId);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    logVoice(`peer(${shortId(otherId)}): offer sent`);
     send({ type: "offer", from: session.user.id, to: otherId, sdp: offer });
   }
 
   async function handleSignal(payload: any) {
     if (payload.from === session.user.id) return;
     if (payload.type === "join") {
-      logVoice(`signal: join from ${shortId(payload.from)}`);
       // Antworte immer mit "here", unabhängig davon ob wir selbst anbieten -
       // sonst erfährt ein neu Beigetretener mit kleinerer ID nie von einem
       // bereits anwesenden Peer mit größerer ID (der correctly nicht
       // anbietet), und keine Seite initiiert je einen Offer für dieses Paar.
       send({ type: "here", from: session.user.id, to: payload.from });
-      await maybeOffer(payload.from).catch((e) => { logVoice(`peer(${shortId(payload.from)}): maybeOffer threw: ${e?.message ?? e}`); removePeer(payload.from); });
+      await maybeOffer(payload.from).catch(() => removePeer(payload.from));
       return;
     }
     if (payload.type === "here") {
       if (payload.to !== session.user.id) return;
-      logVoice(`signal: here from ${shortId(payload.from)}`);
-      await maybeOffer(payload.from).catch((e) => { logVoice(`peer(${shortId(payload.from)}): maybeOffer threw: ${e?.message ?? e}`); removePeer(payload.from); });
+      await maybeOffer(payload.from).catch(() => removePeer(payload.from));
       return;
     }
-    if (payload.type === "leave") { logVoice(`signal: leave from ${shortId(payload.from)}`); removePeer(payload.from); return; }
+    if (payload.type === "leave") { removePeer(payload.from); return; }
     if (payload.to !== session.user.id) return;
     try {
       if (payload.type === "offer") {
-        logVoice(`signal: offer from ${shortId(payload.from)}`);
         const pc = getOrCreatePeer(payload.from);
         await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
         await flushPendingCandidates(payload.from, pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        logVoice(`peer(${shortId(payload.from)}): answer sent`);
         send({ type: "answer", from: session.user.id, to: payload.from, sdp: answer });
       } else if (payload.type === "answer") {
-        logVoice(`signal: answer from ${shortId(payload.from)}`);
         const pc = peersRef.current.get(payload.from);
         if (pc) {
           await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
           await flushPendingCandidates(payload.from, pc);
-        } else {
-          logVoice(`peer(${shortId(payload.from)}): answer arrived but no local peer exists!`);
         }
       } else if (payload.type === "ice") {
         const pc = peersRef.current.get(payload.from);
@@ -2477,12 +2423,11 @@ function useVoiceChat(roomId: string | null, session: Session) {
           await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
         }
       }
-    } catch (e) {
+    } catch {
       // Negotiation gescheitert (z.B. ein verspätetes/doppeltes Offer trifft
       // eine Connection im falschen Signaling-State) - Paar sauber
       // fallenlassen statt eines unbehandelten Rejections mit halb
       // ausgehandelter, nie wieder erholender Connection.
-      logVoice(`peer(${shortId(payload.from)}): ${payload.type} handling threw: ${(e as any)?.message ?? e} - dropping peer`);
       removePeer(payload.from);
     }
   }
@@ -2511,23 +2456,12 @@ function useVoiceChat(roomId: string | null, session: Session) {
       const iceRes = await callGameAction(rid, "getIceServers", {});
       if (roomIdRef.current !== rid) { disableVoice(); return; }
       if (iceRes?.iceServers) iceServersRef.current = iceRes.iceServers;
-      // A connection that can't find a direct path (different networks,
-      // mobile carrier NAT, restrictive Wi-Fi) needs a TURN relay to work at
-      // all - STUN alone only reveals the public address, it can't relay
-      // media. If the server only ever hands back its STUN-only fallback
-      // (TURN_HOST/TURN_SHARED_SECRET unset, or the TURN add-on down), every
-      // such pair fails after the ICE timeout with no other symptom. Logging
-      // which kinds were actually received turns "it failed" into "it never
-      // had a relay to fall back to" - a fixable, checkable server issue -
-      // versus a genuine network-specific ICE failure.
-      const hasTurn = iceServersRef.current.some((s: any) => (Array.isArray(s.urls) ? s.urls : [s.urls]).some((u: string) => u?.startsWith("turn:")));
-      logVoice(`ICE servers: ${iceServersRef.current.length} total, TURN ${hasTurn ? "present" : "MISSING - STUN-only fallback"}`);
 
       const ch = supabase.channel(`voice:${rid}`, { config: { broadcast: { self: false } } });
       channelRef.current = ch;
       ch.on("broadcast", { event: "signal" }, ({ payload }: any) => handleSignal(payload));
       ch.subscribe((status: string) => {
-        if (status === "SUBSCRIBED") { logVoice("channel subscribed, sending join"); send({ type: "join", from: session.user.id }); return; }
+        if (status === "SUBSCRIBED") { send({ type: "join", from: session.user.id }); return; }
         // Same idea for the signaling channel itself - a network drop here
         // otherwise leaves the UI stuck on "connected" with no way to ever
         // exchange offers with anyone again.
@@ -2581,7 +2515,7 @@ function useVoiceChat(roomId: string | null, session: Session) {
     setMuted(next);
   }
 
-  return { enabled, connecting, muted, error, participantIds, speakingIds, enableVoice, disableVoice, toggleMute, voiceLog };
+  return { enabled, connecting, muted, error, participantIds, speakingIds, enableVoice, disableVoice, toggleMute };
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
@@ -3112,24 +3046,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     </div>
   );
 
-  // Voice-chat diagnostic overlay - see voiceLog in useVoiceChat. Was only
-  // ever rendered from the main in-game return below, so a Warteraum/
-  // Rundenende repro (this is where voice chat actually gets turned on, via
-  // voicePanel above) never had logs to look at. A portal, so identical
-  // regardless of which phase-specific return renders it from.
-  const voiceDiagnostics = voice.voiceLog.length > 0 && createPortal(
-    <div style={{
-      position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
-      background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
-      fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
-      maxHeight: "40vh", overflowY: "auto" as const,
-      pointerEvents: "auto" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
-    }}>
-      {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
-    </div>,
-    document.body
-  );
-
   // "Niemand wird unbemerkt beobachtet" - a small badge, present regardless
   // of phase, so spectators are never invisible to the people they're
   // watching. Tap to expand the names (loadSpectators() resolves them from
@@ -3248,7 +3164,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         ) : <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf den Host…</div>}
         {error && <div style={{ color: "#FF8080", fontSize: 12 }}>{error}</div>}
         {voicePanel}
-        {voiceDiagnostics}
       </div>
     );
   }
@@ -3339,7 +3254,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         </div>
         {spectatorBadge}
         {voicePanel}
-        {voiceDiagnostics}
       </div>
     );
   }
@@ -3692,8 +3606,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: "4px 7px", borderRadius: 6, display: "flex" }} title="Verlassen"><IconX size={15} /></button>
         </div>
       </div>
-
-      {voiceDiagnostics}
 
       {/* Full screen table with seated players */}
       {(() => {
@@ -4333,19 +4245,6 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
           )}
           {voice.error && <div style={{ ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080" }}>{voice.error}</div>}
         </div>
-
-        {voice.voiceLog.length > 0 && createPortal(
-          <div style={{
-            position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
-            background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
-            fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
-            maxHeight: "40vh", overflowY: "auto" as const,
-            pointerEvents: "auto" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
-          }}>
-            {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
-          </div>,
-          document.body
-        )}
       </div>
     );
   }
@@ -4447,23 +4346,6 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
           <div style={{ position: "absolute" as const, top: 44, left: "50%", transform: "translateX(-50%)", zIndex: 15, ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080", whiteSpace: "nowrap" as const }}>
             {voice.error}
           </div>
-        )}
-
-        {/* Same voice-chat diagnostic overlay as GameRoom - a spectator is
-            now a real participant in the mesh too, so a repro needs logs
-            from this side as much as from a player's. See voiceLog in
-            useVoiceChat above. Remove once the underlying bug is confirmed fixed. */}
-        {voice.voiceLog.length > 0 && createPortal(
-          <div style={{
-            position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
-            background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
-            fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
-            maxHeight: "40vh", overflowY: "auto" as const,
-            pointerEvents: "auto" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
-          }}>
-            {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
-          </div>,
-          document.body
         )}
 
         {/* All seats - every player gets the same glowing-when-active pill, none singled out as "mine" */}
