@@ -7,10 +7,6 @@ import { SUITS, SUIT_SYMBOLS, SUIT_COLORS, forbiddenDealerBid } from "./types";
 import { IconX, IconArrowLeft, IconSettings, IconUsers, IconUserPlus, IconHome, IconClipboardList, IconMessageCircle, IconHistory, IconCards, IconTrophy, IconStar, IconTarget, IconPercent, IconLayers, IconBarChart, IconMic, IconMicOff, IconBell, IconBellOff, IconGripVertical, IconPencil } from "./Icons";
 import { WizardArt, DragonArt, FairyArt, WitchArt, WerewolfArt, VampireArt, BombArt, Rainbow7Art, Rainbow9Art, WizardFoolArt } from "./CardArt";
 
-// Injected at build time by vite.config.ts - see BuildBadge below.
-declare const __APP_VERSION__: string;
-declare const __BUILD_SHA__: string;
-
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
   bgDark: "#10161A",
@@ -2488,27 +2484,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   // with nothing to correct it until the next unrelated event touches it.
   const playersGuard = useRef(makeSeqGuard()).current;
   const roomGuard = useRef(makeSeqGuard()).current;
-  // Temporary diagnostic: a reported "played card stays in hand" bug has
-  // survived two rounds of fixes for plausible-but-unconfirmed causes.
-  // Logs every time the caller's own hand actually changes, tagged by which
-  // of the several setPlayers() call sites produced it. The user only plays
-  // on a phone, with no practical access to a browser console mid-game - so
-  // this renders on-screen (see handDebugLog below) instead of console.log,
-  // so a screenshot at the moment of the bug is enough to see which write
-  // path was responsible, instead of another round of static-code guessing.
-  const handDebugRef = useRef<string>("");
-  const [handDebugLog, setHandDebugLog] = useState<string[]>([]);
-  const logHandChange = (source: string, playersArr: any[]) => {
-    const own = playersArr.find((p: any) => p.user_id === session.user.id);
-    const ids = (own?.hand ?? []).map((c: any) => c.id).sort().join(",");
-    if (ids !== handDebugRef.current) {
-      const from = handDebugRef.current || "(none)";
-      const to = ids || "(empty)";
-      const t = new Date().toLocaleTimeString("de-DE", { hour12: false }) + "." + String(new Date().getMilliseconds()).padStart(3, "0");
-      handDebugRef.current = ids;
-      setHandDebugLog(prev => [...prev.slice(-5), `${t} ${source}: ${from} → ${to}`]);
-    }
-  };
   const [showLog, setShowLog] = useState(false);
   const [modalMinimized, setModalMinimized] = useState(true);
   const [room, setRoom] = useState<any>(null);
@@ -2709,7 +2684,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     loadPlayersSecure(roomId, session.user.id).then(data => {
       if (data) {
         if (!playersGuard.isCurrent(playersToken)) return; // superseded by a newer update
-        logHandChange("initial-mount", data);
         setPlayers(data);
         const mine = data.find((p: any) => p.user_id === session.user.id);
         if (mine) setMyIdx(mine.player_index);
@@ -2734,7 +2708,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
       loadPlayersSecure(roomId, session.user.id).then(data => {
         if (!data) { console.error("[refreshState] players fetch failed"); return; }
         if (!playersGuard.isCurrent(playersToken)) return; // superseded by a newer update
-        logHandChange("poll/refreshState", data);
         setPlayers(data);
       });
     };
@@ -2766,7 +2739,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
             // still use this (still-reasonably-current) data for the one-shot
             // AI/clearTrick scheduling checks below, which are independently
             // guarded against double-firing.
-            if (playersGuard.isCurrent(mySeq)) { logHandChange("rooms:UPDATE-refetch", data); setPlayers(data); }
+            if (playersGuard.isCurrent(mySeq)) setPlayers(data);
             if (newRoom.phase === "playing" && data[newRoom.current_player]?.is_ai) {
               // Unique key: player index + current trick length to prevent duplicate triggers
               // for the same turn (multiple room updates fire for one state change)
@@ -2808,11 +2781,9 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         if (payload.eventType === "UPDATE" && payload.new) {
           setPlayers(prev => {
             const exists = prev.some(p => p.id === payload.new.id);
-            const next = exists
+            return exists
               ? prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p)
               : [...prev, payload.new].sort((a,b) => a.player_index - b.player_index);
-            logHandChange("room_players:merge", next);
-            return next;
           });
         } else if (payload.eventType === "INSERT") {
           setPlayers(prev => {
@@ -3544,23 +3515,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         </div>
       </div>
 
-      {/* Temporary diagnostic overlay for the "played card stays in hand" bug
-          report - see logHandChange() above. Portaled straight to <body> so
-          it always sits fixed to the real viewport regardless of any
-          transformed ancestor in the card-table layout below. Remove once
-          the bug is confirmed fixed. */}
-      {handDebugLog.length > 0 && createPortal(
-        <div style={{
-          position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
-          background: "rgba(0,0,0,0.82)", color: "#8FE3A0", fontFamily: "monospace",
-          fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
-          pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
-        }}>
-          {handDebugLog.map((line, i) => <div key={i}>{line}</div>)}
-        </div>,
-        document.body
-      )}
-
       {/* Temporary diagnostic overlay for the "3rd voice chat participant
           can't be heard" bug report - see voiceLog in useVoiceChat above.
           Two rounds of fixes for plausible causes didn't change the
@@ -3569,9 +3523,9 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           Remove once the bug is confirmed fixed. */}
       {voice.voiceLog.length > 0 && createPortal(
         <div style={{
-          position: "fixed" as const, bottom: "max(70px, calc(env(safe-area-inset-bottom) + 70px))", left: 4, right: 4, zIndex: 9999,
+          position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
           background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
-          fontSize: 8.5, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
+          fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
           pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
         }}>
           {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
@@ -4148,21 +4102,6 @@ export default function App() {
     <>
       {session ? <LobbyScreen session={session} /> : <AuthScreen />}
       <InstallBanner />
-      <BuildBadge />
     </>
-  );
-}
-
-// Answers "did my update actually arrive on this device" from a screenshot -
-// deployment-vs-code-bug confusion has repeatedly derailed debugging real
-// issues in this app. Always on, deliberately unobtrusive.
-function BuildBadge() {
-  return (
-    <div style={{
-      position: "fixed" as const, bottom: "max(2px, env(safe-area-inset-bottom))", right: 4, zIndex: 9998,
-      fontSize: 8, color: "rgba(255,255,255,0.25)", fontFamily: "monospace", pointerEvents: "none" as const,
-    }}>
-      v{__APP_VERSION__} · {__BUILD_SHA__}
-    </div>
   );
 }
