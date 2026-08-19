@@ -1124,6 +1124,25 @@ serve(async (req) => {
       return json({ ok: true });
     }
 
+    case "spectateRoom": {
+      // Re-validates server-side what the discovery UI (friends_active_rooms)
+      // already filtered client-side - never trust the client to have
+      // actually enforced "must have a friend in this room" itself.
+      if (callerIdx >= 0) return json({ error: "Du bist bereits Spieler in diesem Raum" }, 400);
+      const { data: friendRows } = await supabase.from("friends").select("requester_id, addressee_id")
+        .eq("status", "accepted").or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+      const friendIds = new Set((friendRows ?? []).map(f => f.requester_id === user.id ? f.addressee_id : f.requester_id));
+      const hasFriendInRoom = players.some(p => !p.is_ai && friendIds.has(p.user_id));
+      if (!hasFriendInRoom) return json({ error: "Kein Freund in diesem Raum" }, 403);
+      await upd(supabase.from("room_spectators").upsert({ room_id: roomId, user_id: user.id }, { onConflict: "room_id,user_id" }), "spectateRoom.insert");
+      return json({ ok: true, roomId });
+    }
+
+    case "leaveSpectating": {
+      await upd(supabase.from("room_spectators").delete().eq("room_id", roomId).eq("user_id", user.id), "leaveSpectating.delete");
+      return json({ ok: true });
+    }
+
     case "syncPresence": {
       // Reports which human players currently have this room open, driven by
       // the client's realtime presence channel. `room_players.connected` is
@@ -1153,7 +1172,10 @@ serve(async (req) => {
       // username = "<expiry-unix-ts>:<anything>", password = base64(HMAC-SHA1
       // (sharedSecret, username))). The long-lived secret never leaves the
       // server - only these expiring username/password pairs do.
-      if (callerIdx < 0) return json({ error: "Nicht in diesem Raum" }, 400);
+      if (callerIdx < 0) {
+        const { data: specRow } = await supabase.from("room_spectators").select("id").eq("room_id", roomId).eq("user_id", user.id).maybeSingle();
+        if (!specRow) return json({ error: "Nicht in diesem Raum" }, 400);
+      }
       const turnSecret = Deno.env.get("TURN_SHARED_SECRET");
       const turnHost = Deno.env.get("TURN_HOST");
       const iceServers: any[] = [{ urls: "stun:stun.l.google.com:19302" }];

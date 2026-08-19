@@ -666,7 +666,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 }
 
 // ─── Friends Screen ───────────────────────────────────────────────────────────
-function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; onClose: () => void; onlineUserIds: Set<string> }) {
+function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { session: Session; onClose: () => void; onlineUserIds: Set<string>; onSpectate: (roomId: string) => void }) {
   const uid = session.user.id;
   const [rows, setRows] = useState<any[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -676,6 +676,35 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
   const [searching, setSearching] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Rooms where an accepted friend is currently seated (lobby through active
+  // play - friends_active_rooms drops a room the moment their room_players
+  // row disappears). Polled rather than realtime-subscribed: this panel is
+  // only open briefly, and the discovery view already re-derives everything
+  // from auth.uid() server-side on every read, so a cheap 10s refresh is
+  // plenty to catch a friend starting a new game while the panel is open.
+  const [activeRooms, setActiveRooms] = useState<any[] | null>(null);
+  const [spectatingId, setSpectatingId] = useState<string | null>(null);
+  const loadActiveRooms = useCallback(() => {
+    supabase.from("friends_active_rooms").select("*").then(({ data, error }) => {
+      if (error) { console.error("[FriendsScreen] friends_active_rooms fetch failed:", error.message); return; }
+      setActiveRooms(data ?? []);
+    });
+  }, []);
+  useEffect(() => {
+    loadActiveRooms();
+    const poll = setInterval(loadActiveRooms, 10000);
+    return () => clearInterval(poll);
+  }, [loadActiveRooms]);
+
+  async function spectate(roomId: string) {
+    if (spectatingId) return;
+    setSpectatingId(roomId);
+    const res = await callGameAction(roomId, "spectateRoom", {});
+    setSpectatingId(null);
+    if (res.error) { setMsg({ text: res.error, ok: false }); return; }
+    onSpectate(roomId);
+  }
 
   const load = useCallback(() => {
     supabase.from("friends").select("*").or(`requester_id.eq.${uid},addressee_id.eq.${uid}`)
@@ -788,6 +817,37 @@ function FriendsScreen({ session, onClose, onlineUserIds }: { session: Session; 
           )}
           {msg && <div style={{ fontSize: 11, color: msg.ok ? C.success : C.error, textAlign: "center" }}>{msg.text}</div>}
         </div>
+
+        {/* Friends currently in a room - dedupe by room_id, since several
+            friends can be seated in the same room. */}
+        {(() => {
+          const seen = new Set<string>();
+          const rooms = (activeRooms ?? []).filter(r => {
+            if (seen.has(r.room_id)) return false;
+            seen.add(r.room_id);
+            return true;
+          });
+          if (rooms.length === 0) return null;
+          return (
+            <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>FREUNDE SPIELEN GERADE</div>
+              {rooms.map((r: any) => {
+                const others = (activeRooms ?? []).filter(x => x.room_id === r.room_id).map(x => x.friend_name ?? names[x.friend_user_id] ?? "…");
+                return (
+                  <div key={r.room_id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
+                    <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {others.join(", ")}
+                    </div>
+                    <button onClick={() => spectate(r.room_id)} disabled={spectatingId === r.room_id}
+                      style={{ ...goldBtn(), padding: "4px 10px", fontSize: 10, opacity: spectatingId === r.room_id ? 0.5 : 1 }}>
+                      👁 Zuschauen
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* Incoming requests */}
         {incoming.length > 0 && (
@@ -1778,6 +1838,10 @@ function LobbyScreen({ session }: { session: Session }) {
   useEffect(() => { checkReconnect(); }, [checkReconnect]);
   const [codeInput, setCodeInput] = useState("");
   const [roomId, setRoomId] = useState<string | null>(null);
+  // Set alongside roomId (never on its own) when entering via "Zuschauen"
+  // instead of create/join/reconnect - decides whether roomId renders
+  // SpectatorRoom (read-only) or GameRoom below.
+  const [isSpectating, setIsSpectating] = useState(false);
   const [edition, setEdition] = useState<"classic"|"anniversary">("classic");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1926,6 +1990,12 @@ function LobbyScreen({ session }: { session: Session }) {
 
   if (view === "scoreboard") return <ManualScoreboardScreen session={session} onBack={() => setView("home")} />;
 
+  if (roomId && isSpectating) return <SpectatorRoom roomId={roomId} session={session} voice={voice} onLeave={() => {
+    callGameAction(roomId, "leaveSpectating", {});
+    setRoomId(null);
+    setIsSpectating(false);
+  }} />;
+
   if (roomId) return <GameRoom roomId={roomId} session={session} edition={edition} onlineUserIds={onlineUserIds} voice={voice} onLeave={() => { setRoomId(null); checkReconnect(); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
@@ -2065,7 +2135,7 @@ function LobbyScreen({ session }: { session: Session }) {
           </div>
         </div>
       )}
-      {showFriendsPanel && <FriendsScreen session={session} onClose={() => setShowFriendsPanel(false)} onlineUserIds={onlineUserIds} />}
+      {showFriendsPanel && <FriendsScreen session={session} onClose={() => setShowFriendsPanel(false)} onlineUserIds={onlineUserIds} onSpectate={(rid) => { setShowFriendsPanel(false); setIsSpectating(true); setRoomId(rid); }} />}
       {screen}
     </>
   );
@@ -4058,6 +4128,167 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         ))}
       </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Spectator Room ───────────────────────────────────────────────────────────
+// Deliberately its own component rather than GameRoom+isSpectator flags:
+// GameRoom's JSX assumes a real seat throughout (getSeatPositions clamps a
+// missing index to player 0, which would otherwise misrender someone else's
+// hand/score as "mine"), and it's large enough that threading a spectator
+// branch through every phase would risk regressing the just-stabilized
+// player experience. This is intentionally simpler: no seat-relative
+// layout, no card interaction, no presence tracking (a spectator watching
+// doesn't affect "did everyone leave mid-game" cleanup logic) - just the
+// read-only facts every player can already see, rendered generically.
+function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; session: Session; voice: ReturnType<typeof useVoiceChat>; onLeave: () => void }) {
+  const roomGuard = useRef(makeSeqGuard()).current;
+  const playersGuard = useRef(makeSeqGuard()).current;
+  const [room, setRoom] = useState<any>(null);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [showLog, setShowLog] = useState(false);
+
+  useEffect(() => {
+    const refreshState = () => {
+      const roomToken = roomGuard.next();
+      supabase.from("rooms").select("id, code, phase, round, max_rounds, dealer, current_player, trump_card, trump_suit, werewolf_suit, current_trick, last_trick_winner, last_trick_cards, edition, log, created_at").eq("id", roomId).single().then(({ data, error }) => {
+        if (data) { if (roomGuard.isCurrent(roomToken)) setRoom(data); }
+        else if (error) console.error("[SpectatorRoom] room fetch failed:", error.message);
+      });
+      const playersToken = playersGuard.next();
+      loadPlayersSecure(roomId, session.user.id).then(data => {
+        if (!data) { console.error("[SpectatorRoom] players fetch failed"); return; }
+        if (!playersGuard.isCurrent(playersToken)) return;
+        setPlayers(data);
+      });
+    };
+
+    refreshState();
+    // Spectators have no own room_players row, so the raw postgres_changes
+    // stream GameRoom uses (RLS-scoped to auth.uid() = user_id) would never
+    // deliver anything here - a "rooms" change plus a poll fallback is the
+    // whole story for keeping this in sync.
+    const ch = supabase.channel(`spectate:${roomId}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` }, () => refreshState())
+      .subscribe();
+    const poll = setInterval(refreshState, 5000);
+    const onVisible = () => { if (document.visibilityState === "visible") refreshState(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
+    return () => {
+      supabase.removeChannel(ch);
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [roomId]);
+
+  if (!room) {
+    return <div style={{ ...tableStyle, justifyContent: "center" }}><div style={{ color: C.ivoryDim }}>Lade Partie…</div></div>;
+  }
+
+  const log: string[] = room.log ?? [];
+  const trick: any[] = room.phase === "trickEnd" ? (room.last_trick_cards ?? room.current_trick ?? []) : (room.current_trick ?? []);
+  const voiceNameFor = (id: string) => id === session.user.id ? "Du" : (players.find((p: any) => p.user_id === id)?.ai_name ?? "Spieler");
+
+  return (
+    <div style={{ ...tableStyle, gap: "clamp(12px,2vw,20px)" }} className="fade-in">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: 720 }}>
+        <button onClick={onLeave} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <IconArrowLeft size={13} /> Zuschauen beenden
+        </button>
+        <div style={{ ...cinzel, fontSize: 12, color: C.ivoryDim, display: "flex", alignItems: "center", gap: 6 }}>
+          👁 {room.code} · Runde {room.round}/{room.max_rounds}
+        </div>
+      </div>
+
+      {room.trump_card && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+          <div style={{ ...cinzel, fontSize: 11, color: C.gold }}>TRUMPF</div>
+          <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
+          {room.trump_suit && (
+            <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 13, fontWeight: 700 }}>
+              {SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", minHeight: 84 }}>
+        {trick.length === 0 && room.phase === "playing" && (
+          <div style={{ color: C.ivoryDim, fontSize: 12, alignSelf: "center" }}>Warte auf den ersten Stich…</div>
+        )}
+        {trick.map((t: any, i: number) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <CardView card={t.card} small werewolfSuit={room.werewolf_suit} />
+            <div style={{ fontSize: 10, color: C.ivoryDim }}>{players[t.playerIndex]?.ai_name ?? players[t.playerIndex]?.username ?? `Spieler ${t.playerIndex + 1}`}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, width: "100%", maxWidth: 720 }}>
+        {players.map((p: any) => (
+          <div key={p.id} style={{ ...glass({ padding: 10 }), display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.connected || p.is_ai ? C.success : "rgba(255,255,255,0.25)", flexShrink: 0 }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.ivory, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {p.ai_name ?? p.username ?? `Spieler ${p.player_index + 1}`}
+              </span>
+              {Number(room.current_player) === Number(p.player_index) && room.phase === "playing" && (
+                <span style={{ fontSize: 10, color: C.gold }}>●</span>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12, color: C.ivoryDim }}>
+              <TrickPile tricksWon={p.tricks_won ?? 0} bid={p.bid} />
+              <span>{p.score ?? 0} Pkt.</span>
+            </div>
+            <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+              {Array.from({ length: p.hand_count ?? 0 }, (_, i) => (
+                <CardView key={i} card={{ id: `back-${p.player_index}-${i}`, type: "hidden" } as any} faceDown small />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+        {voice.enabled && voice.participantIds.size > 0 && (
+          <div style={{ ...glass({ padding: "8px 12px" }), display: "flex", flexDirection: "column", gap: 4 }}>
+            {[session.user.id, ...voice.participantIds].map((id: string) => (
+              <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: voice.speakingIds.has(id) ? C.success : C.ivoryDim }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: voice.speakingIds.has(id) ? C.success : "rgba(255,255,255,0.25)" }} />
+                {voiceNameFor(id)}
+              </div>
+            ))}
+          </div>
+        )}
+        {!voice.enabled ? (
+          <button onClick={voice.enableVoice} disabled={voice.connecting} style={{ ...goldBtn(false), padding: "8px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, opacity: voice.connecting ? 0.5 : 1 }}>
+            <IconMic size={14} /> {voice.connecting ? "Verbinde…" : "Sprachchat beitreten"}
+          </button>
+        ) : (
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={voice.toggleMute} style={{ ...goldBtn(!voice.muted), padding: "8px 12px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {voice.muted ? <IconMicOff size={14} /> : <IconMic size={14} />} {voice.muted ? "Stumm" : "Live"}
+            </button>
+            <button onClick={voice.disableVoice} style={{ ...glass({ padding: "8px 10px" }), border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", alignItems: "center" }} title="Sprachchat verlassen"><IconX size={15} /></button>
+          </div>
+        )}
+        {voice.error && <div style={{ ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080" }}>{voice.error}</div>}
+      </div>
+
+      <button onClick={() => setShowLog(s => !s)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
+        <IconHistory size={13} /> {showLog ? "Verlauf ausblenden" : "Verlauf anzeigen"}
+      </button>
+      {showLog && (
+        <div style={{ ...glass({ padding: 8 }), fontSize: 11, color: C.ivoryDim, width: "100%", maxWidth: 720, maxHeight: 200, overflowY: "auto" }}>
+          {log.map((l: string, i: number) => (
+            <div key={i} style={{ padding: "2px 0", borderBottom: "1px solid rgba(201,168,76,0.06)" }}>{l}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
