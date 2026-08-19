@@ -2340,6 +2340,15 @@ function useVoiceChat(roomId: string | null, session: Session) {
         audioElsRef.current.set(otherId, el);
       }
       el.srcObject = e.streams[0];
+      // The `autoplay` attribute alone is unreliable for an element created
+      // outside the direct call stack of a user gesture (it's set here,
+      // inside an async ontrack callback, not inside the click handler that
+      // started the connection) - some browsers silently never start
+      // playback rather than throwing, which is indistinguishable from "no
+      // audio arrived" without this. Calling play() explicitly either starts
+      // it or surfaces the rejection (typically NotAllowedError) in the log
+      // instead of a permanently silent "connected" peer.
+      el.play().catch(err => logVoice(`peer(${shortId(otherId)}): audio play() failed: ${(err as any)?.name ?? err}`));
       setParticipantIds(prev => new Set(prev).add(otherId));
       startSpeakingDetection(e.streams[0], otherId);
     };
@@ -4286,6 +4295,22 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
           <div style={{ position: "absolute" as const, top: 44, left: "50%", transform: "translateX(-50%)", zIndex: 15, ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080", whiteSpace: "nowrap" as const }}>
             {voice.error}
           </div>
+        )}
+
+        {/* Same voice-chat diagnostic overlay as GameRoom - a spectator is
+            now a real participant in the mesh too, so a repro needs logs
+            from this side as much as from a player's. See voiceLog in
+            useVoiceChat above. Remove once the underlying bug is confirmed fixed. */}
+        {voice.voiceLog.length > 0 && createPortal(
+          <div style={{
+            position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
+            background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
+            fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
+            pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+          }}>
+            {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
+          </div>,
+          document.body
         )}
 
         {/* All seats - every player gets the same glowing-when-active pill, none singled out as "mine" */}
