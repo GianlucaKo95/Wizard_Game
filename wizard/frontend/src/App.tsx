@@ -2273,7 +2273,11 @@ function useVoiceChat(roomId: string | null, session: Session) {
   const [voiceLog, setVoiceLog] = useState<string[]>([]);
   const logVoice = (line: string) => {
     const t = new Date().toLocaleTimeString("de-DE", { hour12: false }) + "." + String(new Date().getMilliseconds()).padStart(3, "0");
-    setVoiceLog(prev => [...prev.slice(-9), `${t} ${line}`]);
+    // Candidate-type logging below can emit several lines in the first
+    // second alone - a 10-line buffer could scroll the actually-diagnostic
+    // "ICE servers:"/"connectionState=failed" lines out of view before
+    // there's a chance to screenshot them.
+    setVoiceLog(prev => [...prev.slice(-39), `${t} ${line}`]);
   };
   const shortId = (id: string) => id.slice(0, 6);
 
@@ -2322,7 +2326,18 @@ function useVoiceChat(roomId: string | null, session: Session) {
     pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
     localStreamRef.current?.getTracks().forEach(t => pc!.addTrack(t, localStreamRef.current!));
     pc.onicecandidate = (e) => {
-      if (e.candidate) send({ type: "ice", from: session.user.id, to: otherId, candidate: e.candidate });
+      if (e.candidate) {
+        // candidate.type tells us what kind of path was even found: "host"
+        // (local network), "srflx" (STUN, direct-but-NAT-mapped), or "relay"
+        // (TURN). If only "host"/"srflx" ever show up here for a pair on
+        // different networks, that's the whole story for why it later fails
+        // - no relay candidate means no fallback path exists once a direct
+        // route isn't reachable.
+        logVoice(`peer(${shortId(otherId)}): ice candidate type=${e.candidate.type}`);
+        send({ type: "ice", from: session.user.id, to: otherId, candidate: e.candidate });
+      } else {
+        logVoice(`peer(${shortId(otherId)}): ice gathering complete`);
+      }
     };
     pc.ontrack = (e) => {
       logVoice(`peer(${shortId(otherId)}): ontrack fired`);
@@ -2487,6 +2502,17 @@ function useVoiceChat(roomId: string | null, session: Session) {
       const iceRes = await callGameAction(rid, "getIceServers", {});
       if (roomIdRef.current !== rid) { disableVoice(); return; }
       if (iceRes?.iceServers) iceServersRef.current = iceRes.iceServers;
+      // A connection that can't find a direct path (different networks,
+      // mobile carrier NAT, restrictive Wi-Fi) needs a TURN relay to work at
+      // all - STUN alone only reveals the public address, it can't relay
+      // media. If the server only ever hands back its STUN-only fallback
+      // (TURN_HOST/TURN_SHARED_SECRET unset, or the TURN add-on down), every
+      // such pair fails after the ICE timeout with no other symptom. Logging
+      // which kinds were actually received turns "it failed" into "it never
+      // had a relay to fall back to" - a fixable, checkable server issue -
+      // versus a genuine network-specific ICE failure.
+      const hasTurn = iceServersRef.current.some((s: any) => (Array.isArray(s.urls) ? s.urls : [s.urls]).some((u: string) => u?.startsWith("turn:")));
+      logVoice(`ICE servers: ${iceServersRef.current.length} total, TURN ${hasTurn ? "present" : "MISSING - STUN-only fallback"}`);
 
       const ch = supabase.channel(`voice:${rid}`, { config: { broadcast: { self: false } } });
       channelRef.current = ch;
@@ -3087,7 +3113,8 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
       position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
       background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
       fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
-      pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+      maxHeight: "40vh", overflowY: "auto" as const,
+      pointerEvents: "auto" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
     }}>
       {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
     </div>,
@@ -4303,7 +4330,8 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
             position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
             background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
             fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
-            pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+            maxHeight: "40vh", overflowY: "auto" as const,
+            pointerEvents: "auto" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
           }}>
             {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
           </div>,
@@ -4421,7 +4449,8 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
             position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
             background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
             fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
-            pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+            maxHeight: "40vh", overflowY: "auto" as const,
+            pointerEvents: "auto" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
           }}>
             {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
           </div>,
