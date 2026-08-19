@@ -3793,7 +3793,18 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         position: "absolute" as const, bottom: "max(8px, env(safe-area-inset-bottom))", left: 0, right: 0, zIndex: 10,
         display: "flex", flexDirection: "column" as const, alignItems: "center",
       }}>
-        <div style={{ display: "flex", gap: "clamp(3px,1vw,6px)", flexWrap: "nowrap", justifyContent: myHand.length > 6 ? "flex-start" : "center", overflowX: "auto", alignSelf: "stretch", width: "100%", maxWidth: "100vw", minWidth: 0, boxSizing: "border-box" as const, padding: "0 8px 8px", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
+        <div style={{
+          display: "flex", gap: "clamp(3px,1vw,6px)", flexWrap: "nowrap", justifyContent: myHand.length > 6 ? "flex-start" : "center",
+          // Setting overflowX without an explicit overflowY makes browsers
+          // treat the unset axis as "auto" too, not "visible" (CSS Overflow
+          // spec) - so a selected card's translateY(-16px) lift/scale(1.05)
+          // got silently clipped by this row's own top edge. 28px of padding
+          // reserves headroom for that lift inside the row's own clip box;
+          // the matching negative margin cancels the padding's own layout
+          // push so the resting (unselected) hand position doesn't move.
+          overflowX: "auto", marginTop: -28,
+          alignSelf: "stretch", width: "100%", maxWidth: "100vw", minWidth: 0, boxSizing: "border-box" as const, padding: "28px 8px 8px", WebkitOverflowScrolling: "touch",
+        } as React.CSSProperties}>
           {myHand.map((card: any) => (
             <CardView key={card.id} card={card}
               selected={selected === card.id}
