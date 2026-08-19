@@ -661,12 +661,27 @@ async function advanceTrick(supabase, roomId, room, players) {
   // touching any player state. A duplicate playCard request for the trick-
   // completing card (double-tap, network retry, multi-tab) that loses this
   // race returns immediately below, instead of double-incrementing
-  // tricks_won or double-writing current_trick/current_player. Only
-  // current_player/phase move here - the rest of the trickEnd fields
-  // (current_trick, pending_*, etc.) depend on tricks_won/isLastTrick and
-  // are written by the full update further down, once this claim succeeds.
+  // tricks_won or double-writing current_trick/current_player.
+  //
+  // current_trick/last_trick_winner/last_trick_cards are written together
+  // with phase right here, not split into a later "full update" - winnerIdx
+  // and the completed trick are both already known at this point, nothing
+  // about them depends on the tricks_won/isLastTrick lookups below. Writing
+  // phase:"trickEnd" without them in the same statement (the previous
+  // shape of this claim) left a real, guaranteed-to-happen gap where
+  // realtime clients would see phase already flipped but last_trick_cards
+  // still holding the *previous* trick - the client's
+  // `phase==="trickEnd" ? (last_trick_cards ?? current_trick) : current_trick`
+  // picks the stale-but-non-null last_trick_cards over the fresh
+  // current_trick, so every single trick after the first in a round
+  // visibly flashed the trick before it, until the later write caught up.
+  // Only the pending_* follow-up fields (which genuinely need the fresh
+  // DB read below) remain in the second write further down.
   const { data: trickClaim } = await supabase.from("rooms")
-    .update({ phase: "trickEnd", current_player: winnerIdx })
+    .update({
+      phase: "trickEnd", current_player: winnerIdx,
+      current_trick: [], last_trick_winner: winnerIdx, last_trick_cards: trick,
+    })
     .eq("id", roomId)
     .eq("current_player", room.current_player)
     .select("id");
@@ -705,12 +720,11 @@ async function advanceTrick(supabase, roomId, room, players) {
     ? witchPlayerIdx
     : null;
 
-  // Exclusivity was already claimed above (current_player -> winnerIdx) -
-  // this just fills in the rest of the trickEnd fields, no CAS needed here.
+  // Exclusivity, phase, and the trick display fields (current_trick/
+  // last_trick_winner/last_trick_cards) were already written atomically in
+  // the claim above - this only adds the pending_* follow-up fields, which
+  // genuinely depend on the fresh tricks_won/isLastTrick computation above.
   await supabase.from("rooms").update({
-    current_trick: [], current_player: winnerIdx,
-    last_trick_winner: winnerIdx, last_trick_cards: trick,
-    phase: "trickEnd",
     // If both Jongleur (7½) and Wolke (9¾) are in the trick,
     // Jongleur resolves first (official FAQ). Defer rainbow9 until after rainbow7 is done.
     // On the last trick there are no cards left to pass, so Jongleur's
