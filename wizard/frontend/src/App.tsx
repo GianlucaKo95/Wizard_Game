@@ -4191,104 +4191,200 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
 
   const log: string[] = room.log ?? [];
   const trick: any[] = room.phase === "trickEnd" ? (room.last_trick_cards ?? room.current_trick ?? []) : (room.current_trick ?? []);
-  const voiceNameFor = (id: string) => id === session.user.id ? "Du" : (players.find((p: any) => p.user_id === id)?.ai_name ?? "Spieler");
+  // Purely a layout anchor (seat 0 drawn "closest to camera"), never a hand-
+  // ownership marker: unlike GameRoom, no seat here ever renders a real card
+  // for anyone (visible_hand is unconditionally null for spectators), so the
+  // clamping this helper does for a missing "my seat" can't leak anything -
+  // there's nothing seat-specific left for it to mislabel.
+  const seats = getSeatPositions(players, 0);
+  const n = players.length;
+
+  const seatPos = (position: string): React.CSSProperties => {
+    switch (position) {
+      case "top":         return { top: "clamp(78px,11vh,140px)", left: "50%", transform: "translateX(-50%)" };
+      case "top-left":    return { top: "clamp(78px,11vh,140px)", left: "22%", transform: "translateX(-50%)" };
+      case "top-right":   return { top: "clamp(78px,11vh,140px)", left: "78%", transform: "translateX(-50%)" };
+      case "left":        return { top: "46%", left: "3%",  transform: "translateY(-50%)" };
+      case "right":       return { top: "46%", left: "97%", transform: "translate(-100%,-50%)" };
+      default:             return { bottom: "clamp(18px,6vh,60px)", left: "50%", transform: "translateX(-50%)" };
+    }
+  };
+
+  const PlayerSeat = ({ p, position }: { p: any; position: string }) => {
+    const isActive = room.phase === "playing" && Number(room.current_player) === Number(p.player_index);
+    const hasBid = p.bid !== null;
+    const hasPlayed = trick.some((t: any) => t.playerIndex === p.player_index);
+    return (
+      <div style={{ position: "absolute" as const, ...seatPos(position), zIndex: 5, display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 4 }}>
+        <div style={{
+          background: isActive ? `linear-gradient(135deg, rgba(38,48,41,0.96), rgba(58,75,64,0.92))` : "rgba(5,10,20,0.88)",
+          border: `${isActive ? "2px" : "1px"} solid ${isActive ? C.gold : "rgba(201,168,76,0.3)"}`,
+          boxShadow: isActive ? `0 0 22px ${C.gold}88` : "0 2px 8px rgba(0,0,0,0.5)",
+          borderRadius: 10, padding: "5px 9px", minWidth: "clamp(72px,12vmin,150px)",
+          transition: "all 0.3s ease",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+            <span style={{ fontSize: 10 }}>{p.is_ai ? "🤖" : "👤"}</span>
+            <span style={{ ...cinzel, fontSize: "clamp(9px,1.6vmin,16px)", color: isActive ? C.gold : "#fff", fontWeight: 700, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis", maxWidth: "clamp(70px,10vmin,120px)" }}>
+              {p.ai_name}
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 3, marginLeft: "auto" }}>
+              {!p.is_ai && voice.participantIds.has(p.user_id) && (
+                <IconMic size={9} style={{ color: voice.speakingIds.has(p.user_id) ? C.success : "rgba(255,255,255,0.4)", flexShrink: 0 }} />
+              )}
+              {hasPlayed && <span style={{ fontSize: 9, color: C.gold }}>✓</span>}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span style={{ ...cinzel, fontSize: "clamp(11px,2vmin,18px)", color: "#F4D03F", fontWeight: 700 }}>{p.score}</span>
+            {hasBid ? (
+              <TrickPile tricksWon={p.tricks_won} bid={p.bid} />
+            ) : room.phase === "bidding" ? (
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)" }}>…</span>
+            ) : null}
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginLeft: "auto" }}>🂠{p.hand_count ?? 0}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div style={{ ...tableStyle, gap: "clamp(12px,2vw,20px)" }} className="fade-in">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: 720 }}>
-        <button onClick={onLeave} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <IconArrowLeft size={13} /> Zuschauen beenden
-        </button>
-        <div style={{ ...cinzel, fontSize: 12, color: C.ivoryDim, display: "flex", alignItems: "center", gap: 6 }}>
-          👁 {room.code} · Runde {room.round}/{room.max_rounds}
-        </div>
-      </div>
+    <div className="fade-in" style={{ height: "100dvh", width: "100%", overflow: "hidden", position: "relative" as const, background: C.bgDark }}>
+      {/* Status bar safe-area strip - matches table color */}
+      <div style={{ position: "absolute" as const, top: 0, left: 0, right: 0, height: "env(safe-area-inset-top)", background: "#101713", zIndex: 16 }} />
 
-      {room.trump_card && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-          <div style={{ ...cinzel, fontSize: 11, color: C.gold }}>TRUMPF</div>
-          <CardView card={room.trump_card} small werewolfSuit={room.werewolf_suit} />
-          {room.trump_suit && (
-            <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: 13, fontWeight: 700 }}>
-              {SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}
+      <div style={{ position: "absolute" as const, top: "env(safe-area-inset-top)", left: 0, right: 0, bottom: 0 }}>
+        {/* Table surface: same wood-grain treatment as the live game table */}
+        <div style={{ position: "absolute" as const, inset: 0, pointerEvents: "none" as const, background: "radial-gradient(ellipse at 50% 35%, #3b4a41 0%, #232e28 55%, #101713 100%)" }} />
+        <div style={{ position: "absolute" as const, inset: 0, pointerEvents: "none" as const, backgroundImage: "repeating-linear-gradient(89deg, rgba(0,0,0,0.16) 0px, transparent 2px, transparent 30px, rgba(255,255,255,0.05) 33px, transparent 36px, transparent 70px), repeating-linear-gradient(91deg, rgba(0,0,0,0.10) 0px, transparent 1px, transparent 55px, rgba(255,255,255,0.03) 57px, transparent 60px, transparent 118px)" }} />
+        <div style={{ position: "absolute" as const, inset: 0, pointerEvents: "none" as const, opacity: 0.5, mixBlendMode: "overlay" as const, backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")" }} />
+        <div style={{ position: "absolute" as const, inset: 0, pointerEvents: "none" as const, background: "radial-gradient(ellipse at 50% 40%, transparent 0%, transparent 45%, rgba(0,0,0,0.38) 100%)" }} />
+
+        {/* Header */}
+        <div style={{ position: "absolute" as const, top: 0, left: 0, right: 0, zIndex: 15, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px 6px 12px", background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%)" }}>
+          <button onClick={() => { callGameAction(roomId, "leaveSpectating", {}); onLeave(); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.65)", cursor: "pointer", fontSize: "clamp(10px,1.8vmin,14px)", display: "inline-flex", alignItems: "center", gap: 4, ...cinzel }}>
+            <IconArrowLeft size={13} /> ZUSCHAUEN BEENDEN
+          </button>
+          <div style={{ ...cinzel, fontSize: "clamp(11px,2vmin,18px)", color: C.gold, letterSpacing: "clamp(1px,0.4vmin,4px)", display: "flex", alignItems: "center", gap: 6 }}>
+            👁 {room.code} · RUNDE {room.round}/{room.max_rounds}
+          </div>
+          <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+            <button onClick={voice.enabled ? voice.toggleMute : voice.enableVoice} disabled={voice.connecting}
+              style={{ ...goldBtn(voice.enabled && !voice.muted), padding: "4px 7px", display: "flex", opacity: voice.connecting ? 0.5 : 1 }}
+              title={!voice.enabled ? "Sprachchat beitreten" : voice.muted ? "Stummschaltung aufheben" : "Stummschalten"}>
+              {voice.enabled && voice.muted ? <IconMicOff size={15} /> : <IconMic size={15} />}
+            </button>
+            {voice.enabled && (
+              <button onClick={voice.disableVoice} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: "4px 7px", borderRadius: 6, display: "flex" }} title="Sprachchat verlassen"><IconX size={15} /></button>
+            )}
+            <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
+          </div>
+        </div>
+
+        {voice.error && (
+          <div style={{ position: "absolute" as const, top: 44, left: "50%", transform: "translateX(-50%)", zIndex: 15, ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080", whiteSpace: "nowrap" as const }}>
+            {voice.error}
+          </div>
+        )}
+
+        {/* All seats - every player gets the same glowing-when-active pill, none singled out as "mine" */}
+        {seats.map((s: any) => <PlayerSeat key={s.player.id} p={s.player} position={s.position} />)}
+
+        {/* Trumpf - fixed corner */}
+        {room.trump_card && (() => {
+          const trumpHasChosenSuit = room.trump_card.type === "wizard" ||
+            ["wizardfool", "vampire", "rainbow9", "dragon", "rainbow7"].includes(room.trump_card.specialType);
+          return (
+            <div style={{ position: "absolute" as const, bottom: "26%", left: "clamp(10px,3vw,40px)", textAlign: "center", zIndex: 4 }}>
+              <div style={{ position: "relative" as const, display: "inline-block" }}>
+                {room.trump_suit && trumpHasChosenSuit && (
+                  <div style={{ position: "absolute" as const, top: -10, left: "50%", transform: "translateX(-50%)", background: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], color: "#fff", borderRadius: 20, padding: "2px 8px", fontSize: "clamp(8px,1.2vmin,12px)", fontWeight: 700, ...cinzel, whiteSpace: "nowrap" as const, zIndex: 5, boxShadow: "0 2px 6px rgba(0,0,0,0.5)" }}>
+                    {SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}
+                  </div>
+                )}
+                <CardView card={room.trump_card} werewolfSuit={room.werewolf_suit} />
+              </div>
+              <div style={{ ...cinzel, fontSize: "clamp(7px,1vmin,10px)", color: C.gold, marginTop: 3 }}>TRUMPF</div>
+              {room.trump_suit && !trumpHasChosenSuit && (
+                <div style={{ color: SUIT_COLORS[room.trump_suit as keyof typeof SUIT_COLORS], fontSize: "clamp(10px,1.5vmin,14px)", fontWeight: 700 }}>{SUIT_SYMBOLS[room.trump_suit as keyof typeof SUIT_SYMBOLS]}</div>
+              )}
+              {room.werewolf_suit && <div style={{ color: SUIT_COLORS[room.werewolf_suit as keyof typeof SUIT_COLORS], fontSize: "clamp(10px,1.5vmin,14px)" }}>🐺 {SUIT_SYMBOLS[room.werewolf_suit as keyof typeof SUIT_SYMBOLS]}</div>}
+            </div>
+          );
+        })()}
+
+        {/* Trick cards - center of table, same seat-relative positioning as the live game */}
+        <div style={{ position: "absolute" as const, top: "44%", left: "50%", transform: "translate(-50%,-50%)", width: "60%", height: "26%", zIndex: 3 }}>
+          {trick.length === 0 && room.phase === "playing" && (
+            <div style={{ position: "absolute" as const, top: "50%", left: "50%", transform: "translate(-50%,-50%)", color: "rgba(255,255,255,0.25)", fontSize: 11, textAlign: "center", whiteSpace: "nowrap" as const }}>
+              {players[room.current_player]?.ai_name} beginnt…
             </div>
           )}
-        </div>
-      )}
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", minHeight: 84 }}>
-        {trick.length === 0 && room.phase === "playing" && (
-          <div style={{ color: C.ivoryDim, fontSize: 12, alignSelf: "center" }}>Warte auf den ersten Stich…</div>
-        )}
-        {trick.map((t: any, i: number) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            <CardView card={t.card} small werewolfSuit={room.werewolf_suit} />
-            <div style={{ fontSize: 10, color: C.ivoryDim }}>{players[t.playerIndex]?.ai_name ?? players[t.playerIndex]?.username ?? `Spieler ${t.playerIndex + 1}`}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, width: "100%", maxWidth: 720 }}>
-        {players.map((p: any) => (
-          <div key={p.id} style={{ ...glass({ padding: 10 }), display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.connected || p.is_ai ? C.success : "rgba(255,255,255,0.25)", flexShrink: 0 }} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: C.ivory, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {p.ai_name ?? p.username ?? `Spieler ${p.player_index + 1}`}
-              </span>
-              {Number(room.current_player) === Number(p.player_index) && room.phase === "playing" && (
-                <span style={{ fontSize: 10, color: C.gold }}>●</span>
-              )}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12, color: C.ivoryDim }}>
-              <TrickPile tricksWon={p.tricks_won ?? 0} bid={p.bid} />
-              <span>{p.score ?? 0} Pkt.</span>
-            </div>
-            <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-              {Array.from({ length: p.hand_count ?? 0 }, (_, i) => (
-                <CardView key={i} card={{ id: `back-${p.player_index}-${i}`, type: "hidden" } as any} faceDown small />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-        {voice.enabled && voice.participantIds.size > 0 && (
-          <div style={{ ...glass({ padding: "8px 12px" }), display: "flex", flexDirection: "column", gap: 4 }}>
-            {[session.user.id, ...voice.participantIds].map((id: string) => (
-              <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: voice.speakingIds.has(id) ? C.success : C.ivoryDim }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: voice.speakingIds.has(id) ? C.success : "rgba(255,255,255,0.25)" }} />
-                {voiceNameFor(id)}
+          {trick.map((t: any) => {
+            const offset = (t.playerIndex - 0 + n) % n;
+            const isBottom = offset === 0;
+            let pos: React.CSSProperties = {};
+            if (n <= 3) {
+              if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
+              else if (offset === 1) pos = { top: "0%", left: "30%", transform: "translateX(-50%)" };
+              else                   pos = { top: "0%", left: "70%", transform: "translateX(-50%)" };
+            } else if (n === 4) {
+              if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
+              else if (offset === 1) pos = { top: "50%", left: "0%", transform: "translateY(-50%)" };
+              else if (offset === 2) pos = { top: "0%", left: "50%", transform: "translateX(-50%)" };
+              else                   pos = { top: "50%", right: "0%", transform: "translateY(-50%)" };
+            } else if (n === 5) {
+              if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
+              else if (offset === 1) pos = { top: "50%", left: "0%", transform: "translateY(-50%)" };
+              else if (offset === 2) pos = { top: "0%", left: "25%", transform: "translateX(-50%)" };
+              else if (offset === 3) pos = { top: "0%", left: "75%", transform: "translateX(-50%)" };
+              else                   pos = { top: "50%", right: "0%", transform: "translateY(-50%)" };
+            } else {
+              if (isBottom)          pos = { bottom: "0%", left: "50%", transform: "translateX(-50%)" };
+              else if (offset === 1) pos = { top: "50%", left: "0%", transform: "translateY(-50%)" };
+              else if (offset === 2) pos = { top: "0%", left: "25%", transform: "translateX(-50%)" };
+              else if (offset === 3) pos = { top: "0%", left: "50%", transform: "translateX(-50%)" };
+              else if (offset === 4) pos = { top: "0%", left: "75%", transform: "translateX(-50%)" };
+              else                   pos = { top: "50%", right: "0%", transform: "translateY(-50%)" };
+            }
+            const isWinner = room.phase === "trickEnd" && room.last_trick_winner === t.playerIndex;
+            const isBombed = room.phase === "trickEnd" && t.card.specialType === "bomb";
+            return (
+              <div key={t.playerIndex} style={{ position: "absolute" as const, textAlign: "center", ...pos }}>
+                <div style={{ fontSize: 8, color: "rgba(255,255,255,0.6)", marginBottom: 2, ...cinzel }}>{players[t.playerIndex]?.ai_name}</div>
+                <div style={{ position: "relative" as const, animation: isBombed ? "bombShake 0.5s ease-in-out 2" : undefined }}>
+                  <CardView card={t.card} winner={isWinner} small />
+                  {isBombed && (
+                    <div style={{ position: "absolute" as const, inset: 0, pointerEvents: "none" as const, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 6 }}>
+                      <div style={{ width: "160%", height: "160%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,225,140,0.95) 0%, rgba(255,140,40,0.85) 35%, rgba(220,40,20,0.6) 60%, transparent 75%)", animation: "bombBurst 0.7s ease-out forwards" }} />
+                    </div>
+                  )}
+                </div>
+                {t.card.specialType === "wizardfool" && (
+                  <div style={{ ...cinzel, fontSize: 7, marginTop: 2, color: t.card.type === "wizard" ? C.gold : "#95A5A6" }}>
+                    {t.card.type === "wizard" ? "🧙 Zauberer" : "🃏 Narr"}
+                  </div>
+                )}
+                {(t.card.specialType === "rainbow7" || t.card.specialType === "rainbow9") && t.card.suit && (
+                  <div style={{ ...cinzel, fontSize: "clamp(10px,1.5vmin,14px)", fontWeight: 700, marginTop: 2, color: SUIT_COLORS[t.card.suit as keyof typeof SUIT_COLORS] }}>
+                    {SUIT_SYMBOLS[t.card.suit as keyof typeof SUIT_SYMBOLS]}
+                  </div>
+                )}
               </div>
+            );
+          })}
+        </div>
+
+        {/* Log */}
+        {showLog && (
+          <div style={{ position: "absolute" as const, top: 44, right: 12, zIndex: 20, ...glass({ padding: 8 }), fontSize: "var(--text-xs)", color: C.ivoryDim, width: "min(280px, 70vw)", maxHeight: "50vh", overflowY: "auto" as const }}>
+            {log.map((l: string, i: number) => (
+              <div key={i} style={{ padding: "2px 0", borderBottom: "1px solid rgba(201,168,76,0.06)" }}>{l}</div>
             ))}
           </div>
         )}
-        {!voice.enabled ? (
-          <button onClick={voice.enableVoice} disabled={voice.connecting} style={{ ...goldBtn(false), padding: "8px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, opacity: voice.connecting ? 0.5 : 1 }}>
-            <IconMic size={14} /> {voice.connecting ? "Verbinde…" : "Sprachchat beitreten"}
-          </button>
-        ) : (
-          <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={voice.toggleMute} style={{ ...goldBtn(!voice.muted), padding: "8px 12px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
-              {voice.muted ? <IconMicOff size={14} /> : <IconMic size={14} />} {voice.muted ? "Stumm" : "Live"}
-            </button>
-            <button onClick={voice.disableVoice} style={{ ...glass({ padding: "8px 10px" }), border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", alignItems: "center" }} title="Sprachchat verlassen"><IconX size={15} /></button>
-          </div>
-        )}
-        {voice.error && <div style={{ ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080" }}>{voice.error}</div>}
       </div>
-
-      <button onClick={() => setShowLog(s => !s)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
-        <IconHistory size={13} /> {showLog ? "Verlauf ausblenden" : "Verlauf anzeigen"}
-      </button>
-      {showLog && (
-        <div style={{ ...glass({ padding: 8 }), fontSize: 11, color: C.ivoryDim, width: "100%", maxWidth: 720, maxHeight: 200, overflowY: "auto" }}>
-          {log.map((l: string, i: number) => (
-            <div key={i} style={{ padding: "2px 0", borderBottom: "1px solid rgba(201,168,76,0.06)" }}>{l}</div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
