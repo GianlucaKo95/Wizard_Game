@@ -4201,6 +4201,74 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
     return <div style={{ ...tableStyle, justifyContent: "center" }}><div style={{ color: C.ivoryDim }}>Lade Partie…</div></div>;
   }
 
+  // Warteraum has no trump, no trick, no seated players yet, and "current
+  // player" is meaningless pre-deal - GameRoom itself doesn't reuse the
+  // wood-grain table for this phase either (its own lobby is a plain
+  // centered screen, see the `room.phase === "lobby"` branch above), so a
+  // spectator watching before the game starts gets that same simpler screen
+  // instead of an empty table with a misleading "Runde 0" header.
+  if (room.phase === "lobby") {
+    return (
+      <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
+        <button onClick={() => { callGameAction(roomId, "leaveSpectating", {}); onLeave(); }} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <IconArrowLeft size={13} /> Zuschauen beenden
+        </button>
+        <div style={{ ...cinzel, fontSize: 24, color: C.gold, display: "flex", alignItems: "center", gap: 10 }}>
+          👁 Warteraum
+        </div>
+        <div style={{ ...glass({ padding: "8px 24px" }), ...cinzel, fontSize: 20, letterSpacing: 6, color: C.goldLight }}>{room.code}</div>
+        <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim, display: "flex", alignItems: "center", gap: 6 }}>
+          {room?.edition === "anniversary" ? <>⚡ 30 Jahre Edition</> : <><CardIcon size={11}><WizardArt index={0} /></CardIcon> Classic Edition</>}
+        </div>
+
+        <div style={{ ...glass({ padding: 16 }), width: "min(320px, 92vw)" }}>
+          {players.map((p: any) => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
+              <span style={{ fontSize: 15 }}>{p.is_ai ? "🤖" : "👤"}</span>
+              <div style={{ ...cinzel, fontSize: 13, color: C.ivory }}>
+                {p.ai_name}
+                {p.player_index === 0 && <span style={{ color: C.ivoryDim, fontWeight: 400 }}> (Host)</span>}
+              </div>
+              {!p.is_ai && (
+                <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: p.connected ? C.success : "rgba(255,255,255,0.25)" }} title={p.connected ? "Verbunden" : "Getrennt"} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ color: C.ivoryDim, fontSize: 13 }}>Wartet auf den Host…</div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+          {!voice.enabled ? (
+            <button onClick={voice.enableVoice} disabled={voice.connecting} style={{ ...goldBtn(false), padding: "8px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, opacity: voice.connecting ? 0.5 : 1 }}>
+              <IconMic size={14} /> {voice.connecting ? "Verbinde…" : "Sprachchat beitreten"}
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={voice.toggleMute} style={{ ...goldBtn(!voice.muted), padding: "8px 12px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {voice.muted ? <IconMicOff size={14} /> : <IconMic size={14} />} {voice.muted ? "Stumm" : "Live"}
+              </button>
+              <button onClick={voice.disableVoice} style={{ ...glass({ padding: "8px 10px" }), border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", alignItems: "center" }} title="Sprachchat verlassen"><IconX size={15} /></button>
+            </div>
+          )}
+          {voice.error && <div style={{ ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080" }}>{voice.error}</div>}
+        </div>
+
+        {voice.voiceLog.length > 0 && createPortal(
+          <div style={{
+            position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
+            background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
+            fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
+            pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+          }}>
+            {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
+          </div>,
+          document.body
+        )}
+      </div>
+    );
+  }
+
   const log: string[] = room.log ?? [];
   const trick: any[] = room.phase === "trickEnd" ? (room.last_trick_cards ?? room.current_trick ?? []) : (room.current_trick ?? []);
   // Purely a layout anchor (seat 0 drawn "closest to camera"), never a hand-
