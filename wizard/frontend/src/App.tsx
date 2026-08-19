@@ -2340,6 +2340,15 @@ function useVoiceChat(roomId: string | null, session: Session) {
         audioElsRef.current.set(otherId, el);
       }
       el.srcObject = e.streams[0];
+      // The `autoplay` attribute alone is unreliable for an element created
+      // outside the direct call stack of a user gesture (it's set here,
+      // inside an async ontrack callback, not inside the click handler that
+      // started the connection) - some browsers silently never start
+      // playback rather than throwing, which is indistinguishable from "no
+      // audio arrived" without this. Calling play() explicitly either starts
+      // it or surfaces the rejection (typically NotAllowedError) in the log
+      // instead of a permanently silent "connected" peer.
+      el.play().catch(err => logVoice(`peer(${shortId(otherId)}): audio play() failed: ${(err as any)?.name ?? err}`));
       setParticipantIds(prev => new Set(prev).add(otherId));
       startSpeakingDetection(e.streams[0], otherId);
     };
@@ -2558,6 +2567,19 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   const [modalMinimized, setModalMinimized] = useState(true);
   const [room, setRoom] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
+  // Who's watching - "niemand wird unbemerkt beobachtet". room_spectators
+  // is now readable for any player seated in the same room (see migration
+  // 015), so this is a plain fetch, not a new security surface.
+  const [showSpectators, setShowSpectators] = useState(false);
+  const [spectators, setSpectators] = useState<{ user_id: string; username: string }[]>([]);
+  const loadSpectators = useCallback(async () => {
+    const { data: rows, error } = await supabase.from("room_spectators").select("user_id").eq("room_id", roomId);
+    if (error) { console.error("[loadSpectators] fetch failed:", error.message); return; }
+    if (!rows?.length) { setSpectators([]); return; }
+    const ids = rows.map((r: any) => r.user_id);
+    const { data: profs } = await supabase.from("profiles").select("id, username").in("id", ids);
+    setSpectators(ids.map(id => ({ user_id: id, username: profs?.find((p: any) => p.id === id)?.username ?? "Spieler" })));
+  }, [roomId]);
   const [myIdx, setMyIdx] = useState(-1);
   const [selected, setSelected] = useState<string | null>(null);
   // Card ids are derived purely from suit+value (see buildDeck()), not per-
@@ -2762,6 +2784,14 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
       }
     });
   }, [roomId]);
+
+  useEffect(() => {
+    loadSpectators();
+    const ch = supabase.channel(`spectator-watch:${roomId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "room_spectators", filter: `room_id=eq.${roomId}` }, () => loadSpectators())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [roomId, loadSpectators]);
 
   useEffect(() => {
     // Both fetches below silently no-op on failure (RLS hiccup, transient
@@ -3047,6 +3077,43 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     </div>
   );
 
+  // Voice-chat diagnostic overlay - see voiceLog in useVoiceChat. Was only
+  // ever rendered from the main in-game return below, so a Warteraum/
+  // Rundenende repro (this is where voice chat actually gets turned on, via
+  // voicePanel above) never had logs to look at. A portal, so identical
+  // regardless of which phase-specific return renders it from.
+  const voiceDiagnostics = voice.voiceLog.length > 0 && createPortal(
+    <div style={{
+      position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
+      background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
+      fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
+      pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+    }}>
+      {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
+    </div>,
+    document.body
+  );
+
+  // "Niemand wird unbemerkt beobachtet" - a small badge, present regardless
+  // of phase, so spectators are never invisible to the people they're
+  // watching. Tap to expand the names (loadSpectators() resolves them from
+  // profiles once, not per-render).
+  const spectatorBadge = spectators.length > 0 && (
+    <div style={{ position: "relative" as const }}>
+      <button onClick={() => setShowSpectators(s => !s)} style={{ ...goldBtn(showSpectators), padding: "4px 9px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 5 }}>
+        👁 {spectators.length}
+      </button>
+      {showSpectators && (
+        <div style={{ position: "absolute" as const, top: "calc(100% + 4px)", right: 0, zIndex: 25, ...glass({ padding: "8px 12px" }), whiteSpace: "nowrap" as const }}>
+          <div style={{ ...cinzel, fontSize: 9, color: C.gold, letterSpacing: 1, marginBottom: 4 }}>ZUSCHAUER</div>
+          {spectators.map(s => (
+            <div key={s.user_id} style={{ fontSize: 12, color: C.ivory, padding: "2px 0" }}>{s.username}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   // ── Lobby Phase ──
   if (room.phase === "lobby") {
     // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
@@ -3067,6 +3134,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim, display: "flex", alignItems: "center", gap: 6 }}>
           {room?.edition === "anniversary" ? <>⚡ 30 Jahre Edition</> : <><CardIcon size={11}><WizardArt index={0} /></CardIcon> Classic Edition</>}
         </div>
+        {spectatorBadge}
 
         {!showInvite ? (
           <button onClick={openInvitePicker} style={{ ...goldBtn(false), padding: "7px 16px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><IconUsers size={13} /> Freund einladen</button>
@@ -3144,6 +3212,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         ) : <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf den Host…</div>}
         {error && <div style={{ color: "#FF8080", fontSize: 12 }}>{error}</div>}
         {voicePanel}
+        {voiceDiagnostics}
       </div>
     );
   }
@@ -3232,7 +3301,9 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           {!isHost && <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf Host…</div>}
           <button onClick={() => window.location.reload()} style={{ ...goldBtn(false), padding: "12px 20px", fontSize: 12 }}>Raum verlassen</button>
         </div>
+        {spectatorBadge}
         {voicePanel}
+        {voiceDiagnostics}
       </div>
     );
   }
@@ -3581,27 +3652,12 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
             )}
           </button>
           <button onClick={() => setShowScoresheet(true)} style={{ ...goldBtn(false), padding: "4px 7px", display: "flex" }} title="Spielblatt"><IconClipboardList size={15} /></button>
+          {spectatorBadge}
           <button onClick={() => { if (confirm("Spiel verlassen?")) onLeave(); }} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: "4px 7px", borderRadius: 6, display: "flex" }} title="Verlassen"><IconX size={15} /></button>
         </div>
       </div>
 
-      {/* Temporary diagnostic overlay for the "3rd voice chat participant
-          can't be heard" bug report - see voiceLog in useVoiceChat above.
-          Two rounds of fixes for plausible causes didn't change the
-          reported symptom, so this logs the actual per-peer signaling and
-          connection-state lifecycle instead of guessing a third time.
-          Remove once the bug is confirmed fixed. */}
-      {voice.voiceLog.length > 0 && createPortal(
-        <div style={{
-          position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
-          background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
-          fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
-          pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
-        }}>
-          {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
-        </div>,
-        document.body
-      )}
+      {voiceDiagnostics}
 
       {/* Full screen table with seated players */}
       {(() => {
@@ -4189,6 +4245,74 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
     return <div style={{ ...tableStyle, justifyContent: "center" }}><div style={{ color: C.ivoryDim }}>Lade Partie…</div></div>;
   }
 
+  // Warteraum has no trump, no trick, no seated players yet, and "current
+  // player" is meaningless pre-deal - GameRoom itself doesn't reuse the
+  // wood-grain table for this phase either (its own lobby is a plain
+  // centered screen, see the `room.phase === "lobby"` branch above), so a
+  // spectator watching before the game starts gets that same simpler screen
+  // instead of an empty table with a misleading "Runde 0" header.
+  if (room.phase === "lobby") {
+    return (
+      <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
+        <button onClick={() => { callGameAction(roomId, "leaveSpectating", {}); onLeave(); }} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <IconArrowLeft size={13} /> Zuschauen beenden
+        </button>
+        <div style={{ ...cinzel, fontSize: 24, color: C.gold, display: "flex", alignItems: "center", gap: 10 }}>
+          👁 Warteraum
+        </div>
+        <div style={{ ...glass({ padding: "8px 24px" }), ...cinzel, fontSize: 20, letterSpacing: 6, color: C.goldLight }}>{room.code}</div>
+        <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim, display: "flex", alignItems: "center", gap: 6 }}>
+          {room?.edition === "anniversary" ? <>⚡ 30 Jahre Edition</> : <><CardIcon size={11}><WizardArt index={0} /></CardIcon> Classic Edition</>}
+        </div>
+
+        <div style={{ ...glass({ padding: 16 }), width: "min(320px, 92vw)" }}>
+          {players.map((p: any) => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
+              <span style={{ fontSize: 15 }}>{p.is_ai ? "🤖" : "👤"}</span>
+              <div style={{ ...cinzel, fontSize: 13, color: C.ivory }}>
+                {p.ai_name}
+                {p.player_index === 0 && <span style={{ color: C.ivoryDim, fontWeight: 400 }}> (Host)</span>}
+              </div>
+              {!p.is_ai && (
+                <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: p.connected ? C.success : "rgba(255,255,255,0.25)" }} title={p.connected ? "Verbunden" : "Getrennt"} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ color: C.ivoryDim, fontSize: 13 }}>Wartet auf den Host…</div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+          {!voice.enabled ? (
+            <button onClick={voice.enableVoice} disabled={voice.connecting} style={{ ...goldBtn(false), padding: "8px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, opacity: voice.connecting ? 0.5 : 1 }}>
+              <IconMic size={14} /> {voice.connecting ? "Verbinde…" : "Sprachchat beitreten"}
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={voice.toggleMute} style={{ ...goldBtn(!voice.muted), padding: "8px 12px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {voice.muted ? <IconMicOff size={14} /> : <IconMic size={14} />} {voice.muted ? "Stumm" : "Live"}
+              </button>
+              <button onClick={voice.disableVoice} style={{ ...glass({ padding: "8px 10px" }), border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", alignItems: "center" }} title="Sprachchat verlassen"><IconX size={15} /></button>
+            </div>
+          )}
+          {voice.error && <div style={{ ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080" }}>{voice.error}</div>}
+        </div>
+
+        {voice.voiceLog.length > 0 && createPortal(
+          <div style={{
+            position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
+            background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
+            fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
+            pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+          }}>
+            {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
+          </div>,
+          document.body
+        )}
+      </div>
+    );
+  }
+
   const log: string[] = room.log ?? [];
   const trick: any[] = room.phase === "trickEnd" ? (room.last_trick_cards ?? room.current_trick ?? []) : (room.current_trick ?? []);
   // Purely a layout anchor (seat 0 drawn "closest to camera"), never a hand-
@@ -4286,6 +4410,22 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
           <div style={{ position: "absolute" as const, top: 44, left: "50%", transform: "translateX(-50%)", zIndex: 15, ...glass({ padding: "6px 10px" }), fontSize: 11, color: "#FF8080", whiteSpace: "nowrap" as const }}>
             {voice.error}
           </div>
+        )}
+
+        {/* Same voice-chat diagnostic overlay as GameRoom - a spectator is
+            now a real participant in the mesh too, so a repro needs logs
+            from this side as much as from a player's. See voiceLog in
+            useVoiceChat above. Remove once the underlying bug is confirmed fixed. */}
+        {voice.voiceLog.length > 0 && createPortal(
+          <div style={{
+            position: "fixed" as const, top: "max(4px, env(safe-area-inset-top))", left: 4, right: 4, zIndex: 9999,
+            background: "rgba(0,0,0,0.82)", color: "#8FC7FF", fontFamily: "monospace",
+            fontSize: 9, lineHeight: 1.35, padding: "4px 6px", borderRadius: 6,
+            pointerEvents: "none" as const, whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const,
+          }}>
+            {voice.voiceLog.map((line, i) => <div key={i}>{line}</div>)}
+          </div>,
+          document.body
         )}
 
         {/* All seats - every player gets the same glowing-when-active pill, none singled out as "mine" */}
