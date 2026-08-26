@@ -184,6 +184,104 @@ const PAPER = {
 
 const paperHand: React.CSSProperties = { fontFamily: "'Shadows Into Light', cursive" };
 
+// ─── Redesign Design System (Menu/Social/Scoring screens) ─────────────────────
+// Flat, hard-edged Archivo/Cinzel system for Auth/Lobby/Waiting Room/Round End/
+// Rules/Friends/Stats/Profile — deliberately distinct from glass()/goldBtn()/
+// segBtn() above, which stay untouched because the game table keeps its
+// existing rounded/glass look exactly as-is. No border-radius anywhere here
+// (per spec: "bewusst kantig"). Colors reuse the same C tokens.
+const archivo: React.CSSProperties = { fontFamily: "'Archivo', system-ui, sans-serif" };
+
+const flatLabel: React.CSSProperties = {
+  ...archivo, fontWeight: 600, fontSize: 10, letterSpacing: "0.12em",
+  textTransform: "uppercase", color: C.ivoryDim,
+};
+
+const flatRule: React.CSSProperties = { height: 2, background: "rgba(201,168,76,0.45)" };
+const flatRuleThin: React.CSSProperties = { height: 1, background: "rgba(201,168,76,0.22)" };
+
+const flatScreen: React.CSSProperties = {
+  flex: 1, display: "flex", flexDirection: "column",
+  background: C.bgDark, color: C.ivory, minHeight: "100dvh",
+  boxSizing: "border-box",
+};
+
+const flatPrimaryBtn = (disabled = false): React.CSSProperties => ({
+  ...archivo, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+  gap: 8, background: C.gold, color: C.bgDark, border: "none", fontWeight: 800, fontSize: 15,
+  letterSpacing: "0.02em", padding: "17px 16px", cursor: disabled ? "default" : "pointer",
+  textAlign: "left", minHeight: 52, opacity: disabled ? 0.4 : 1,
+  WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
+});
+
+const flatGhostBtn = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+  ...archivo, background: "transparent", border: "2px solid rgba(201,168,76,0.4)", color: C.ivory,
+  fontWeight: 800, fontSize: 12, letterSpacing: "0.04em", padding: "11px 14px", cursor: "pointer",
+  textAlign: "left", minHeight: 44, WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
+  ...extra,
+});
+
+// Segmented pair (login/register, edition, player count …) - flat variant
+const flatSegTrack: React.CSSProperties = {
+  display: "flex", border: "2px solid rgba(201,168,76,0.4)",
+};
+const flatSegBtn = (active: boolean): React.CSSProperties => ({
+  ...archivo, flex: 1, padding: 12, minHeight: 44, fontWeight: 800, fontSize: 12,
+  background: active ? C.gold : "transparent", color: active ? C.bgDark : C.ivory,
+  border: "none", cursor: "pointer",
+  WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
+});
+
+const flatInput: React.CSSProperties = {
+  ...archivo, border: "2px solid rgba(201,168,76,0.3)", padding: "13px 12px",
+  fontWeight: 500, fontSize: 16, color: C.ivory, background: "transparent",
+  width: "100%", boxSizing: "border-box", outline: "none", WebkitAppearance: "none",
+};
+
+// Kennzahl-Feld (stat tile in a bordered grid)
+const flatStat: React.CSSProperties = {
+  padding: "13px 14px", borderRight: "1px solid rgba(201,168,76,0.22)",
+  borderBottom: "1px solid rgba(201,168,76,0.22)",
+};
+
+// List row (friends, waiting room seats, history …)
+const flatRow = (first = false): React.CSSProperties => ({
+  display: "flex", alignItems: "center", gap: 10, padding: "11px 0",
+  borderBottom: "1px solid rgba(201,168,76,0.22)",
+  ...(first ? { borderTop: "2px solid rgba(201,168,76,0.45)" } : {}),
+});
+
+// Bottom tab bar - only rendered on Startseite/Freunde/Statistik/Profil (per
+// spec, everywhere else - table, waiting room, rules, scoreboard, round end -
+// stays without it so those screens keep every pixel of vertical space).
+type TabKey = "home" | "friends" | "stats" | "profile";
+function TabBar({ active, onChange, friendBadge }: { active: TabKey; onChange: (t: TabKey) => void; friendBadge?: number }) {
+  const tabBtn = (on: boolean): React.CSSProperties => ({
+    flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+    padding: "9px 0 4px", border: "none", borderTop: `3px solid ${on ? C.gold : "transparent"}`,
+    background: "transparent", cursor: "pointer", ...archivo, fontWeight: 600, fontSize: 9,
+    letterSpacing: "0.09em", textTransform: "uppercase", color: on ? C.gold : C.ivoryDim,
+    minHeight: 44, position: "relative",
+  });
+  return (
+    <div style={{ borderTop: "2px solid rgba(201,168,76,0.45)", background: C.bgDark, display: "flex", paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
+      <button onClick={() => onChange("home")} style={tabBtn(active === "home")}><IconHome size={19} />Spielen</button>
+      <button onClick={() => onChange("friends")} style={tabBtn(active === "friends")}>
+        <IconUsers size={19} />Freunde
+        {!!friendBadge && (
+          <span style={{ position: "absolute", top: 2, right: "28%", background: C.error, color: "#fff", fontSize: 9, fontWeight: 700, minWidth: 15, height: 15, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+            {friendBadge}
+          </span>
+        )}
+      </button>
+      <button onClick={() => onChange("stats")} style={tabBtn(active === "stats")}><IconBarChart size={19} />Statistik</button>
+      <button onClick={() => onChange("profile")} style={tabBtn(active === "profile")}><IconSettings size={19} />Profil</button>
+    </div>
+  );
+}
+
+
+
 // Fine paper grain, tinted toward the ink-brown rather than neutral gray so it
 // reads as texture instead of TV static - reused on every paper surface below.
 const PAPER_GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.23  0 0 0 0 0.16  0 0 0 0 0.08  0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
@@ -242,6 +340,47 @@ const paperInput: React.CSSProperties = {
   outline: "none",
   fontFamily: "Inter, sans-serif",
   WebkitAppearance: "none",
+};
+
+// ─── Redesign Design System: Rechenblock (Papier-Palette, flach) ──────────────
+// Same "no border-radius" language as flat* above, just in PAPER colors -
+// this is the one screen in the redesign that's paper-themed, not dark.
+const paperFlatScreen: React.CSSProperties = {
+  flex: 1, display: "flex", flexDirection: "column",
+  background: PAPER.bg, color: PAPER.ink, boxSizing: "border-box",
+};
+const paperFlatLabel: React.CSSProperties = {
+  ...archivo, fontWeight: 600, fontSize: 10, letterSpacing: "0.12em",
+  textTransform: "uppercase", color: PAPER.inkDim,
+};
+const paperFlatRule: React.CSSProperties = { height: 2, background: "rgba(90,68,38,0.3)" };
+const paperFlatPrimaryBtn = (disabled = false): React.CSSProperties => ({
+  ...archivo, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+  gap: 8, background: PAPER.gold, color: PAPER.panel, border: "none", fontWeight: 800, fontSize: 15,
+  letterSpacing: "0.02em", padding: "17px 16px", cursor: disabled ? "default" : "pointer",
+  textAlign: "left", minHeight: 52, opacity: disabled ? 0.4 : 1,
+  WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
+});
+const paperFlatGhostBtn = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+  ...archivo, background: "transparent", border: `2px solid rgba(90,68,38,0.3)`, color: PAPER.ink,
+  fontWeight: 800, fontSize: 12, letterSpacing: "0.04em", padding: "11px 14px", cursor: "pointer",
+  textAlign: "left", minHeight: 44, WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
+  ...extra,
+});
+const paperFlatSegTrack: React.CSSProperties = { display: "flex", border: `2px solid rgba(90,68,38,0.3)` };
+const paperFlatSegBtn = (active: boolean): React.CSSProperties => ({
+  ...archivo, flex: 1, padding: 12, minHeight: 44, fontWeight: 800, fontSize: 12,
+  background: active ? PAPER.gold : "transparent", color: active ? PAPER.panel : PAPER.ink,
+  border: "none", cursor: "pointer",
+  WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
+});
+const paperFlatInput: React.CSSProperties = {
+  ...archivo, border: `1px solid rgba(90,68,38,0.3)`, padding: "12px 13px",
+  fontWeight: 500, fontSize: 15, color: PAPER.ink, background: PAPER.panel,
+  width: "100%", boxSizing: "border-box", outline: "none", WebkitAppearance: "none",
+};
+const paperFlatCard: React.CSSProperties = {
+  background: PAPER.panelAlt, borderTop: "2px solid rgba(90,68,38,0.3)", padding: "9px 10px", marginBottom: 6,
 };
 
 // Small framed portrait, keeping the card art's native 100:140 aspect ratio
@@ -358,47 +497,40 @@ function AuthScreen() {
   }
 
   return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 24 }} className="fade-in">
-      {/* Logo */}
-      <div style={{ textAlign: "center" }}>
-        <WizardMascot size={56} style={{ margin: "0 auto 10px" }} />
-        <div style={{ ...cinzel, fontSize: "clamp(32px,5vw,52px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(6px,1.5vw,12px)", textShadow: `0 0 40px ${C.accent}` }}>WIZZO</div>
-        <div style={{ fontSize: 12, color: C.ivoryDim, letterSpacing: 3, marginTop: 4 }}>DAS KARTENSPIEL</div>
+    <div style={{ ...flatScreen, padding: "74px 22px 30px" }} className="fade-in">
+      <div style={{ ...archivo, fontWeight: 800, fontSize: 52, lineHeight: 0.92, letterSpacing: "-0.03em", color: C.ivory }}>WIZZO</div>
+      <div style={{ width: 72, height: 5, background: C.gold, margin: "12px 0 10px" }} />
+      <div style={flatLabel}>Das Kartenspiel</div>
+      <div style={{ ...flatRule, margin: "26px 0 22px" }} />
+
+      <div style={{ ...flatSegTrack, marginBottom: 22 }}>
+        <button onClick={() => { setMode("login"); setError(""); }} style={flatSegBtn(mode === "login")}>Anmelden</button>
+        <button onClick={() => { setMode("register"); setError(""); }} style={flatSegBtn(mode === "register")}>Registrieren</button>
       </div>
 
-      <GoldDivider />
+      <div style={{ ...flatLabel, marginBottom: 6 }}>Name</div>
+      <input value={username} onChange={e => setUsername(e.target.value)}
+        placeholder="Dein Name" style={{ ...flatInput, marginBottom: 18 }} autoFocus
+        onKeyDown={e => e.key === "Enter" && handleSubmit()} />
 
-      {/* Name Card */}
-      <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        {/* Mode toggle */}
-        <div style={segTrack}>
-          {(["login","register"] as const).map(m => (
-            <button key={m} onClick={() => { setMode(m); setError(""); }} style={segBtn(mode === m)}>
-              {m === "login" ? "Anmelden" : "Registrieren"}
-            </button>
-          ))}
+      <div style={{ ...flatLabel, marginBottom: 6 }}>Passwort</div>
+      <input value={password} onChange={e => setPassword(e.target.value)}
+        placeholder="Passwort" type="password" style={{ ...flatInput, marginBottom: 26 }}
+        onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+
+      <button onClick={handleSubmit} disabled={loading} style={flatPrimaryBtn(loading)}>
+        {loading ? "…" : mode === "login" ? "ANMELDEN" : "KONTO ANLEGEN"}
+        <span style={{ fontSize: 18 }}>→</span>
+      </button>
+
+      {error && (
+        <div style={{ background: `${C.error}22`, border: `1px solid ${C.error}55`, padding: "8px 12px", fontSize: 12, color: "#FF8080", textAlign: "center", marginTop: 14 }}>
+          {error}
         </div>
+      )}
 
-        <input value={username} onChange={e => setUsername(e.target.value)}
-          placeholder="Dein Name" style={inputStyle} autoFocus
-          onKeyDown={e => e.key === "Enter" && handleSubmit()} />
-
-        <input value={password} onChange={e => setPassword(e.target.value)}
-          placeholder="Passwort" type="password" style={inputStyle}
-          onKeyDown={e => e.key === "Enter" && handleSubmit()} />
-
-        <button onClick={handleSubmit} disabled={loading} style={{
-          ...goldBtn(), width: "100%", padding: "12px 0", fontSize: 14,
-          opacity: loading ? 0.5 : 1,
-        }}>
-          {loading ? "…" : mode === "login" ? "✦ Anmelden" : "✦ Registrieren"}
-        </button>
-
-        {error && (
-          <div style={{ background: `${C.error}22`, border: `1px solid ${C.error}55`, borderRadius: 6, padding: "8px 12px", fontSize: 12, color: "#FF8080", textAlign: "center" }}>
-            {error}
-          </div>
-        )}
+      <div style={{ marginTop: "auto", ...archivo, fontWeight: 400, fontSize: 11, lineHeight: 1.5, color: C.ivoryDim, paddingTop: 20 }}>
+        Kein Passwort vergeben? Der Login funktioniert weiter mit dem Namen allein — genau wie heute.
       </div>
     </div>
   );
@@ -453,6 +585,7 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   const [nameSaving, setNameSaving] = useState(false);
   const [nameMsg, setNameMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
+  const [pwOpen, setPwOpen] = useState(false);
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
@@ -462,6 +595,18 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarMsg, setAvatarMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Header meta: "Seit ... · N Partien" - createdAt from profiles (own row,
+  // readable via RLS), games_played from user_stats (already aggregated).
+  const [profileMeta, setProfileMeta] = useState<{ createdAt: string | null; gamesPlayed: number }>({ createdAt: null, gamesPlayed: 0 });
+  useEffect(() => {
+    Promise.all([
+      supabase.from("profiles").select("created_at").eq("id", session.user.id).single(),
+      supabase.from("user_stats").select("games_played").eq("id", session.user.id).single(),
+    ]).then(([{ data: p }, { data: s }]) => {
+      setProfileMeta({ createdAt: p?.created_at ?? null, gamesPlayed: s?.games_played ?? 0 });
+    });
+  }, [session.user.id]);
 
   useEffect(() => {
     supabase.from("profiles").select("avatar_url").eq("id", session.user.id).single()
@@ -534,11 +679,6 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
     setAvatarUploading(false);
   }
 
-  const [stats, setStats] = useState<any>(null);
-  useEffect(() => {
-    supabase.from("user_stats").select("*").eq("id", session.user.id).single().then(({ data }) => setStats(data));
-  }, [session.user.id]);
-
   async function saveName() {
     const n = nameInput.trim();
     if (!n || n === username) return;
@@ -556,109 +696,107 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
     const { error } = await supabase.auth.updateUser({ password: pw1 });
     setPwSaving(false);
     if (error) setPwMsg({ text: error.message, ok: false });
-    else { setPwMsg({ text: "Passwort geändert ✓", ok: true }); setPw1(""); setPw2(""); }
+    else { setPwMsg({ text: "Passwort geändert ✓", ok: true }); setPw1(""); setPw2(""); setPwOpen(false); }
   }
 
-  const statItems = stats ? [
-    { label: "Spiele", value: stats.games_played ?? 0, icon: <IconCards size={18} /> },
-    { label: "Siege", value: stats.games_won ?? 0, icon: <IconTrophy size={18} /> },
-    { label: "Ø Punkte", value: stats.avg_score ?? 0, icon: <IconStar size={16} /> },
-    { label: "Ø Platz", value: stats.avg_placement ?? "–", icon: <IconTarget size={18} /> },
-    { label: "Trefferquote", value: `${stats.bid_accuracy_pct ?? 0}%`, icon: <IconPercent size={18} /> },
-    { label: "Stiche geboten", value: stats.total_bid ?? 0, icon: <IconLayers size={18} /> },
-  ] : [];
-
   return (
-    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
-      <button onClick={onBack} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-      <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}><IconSettings size={17} /> Profil</div>
+    <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "56px 18px 12px" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", ...archivo, fontWeight: 800, fontSize: 12, color: C.ivory, cursor: "pointer", padding: 0, minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>← ZURÜCK</button>
+        <div style={{ ...flatLabel, marginLeft: "auto" }}>Profil</div>
+      </div>
+      <div style={flatRule} />
 
-      {/* Avatar */}
-      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, alignSelf: "flex-start" }}>PROFILBILD</div>
-        <Avatar userId={session.user.id} username={username} avatarUrl={avatarUrl} size={72} />
-        <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); e.target.value = ""; }} />
-        <div style={{ display: "flex", gap: 8, width: "100%" }}>
-          <button onClick={() => avatarInputRef.current?.click()} disabled={avatarUploading}
-            style={{ ...goldBtn(), flex: 1, padding: "10px 0", fontSize: 13, opacity: avatarUploading ? 0.5 : 1 }}>
-            {avatarUploading ? "…" : "Bild hochladen"}
-          </button>
-          {avatarUrl && (
-            <button onClick={removeAvatar} disabled={avatarUploading}
-              style={{ ...goldBtn(false), padding: "10px 16px", fontSize: 13, opacity: avatarUploading ? 0.5 : 1 }}>
-              Entfernen
-            </button>
-          )}
+      <div style={{ padding: "22px 18px 0", display: "flex", gap: 14, alignItems: "center" }}>
+        <div style={{ width: 72, height: 72, flexShrink: 0, background: avatarUrl ? `url(${avatarUrl}) center/cover` : avatarColor(session.user.id), display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 800, fontSize: 30, color: "#fff" }}>
+          {!avatarUrl && username.charAt(0).toUpperCase()}
         </div>
-        {avatarMsg && <div style={{ fontSize: 12, color: avatarMsg.ok ? C.success : C.error, textAlign: "center" }}>{avatarMsg.text}</div>}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 20, lineHeight: 1.2 }}>{username}</div>
+          <div style={{ ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim, marginTop: 3 }}>
+            {profileMeta.createdAt ? `Seit ${new Date(profileMeta.createdAt).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}` : ""} · {profileMeta.gamesPlayed} Partien
+          </div>
+          <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); e.target.value = ""; }} />
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button onClick={() => avatarInputRef.current?.click()} disabled={avatarUploading}
+              style={flatGhostBtn({ fontSize: 11, padding: "8px 12px", minHeight: 36, opacity: avatarUploading ? 0.5 : 1 })}>
+              {avatarUploading ? "…" : "BILD ÄNDERN"}
+            </button>
+            {avatarUrl && (
+              <button onClick={removeAvatar} disabled={avatarUploading}
+                style={flatGhostBtn({ fontSize: 11, padding: "8px 12px", minHeight: 36, opacity: avatarUploading ? 0.5 : 1 })}>
+                ENTFERNEN
+              </button>
+            )}
+          </div>
+          {avatarMsg && <div style={{ fontSize: 11, color: avatarMsg.ok ? C.success : C.error, marginTop: 6 }}>{avatarMsg.text}</div>}
+        </div>
       </div>
 
-      {/* Name */}
-      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>NAME</div>
+      <div style={{ padding: "26px 18px 0" }}>
+        <div style={{ ...flatLabel, marginBottom: 6 }}>Name</div>
         <input value={nameInput} onChange={e => { setNameInput(e.target.value); setNameMsg(null); }}
-          placeholder="Dein Name" style={inputStyle} maxLength={24}
+          placeholder="Dein Name" style={flatInput} maxLength={24}
           onKeyDown={e => e.key === "Enter" && saveName()} />
         <button onClick={saveName} disabled={nameSaving || !nameInput.trim() || nameInput.trim() === username}
-          style={{ ...goldBtn(), padding: "10px 0", fontSize: 13, opacity: (nameSaving || !nameInput.trim() || nameInput.trim() === username) ? 0.5 : 1 }}>
-          {nameSaving ? "…" : "Namen speichern"}
+          style={{ ...flatPrimaryBtn(nameSaving || !nameInput.trim() || nameInput.trim() === username), marginTop: 9, padding: "13px 0", fontSize: 13, justifyContent: "center" }}>
+          {nameSaving ? "…" : nameInput.trim() === username ? "NAME GESPEICHERT" : "NAMEN SPEICHERN"}
         </button>
-        {nameMsg && <div style={{ fontSize: 12, color: nameMsg.ok ? C.success : "#FF8080", textAlign: "center" }}>{nameMsg.text}</div>}
+        {nameMsg && <div style={{ fontSize: 12, color: nameMsg.ok ? C.success : "#FF8080", textAlign: "center", marginTop: 8 }}>{nameMsg.text}</div>}
       </div>
 
-      {/* Password */}
-      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>PASSWORT ÄNDERN</div>
-        <input value={pw1} onChange={e => { setPw1(e.target.value); setPwMsg(null); }}
-          placeholder="Neues Passwort" type="password" style={inputStyle} autoComplete="new-password" />
-        <input value={pw2} onChange={e => { setPw2(e.target.value); setPwMsg(null); }}
-          placeholder="Passwort bestätigen" type="password" style={inputStyle} autoComplete="new-password"
-          onKeyDown={e => e.key === "Enter" && savePassword()} />
-        <button onClick={savePassword} disabled={pwSaving || !pw1 || !pw2}
-          style={{ ...goldBtn(), padding: "10px 0", fontSize: 13, opacity: (pwSaving || !pw1 || !pw2) ? 0.5 : 1 }}>
-          {pwSaving ? "…" : "Passwort speichern"}
-        </button>
-        {pwMsg && <div style={{ fontSize: 12, color: pwMsg.ok ? C.success : "#FF8080", textAlign: "center" }}>{pwMsg.text}</div>}
+      <div style={{ padding: "22px 18px 0" }}>
+        <div style={{ ...flatLabel, marginBottom: 6 }}>Passwort</div>
+        {!pwOpen ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1, ...flatInput, color: C.ivoryDim, display: "flex", alignItems: "center" }}>••••••••</div>
+            <button onClick={() => setPwOpen(true)} style={flatGhostBtn({ minHeight: "auto" })}>ÄNDERN</button>
+          </div>
+        ) : (
+          <>
+            <input value={pw1} onChange={e => { setPw1(e.target.value); setPwMsg(null); }}
+              placeholder="Neues Passwort" type="password" style={{ ...flatInput, marginBottom: 8 }} autoComplete="new-password" />
+            <input value={pw2} onChange={e => { setPw2(e.target.value); setPwMsg(null); }}
+              placeholder="Passwort bestätigen" type="password" style={flatInput} autoComplete="new-password"
+              onKeyDown={e => e.key === "Enter" && savePassword()} />
+            <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
+              <button onClick={() => { setPwOpen(false); setPw1(""); setPw2(""); setPwMsg(null); }} style={flatGhostBtn({ flex: 1, textAlign: "center", justifyContent: "center", display: "flex" })}>ABBRECHEN</button>
+              <button onClick={savePassword} disabled={pwSaving || !pw1 || !pw2}
+                style={{ ...flatPrimaryBtn(pwSaving || !pw1 || !pw2), flex: 1, justifyContent: "center", padding: "11px 0", fontSize: 12 }}>
+                {pwSaving ? "…" : "SPEICHERN"}
+              </button>
+            </div>
+          </>
+        )}
+        {pwMsg && <div style={{ fontSize: 12, color: pwMsg.ok ? C.success : "#FF8080", textAlign: "center", marginTop: 8 }}>{pwMsg.text}</div>}
       </div>
 
-      {/* Push notifications */}
       {pushSupported && (
-        <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2 }}>BENACHRICHTIGUNGEN</div>
-          <button onClick={togglePush} disabled={pushBusy}
-            style={{ ...goldBtn(pushEnabled), padding: "10px 0", fontSize: 13, opacity: pushBusy ? 0.5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            {pushEnabled ? <IconBellOff size={14} /> : <IconBell size={14} />}
-            {pushBusy ? "…" : pushEnabled ? "Deaktivieren" : "\"Du bist dran\" aktivieren"}
-          </button>
-          {pushMsg && <div style={{ fontSize: 12, color: pushMsg.ok ? C.success : "#FF8080", textAlign: "center" }}>{pushMsg.text}</div>}
+        <div style={{ padding: "22px 18px 0" }}>
+          <div style={{ ...flatLabel, marginBottom: 4 }}>Benachrichtigungen</div>
+          <div style={flatRow(true)}>
+            <div style={{ flex: 1 }}>
+              <div style={{ ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>„Du bist dran"</div>
+              <div style={{ ...archivo, fontWeight: 400, fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Push, sobald du am Zug bist</div>
+            </div>
+            <button onClick={togglePush} disabled={pushBusy} style={{
+              ...archivo, fontWeight: 800, fontSize: 11, minHeight: 36, padding: "0 14px", border: "none", cursor: "pointer",
+              background: pushEnabled ? C.gold : "rgba(255,255,255,0.07)", color: pushEnabled ? C.bgDark : C.ivoryDim,
+              opacity: pushBusy ? 0.5 : 1,
+            }}>
+              {pushBusy ? "…" : pushEnabled ? "AN" : "AUS"}
+            </button>
+          </div>
+          {pushMsg && <div style={{ fontSize: 11, color: pushMsg.ok ? C.success : "#FF8080", marginTop: 6 }}>{pushMsg.text}</div>}
         </div>
       )}
 
-      {/* Stats */}
-      <div style={{ ...glass({ padding: 20 }), width: "min(420px, 92vw)" }}>
-        <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 2, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}><IconBarChart size={13} /> STATISTIKEN</div>
-        {!stats ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                <div className="skeleton" style={{ width: 18, height: 18, borderRadius: 5 }} />
-                <div className="skeleton" style={{ width: 28, height: 16, borderRadius: 4 }} />
-                <div className="skeleton" style={{ width: 40, height: 8, borderRadius: 4 }} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            {statItems.map(({ label, value, icon }) => (
-              <div key={label} style={{ ...glass({ padding: "10px 8px" }), textAlign: "center" }}>
-                <div style={{ display: "flex", justifyContent: "center", color: C.gold, marginBottom: 4 }}>{icon}</div>
-                <div style={{ ...cinzel, fontSize: 18, fontWeight: 700, color: C.gold }}>{value}</div>
-                <div style={{ fontSize: 10, color: C.ivoryDim, marginTop: 2 }}>{label}</div>
-              </div>
-            ))}
-          </div>
-        )}
+      <div style={{ padding: "26px 18px 30px" }}>
+        <button onClick={() => supabase.auth.signOut()}
+          style={flatGhostBtn({ width: "100%", textAlign: "center", justifyContent: "center", display: "flex", boxSizing: "border-box", color: C.error, borderColor: "rgba(207,68,68,0.6)" })}>
+          ABMELDEN
+        </button>
       </div>
     </div>
   );
@@ -767,144 +905,121 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
   }
 
   return (
-    <div style={{
-      position: "fixed" as const, right: 0, top: 0, bottom: 0, zIndex: 150,
-      width: "min(300px, 88vw)",
-      background: "rgba(16,22,26,0.97)", borderLeft: `1px solid ${C.glassBorder}`,
-      display: "flex", flexDirection: "column" as const,
-      paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)",
-    }} className="slide-in-right">
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.glassBorder}` }}>
-        <div style={{ ...cinzel, fontSize: 14, color: C.gold, display: "flex", alignItems: "center", gap: 6 }}><IconUsers size={15} /> Freunde</div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
+    <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
+      <div style={{ padding: "56px 18px 12px", display: "flex", alignItems: "baseline" }}>
+        <div style={{ ...archivo, fontWeight: 800, fontSize: 19, lineHeight: 1 }}>FREUNDE</div>
+        <div style={{ ...flatLabel, marginLeft: "auto" }}>{accepted.length} verbunden</div>
       </div>
+      <div style={flatRule} />
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: "auto" as const, padding: "14px", display: "flex", flexDirection: "column", gap: 14 }}>
-        {/* Search / add */}
-        <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>FREUND HINZUFÜGEN</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Username suchen"
-              style={{ ...inputStyle, fontSize: 13, padding: "8px 10px" }} onKeyDown={e => e.key === "Enter" && search()} />
-            <button onClick={search} disabled={searching || query.trim().length < 2}
-              style={{ ...goldBtn(), padding: "0 14px", fontSize: 12, opacity: searching || query.trim().length < 2 ? 0.5 : 1 }}>
-              Suchen
-            </button>
-          </div>
-          {results.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {results.map(r => {
-                const st = statusFor(r.id);
-                return (
-                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 8, flexWrap: "wrap" as const }}>
-                    <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{r.username}</div>
-                    {st === "friend" && <span style={{ fontSize: 10, color: C.ivoryDim }}>Schon Freunde</span>}
-                    {st === "incoming" && <span style={{ fontSize: 10, color: C.ivoryDim }}>Hat dich angefragt</span>}
-                    {st === "outgoing" && <span style={{ fontSize: 10, color: C.ivoryDim }}>Gesendet</span>}
-                    {st === "none" && (
-                      <button onClick={() => sendRequest(r.id)} disabled={busyId === r.id}
-                        style={{ ...goldBtn(), padding: "4px 10px", fontSize: 10, opacity: busyId === r.id ? 0.5 : 1 }}>
-                        Anfragen
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {msg && <div style={{ fontSize: 11, color: msg.ok ? C.success : C.error, textAlign: "center" }}>{msg.text}</div>}
+      <div style={{ padding: "22px 18px 0" }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Username suchen"
+            style={{ ...flatInput, flex: 1 }} onKeyDown={e => e.key === "Enter" && search()} />
+          <button onClick={() => { if (query.trim()) { setQuery(""); setResults([]); } else search(); }}
+            disabled={searching || (query.trim().length < 2 && results.length === 0 && !query.trim())}
+            style={flatGhostBtn({ opacity: searching ? 0.5 : 1 })}>
+            {searching ? "…" : results.length > 0 || query.trim() ? "LEEREN" : "SUCHEN"}
+          </button>
         </div>
-
-        {/* Friends currently in a room - dedupe by room_id, since several
-            friends can be seated in the same room. */}
-        {(() => {
-          const seen = new Set<string>();
-          const rooms = (activeRooms ?? []).filter(r => {
-            if (seen.has(r.room_id)) return false;
-            seen.add(r.room_id);
-            return true;
-          });
-          if (rooms.length === 0) return null;
-          return (
-            <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>FREUNDE SPIELEN GERADE</div>
-              {rooms.map((r: any) => {
-                const others = (activeRooms ?? []).filter(x => x.room_id === r.room_id).map(x => x.friend_name ?? names[x.friend_user_id] ?? "…");
-                return (
-                  <div key={r.room_id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
-                    <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {others.join(", ")}
-                    </div>
-                    <button onClick={() => spectate(r.room_id)} disabled={spectatingId === r.room_id}
-                      style={{ ...goldBtn(), padding: "4px 10px", fontSize: 10, opacity: spectatingId === r.room_id ? 0.5 : 1 }}>
-                      👁 Zuschauen
-                    </button>
+        {query.trim().length >= 2 && results.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ ...flatLabel, marginBottom: 4 }}>Treffer</div>
+            {results.map((r, i) => {
+              const st = statusFor(r.id);
+              return (
+                <div key={r.id} style={flatRow(i === 0)}>
+                  <div style={{ width: 26, height: 26, background: avatarColor(r.id), color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
+                    {r.username.charAt(0).toUpperCase()}
                   </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-
-        {/* Incoming requests */}
-        {incoming.length > 0 && (
-          <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>ANFRAGEN ({incoming.length})</div>
-            {incoming.map((f: any) => (
-              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
-                <Avatar userId={f.requester_id} username={names[f.requester_id] ?? "?"} avatarUrl={avatars[f.requester_id]} size={24} />
-                <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[f.requester_id] ?? "…"}</div>
-                <button onClick={() => accept(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(), padding: "4px 10px", fontSize: 10 }}>Annehmen</button>
-                <button onClick={() => remove(f.id)} disabled={busyId === f.id} style={{ ...goldBtn(false), padding: "4px 10px", fontSize: 10 }}>Ablehnen</button>
-              </div>
-            ))}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{r.username}</div>
+                    <div style={{ ...archivo, fontWeight: 400, fontSize: 11, color: C.ivoryDim, marginTop: 1 }}>
+                      {st === "friend" ? "Freund" : st === "incoming" ? "Hat dich angefragt" : st === "outgoing" ? "Angefragt" : "Noch nicht verbunden"}
+                    </div>
+                  </div>
+                  {st === "none" && (
+                    <button onClick={() => sendRequest(r.id)} disabled={busyId === r.id} style={flatPrimaryBtn(busyId === r.id)}>HINZUFÜGEN</button>
+                  )}
+                  {st === "outgoing" && (
+                    <span style={{ ...flatPrimaryBtn(true), background: C.accent, color: C.goldLight, opacity: 1 }}>ANGEFRAGT ✓</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
-
-        {/* Friends list */}
-        <div style={{ ...glass({ padding: 16 }), display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ ...cinzel, fontSize: 10, color: C.gold, letterSpacing: 2 }}>MEINE FREUNDE ({accepted.length})</div>
-          {rows === null ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
-                  <div className="skeleton" style={{ width: 7, height: 7, borderRadius: "50%" }} />
-                  <div className="skeleton" style={{ width: `${90 - i * 18}px`, height: 13, borderRadius: 4, flex: "none" }} />
-                </div>
-              ))}
-            </div>
-          ) : accepted.length === 0 ? (
-            <div style={{ fontSize: 11, color: C.ivoryDim, textAlign: "center", padding: 8 }}>Noch keine Freunde – oben nach Usernamen suchen</div>
-          ) : accepted.map((f: any) => {
-            const otherId = f.requester_id === uid ? f.addressee_id : f.requester_id;
-            return (
-              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.10)" }}>
-                <div style={{ position: "relative" as const }}>
-                  <Avatar userId={otherId} username={names[otherId] ?? "?"} avatarUrl={avatars[otherId]} size={26} />
-                  <span style={{ position: "absolute" as const, bottom: -1, right: -1, width: 8, height: 8, borderRadius: "50%", background: onlineUserIds.has(otherId) ? C.success : "rgba(255,255,255,0.25)", boxShadow: `0 0 0 2px ${C.bgDark}` }} title={onlineUserIds.has(otherId) ? "Online" : "Offline"} />
-                </div>
-                <div style={{ ...cinzel, fontSize: 13, color: C.ivory, flex: 1 }}>{names[otherId] ?? "…"}</div>
-                <button onClick={() => remove(f.id)} disabled={busyId === f.id}
-                  style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10 }}>Entfernen</button>
-              </div>
-            );
-          })}
-          {outgoing.length > 0 && (
-            <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ fontSize: 9, color: C.ivoryDim, letterSpacing: 1 }}>AUSSTEHEND</div>
-              {outgoing.map((f: any) => (
-                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontSize: 12, color: C.ivoryDim, flex: 1 }}>{names[f.addressee_id] ?? "…"}</div>
-                  <button onClick={() => remove(f.id)} disabled={busyId === f.id}
-                    style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 10 }}>Zurückziehen</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {query.trim().length >= 2 && results.length === 0 && !searching && (
+          <div style={{ ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim, marginTop: 10 }}>Kein Nutzer „{query.trim()}" gefunden.</div>
+        )}
+        {msg && <div style={{ fontSize: 11, color: msg.ok ? C.success : C.error, marginTop: 8 }}>{msg.text}</div>}
       </div>
+
+      {incoming.length > 0 && (
+        <div style={{ padding: "22px 18px 0" }}>
+          <div style={{ ...flatLabel, marginBottom: 4 }}>Offene Anfragen · {incoming.length}</div>
+          {incoming.map((f: any, i: number) => (
+            <div key={f.id} style={flatRow(i === 0)}>
+              <div style={{ width: 26, height: 26, background: avatarColor(f.requester_id), color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
+                {(names[f.requester_id] ?? "?").charAt(0).toUpperCase()}
+              </div>
+              <div style={{ flex: 1, ...archivo, fontWeight: 600, fontSize: 14 }}>{names[f.requester_id] ?? "…"}</div>
+              <button onClick={() => accept(f.id)} disabled={busyId === f.id} style={flatPrimaryBtn(busyId === f.id)}>ANNEHMEN</button>
+              <button onClick={() => remove(f.id)} disabled={busyId === f.id} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", padding: 4 }}><IconX size={16} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ padding: "22px 18px 0" }}>
+        <div style={{ ...flatLabel, marginBottom: 4 }}>Meine Freunde</div>
+        {rows === null ? (
+          [0, 1, 2].map(i => (
+            <div key={i} style={flatRow(i === 0)}>
+              <div className="skeleton" style={{ width: 8, height: 8, borderRadius: "50%" }} />
+              <div className="skeleton" style={{ width: `${90 - i * 18}px`, height: 13 }} />
+            </div>
+          ))
+        ) : accepted.length === 0 ? (
+          <div style={{ ...flatRow(true), ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim }}>Noch keine Freunde – oben nach Usernamen suchen</div>
+        ) : accepted.map((f: any, i: number) => {
+          const otherId = f.requester_id === uid ? f.addressee_id : f.requester_id;
+          const online = onlineUserIds.has(otherId);
+          const activeRoom = (activeRooms ?? []).find(r => r.friend_user_id === otherId);
+          return (
+            <div key={f.id} style={flatRow(i === 0)}>
+              <div style={{ width: 8, height: 8, background: online ? C.success : "rgba(255,255,255,0.25)", flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{names[otherId] ?? "…"}</div>
+                <div style={{ ...archivo, fontWeight: 400, fontSize: 11, color: C.ivoryDim, marginTop: 1 }}>
+                  {activeRoom ? `Spielt gerade · Runde ${activeRoom.round}` : online ? "Online" : "Zuletzt offline"}
+                </div>
+              </div>
+              {activeRoom ? (
+                <button onClick={() => spectate(activeRoom.room_id)} disabled={spectatingId === activeRoom.room_id}
+                  style={flatGhostBtn({ fontSize: 11, padding: "8px 11px", minHeight: 36, opacity: spectatingId === activeRoom.room_id ? 0.5 : 1 })}>ZUSCHAUEN</button>
+              ) : (
+                <button disabled={!online} style={flatGhostBtn({ fontSize: 11, padding: "8px 11px", minHeight: 36, opacity: online ? 1 : 0.4 })}>EINLADEN</button>
+              )}
+              <button onClick={() => remove(f.id)} disabled={busyId === f.id}
+                style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", padding: 4 }}><IconX size={16} /></button>
+            </div>
+          );
+        })}
+      </div>
+
+      {outgoing.length > 0 && (
+        <div style={{ padding: "22px 18px 30px" }}>
+          <div style={{ ...flatLabel, marginBottom: 4 }}>Ausstehend</div>
+          {outgoing.map((f: any, i: number) => (
+            <div key={f.id} style={flatRow(i === 0)}>
+              <div style={{ flex: 1, ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim }}>{names[f.addressee_id] ?? "…"}</div>
+              <button onClick={() => remove(f.id)} disabled={busyId === f.id}
+                style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", ...archivo, fontSize: 11 }}>Zurückziehen</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -963,31 +1078,43 @@ function ManualPlayerSlot({ index, slot, excludeIds, onChange }: {
 
   if (slot.userId) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, ...paperPanel({ padding: "9px 12px" }), background: PAPER.panelAlt }}>
-        <div style={{ flex: 1, fontSize: 13, color: PAPER.ink }}>{slot.name}</div>
-        <button onClick={() => { onChange({ userId: null, name: "" }); setQuery(""); }}
-          style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
+      <div style={paperFlatCard}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ flex: 1, ...archivo, fontWeight: 600, fontSize: 14, color: PAPER.ink }}>{slot.name}</div>
+          <span style={{ ...archivo, fontWeight: 600, fontSize: 10, color: PAPER.success }}>VERKNÜPFT</span>
+          <button onClick={() => { onChange({ userId: null, name: "" }); setQuery(""); }}
+            style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ ...paperFlatCard, position: "relative" }}>
       <input
         value={query}
         onChange={e => { setQuery(e.target.value); onChange({ userId: null, name: e.target.value }); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder={`Spieler ${index + 1}: Name eintragen oder Nutzer suchen…`}
-        style={{ ...paperInput, fontSize: 13, padding: "9px 12px" }}
+        placeholder={`Spieler ${index + 1}: Name oder Nutzer suchen…`}
+        style={{ ...paperFlatInput, fontSize: 13, padding: "9px 12px", border: "none", background: "transparent" }}
         maxLength={24}
       />
+      {query.trim().length >= 2 && results.length === 0 && (
+        <div style={{ ...archivo, fontWeight: 400, fontSize: 10.5, color: PAPER.inkDim, marginTop: 4 }}>
+          Kein Treffer — wird als Gast „{query.trim()}" geführt. Punkte zählen nur in dieser Partie.
+        </div>
+      )}
       {open && results.length > 0 && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 10, ...paperPanel({ padding: 4 }), maxHeight: 170, overflowY: "auto" }}>
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 10, background: PAPER.panel, border: `1px solid ${PAPER.line}`, maxHeight: 170, overflowY: "auto" }}>
           {results.map(r => (
             <button key={r.id} onMouseDown={() => { onChange({ userId: r.id, name: r.username }); setQuery(r.username); setOpen(false); }}
-              style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: PAPER.ink, padding: "8px 10px", fontSize: 13, cursor: "pointer", borderRadius: 6 }}>
-              {r.username}
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", color: PAPER.ink, padding: "8px 10px", fontSize: 13, cursor: "pointer" }}>
+              <div style={{ width: 22, height: 22, background: PAPER.gold, color: PAPER.panel, display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+                {r.username.charAt(0).toUpperCase()}
+              </div>
+              <span style={{ ...archivo, fontWeight: 500, fontSize: 13, flex: 1 }}>{r.username}</span>
+              <span style={{ ...archivo, fontWeight: 600, fontSize: 10, color: PAPER.success }}>Nutzer</span>
             </button>
           ))}
         </div>
@@ -1125,25 +1252,31 @@ function ManualGameSetup({ uid, pastGames, onCreated, onViewGame }: { uid: strin
 
   if (stage === "order") {
     return (
-      <div className="paper-sheet" style={{ ...paperPanel({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        <button onClick={() => setStage("roster")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={12} /> Zurück</button>
-        <div style={{ ...paperHand, fontSize: 20, color: PAPER.ink }}>Reihenfolge festlegen</div>
-        <div style={{ fontSize: 11.5, color: PAPER.inkDim }}>So wie ihr am Tisch sitzt - bestimmt Geber- und Bietreihenfolge. Zum Sortieren ziehen.</div>
+      <div style={{ width: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <button onClick={() => setStage("roster")} style={{ background: "none", border: "none", ...archivo, fontWeight: 800, fontSize: 12, color: PAPER.ink, cursor: "pointer", padding: 0, minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>← ZURÜCK</button>
+        </div>
+        <div style={{ ...paperHand, fontSize: 26, color: PAPER.ink, marginBottom: 4 }}>Reihenfolge festlegen</div>
+        <div style={{ ...archivo, fontWeight: 400, fontSize: 13, color: PAPER.inkDim, marginBottom: 16 }}>So wie ihr am Tisch sitzt — bestimmt Geber- und Bietreihenfolge. Zum Sortieren ziehen.</div>
         <div ref={listRef} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {slots.map((s, i) => {
             const isDragging = dragId === s.id;
+            const isMe = s.userId === uid;
             return (
               <div key={s.id} ref={el => { rowRefs.current[i] = el; }}
                 style={{
-                  display: "flex", alignItems: "center", gap: 10, ...paperPanel({ padding: "8px 12px" }),
-                  background: PAPER.panelAlt,
+                  ...paperFlatCard,
+                  display: "flex", alignItems: "center", gap: 10, marginBottom: 6,
                   position: isDragging ? "relative" : undefined,
                   transform: isDragging ? `translateY(${dragOffsetY}px)` : undefined,
                   zIndex: isDragging ? 10 : undefined,
                   boxShadow: isDragging ? `0 10px 26px ${PAPER.shadow}` : undefined,
                 }}>
-                <span style={{ ...paperHand, fontSize: 15, color: PAPER.gold, minWidth: 16 }}>{i + 1}.</span>
-                <span style={{ flex: 1, fontSize: 13, color: PAPER.ink }}>{s.name}</span>
+                <span style={{ ...paperHand, fontSize: 18, color: PAPER.gold, minWidth: 20 }}>{i + 1}.</span>
+                <span style={{ flex: 1, ...archivo, fontWeight: 600, fontSize: 14, color: PAPER.ink }}>{s.name}</span>
+                {isMe && i === 0 && (
+                  <span style={{ ...archivo, fontWeight: 700, fontSize: 10, color: PAPER.gold, whiteSpace: "nowrap" }}>DU · GIBT R1</span>
+                )}
                 <div
                   onPointerDown={e => startDrag(s.id, e)}
                   onPointerMove={onDragMove}
@@ -1157,64 +1290,77 @@ function ManualGameSetup({ uid, pastGames, onCreated, onViewGame }: { uid: strin
             );
           })}
         </div>
-        <button onClick={start} disabled={loading} style={{ ...paperBtn(), width: "100%", padding: "12px 0", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
-          {loading ? "…" : "✦ Spiel starten"}
-        </button>
-        {error && <div style={{ color: PAPER.danger, fontSize: 12, textAlign: "center" }}>{error}</div>}
+        <div style={{ marginTop: 18 }}>
+          <button onClick={start} disabled={loading} style={paperFlatPrimaryBtn(loading)}>
+            {loading ? "…" : "SPIEL STARTEN"}<span style={{ fontSize: 18 }}>→</span>
+          </button>
+        </div>
+        {error && <div style={{ color: PAPER.danger, fontSize: 12, textAlign: "center", marginTop: 10 }}>{error}</div>}
       </div>
     );
   }
 
+  const openSlots = slots.filter(s => !s.name.trim()).length;
+
   return (
-    <>
-      <div className="paper-sheet" style={{ ...paperPanel({ padding: 20 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ ...paperHand, fontSize: 20, color: PAPER.ink }}>Neues Spiel erfassen</div>
-
-        <div>
-          <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim, letterSpacing: 1, marginBottom: 8 }}>EDITION</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setEdition("classic")} style={{ ...paperBtn(edition === "classic"), flex: 1, padding: "8px 0", fontSize: 12 }}>Classic</button>
-            <button onClick={() => setEdition("anniversary")} style={{ ...paperBtn(edition === "anniversary"), flex: 1, padding: "8px 0", fontSize: 12 }}>30 Jahre</button>
-          </div>
-        </div>
-
-        <div>
-          <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim, letterSpacing: 1, marginBottom: 8 }}>SPIELERANZAHL</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {[3, 4, 5, 6].map(n => (
-              <button key={n} onClick={() => changeCount(n)} style={{ ...paperBtn(count === n), flex: 1, padding: "8px 0", fontSize: 13 }}>{n}</button>
-            ))}
-          </div>
-          <div style={{ fontSize: 10.5, color: PAPER.inkDim, marginTop: 6 }}>{Math.floor(60 / count)} Runden</div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim, letterSpacing: 1 }}>MITSPIELER</div>
-          {slots.map((s, i) => (
-            <ManualPlayerSlot key={s.id} index={i} slot={s} excludeIds={excludeIds}
-              onChange={v => setSlots(prev => prev.map((p, pi) => pi === i ? { ...p, ...v } : p))} />
-          ))}
-        </div>
-
-        <button onClick={goToOrder} style={{ ...paperBtn(), width: "100%", padding: "12px 0", fontSize: 14 }}>
-          Weiter → Reihenfolge
-        </button>
-        {error && <div style={{ color: PAPER.danger, fontSize: 12, textAlign: "center" }}>{error}</div>}
+    <div style={{ width: "100%" }}>
+      <div style={{ ...paperHand, fontSize: 34, color: PAPER.ink }}>Neues Spiel erfassen</div>
+      <div style={{ ...archivo, fontWeight: 400, fontSize: 13, color: PAPER.inkDim, marginTop: 4, marginBottom: 18 }}>
+        Registrierte Nutzer suchen — dann landet die Partie auch in deren Statistik. Gäste einfach als Namen eintragen.
       </div>
 
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ ...paperFlatLabel, marginBottom: 8 }}>EDITION</div>
+        <div style={paperFlatSegTrack}>
+          <button onClick={() => setEdition("classic")} style={paperFlatSegBtn(edition === "classic")}>Classic</button>
+          <button onClick={() => setEdition("anniversary")} style={paperFlatSegBtn(edition === "anniversary")}>30 Jahre</button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ ...paperFlatLabel, marginBottom: 8 }}>SPIELERANZAHL</div>
+        <div style={{ display: "flex" }}>
+          {[3, 4, 5, 6].map(n => (
+            <button key={n} onClick={() => changeCount(n)} style={paperFlatSegBtn(count === n)}>{n}</button>
+          ))}
+        </div>
+        <div style={{ ...archivo, fontWeight: 400, fontSize: 10.5, color: PAPER.inkDim, marginTop: 6 }}>{Math.floor(60 / count)} Runden · Geber wechselt jede Runde</div>
+      </div>
+
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ ...paperFlatLabel, marginBottom: 8 }}>MITSPIELER · REIHENFOLGE AM TISCH</div>
+        {slots.map((s, i) => (
+          <ManualPlayerSlot key={s.id} index={i} slot={s} excludeIds={excludeIds}
+            onChange={v => setSlots(prev => prev.map((p, pi) => pi === i ? { ...p, ...v } : p))} />
+        ))}
+      </div>
+
+      {openSlots > 0 && (
+        <div style={{ color: PAPER.danger, background: "rgba(162,58,46,0.1)", border: "1px solid rgba(162,58,46,0.35)", padding: "8px 12px", fontSize: 11.5, marginTop: 10 }}>
+          Noch {openSlots} Mitspieler offen.
+        </div>
+      )}
+
+      <div style={{ marginTop: 18 }}>
+        <button onClick={goToOrder} disabled={openSlots > 0} style={paperFlatPrimaryBtn(openSlots > 0)}>
+          WEITER → REIHENFOLGE<span style={{ fontSize: 18 }}>→</span>
+        </button>
+      </div>
+      {error && <div style={{ color: PAPER.danger, fontSize: 12, textAlign: "center", marginTop: 10 }}>{error}</div>}
+
       {pastGames.length > 0 && (
-        <div style={{ ...paperPanel({ padding: 16 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim, letterSpacing: 1 }}>FRÜHERE SPIELE</div>
-          {pastGames.slice(0, 8).map(g => (
+        <div style={{ marginTop: 26 }}>
+          <div style={{ ...paperFlatLabel, marginBottom: 4 }}>FRÜHERE SPIELE</div>
+          {pastGames.slice(0, 8).map((g, i) => (
             <button key={g.id} onClick={() => onViewGame(g)}
-              style={{ display: "flex", justifyContent: "space-between", width: "100%", background: "none", border: "none", borderTop: `1px solid ${PAPER.lineFaint}`, fontSize: 12, color: PAPER.inkDim, padding: "6px 0", cursor: "pointer", textAlign: "left", font: "inherit" }}>
-              <span>{new Date(g.created_at).toLocaleDateString("de-DE")}</span>
+              style={{ display: "flex", justifyContent: "space-between", width: "100%", background: "none", border: "none", borderTop: i === 0 ? "2px solid rgba(90,68,38,0.3)" : `1px solid ${PAPER.lineFaint}`, ...archivo, fontWeight: 400, fontSize: 12, color: PAPER.inkDim, padding: "10px 0", cursor: "pointer", textAlign: "left" }}>
               <span>{g.edition === "anniversary" ? "30 Jahre" : "Classic"} · {g.max_rounds} Runden</span>
+              <span>{new Date(g.created_at).toLocaleDateString("de-DE")}</span>
             </button>
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -1423,13 +1569,13 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
 
   return (
     <>
-      <div className="paper-sheet" style={{ ...paperPanel({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ ...paperHand, fontSize: 15, color: PAPER.inkDim, letterSpacing: 0.5 }}>
-            {game.edition === "anniversary" ? "30 Jahre" : "Classic"} · Runde {Math.min(currentRoundNum, game.max_rounds)}/{game.max_rounds}
-          </div>
-          <button onClick={discard} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11 }}>Verwerfen</button>
+      <div style={{ width: "100%", overflowX: "auto" }}>
+        <div style={{ ...paperHand, fontSize: 26, color: PAPER.ink }}>{game.edition === "anniversary" ? "30 Jahre" : "Classic"} · {players.length} Spieler</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 2, marginBottom: 14 }}>
+          <div style={paperFlatLabel}>Runde {Math.min(currentRoundNum, game.max_rounds)}/{game.max_rounds}</div>
+          <button onClick={discard} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", ...archivo, fontWeight: 600, fontSize: 11 }}>Verwerfen</button>
         </div>
+        <div style={{ background: PAPER.panel, border: `1px solid ${PAPER.line}`, padding: 12 }}>
         <table style={{ borderCollapse: "collapse", width: "100%", fontVariantNumeric: "tabular-nums" as const }}>
           <thead>
             <tr>
@@ -1508,7 +1654,7 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
                             are already locked in above. */}
                         <input type="number" min={0} max={currentRoundNum} value={effectiveBid(p.player_index)}
                           onChange={e => setBids(prev => ({ ...prev, [p.player_index]: e.target.value }))}
-                          style={{ ...paperInput, width: 36, padding: "5px 2px", fontSize: 12, textAlign: "center" }} />
+                          style={{ ...paperFlatInput, width: 36, padding: "5px 2px", fontSize: 12, textAlign: "center" }} />
                         <span style={{ fontSize: 11.5, color: PAPER.inkDim }}>/</span>
                         {/* Stiche get tapped in below (button picker), not typed here -
                             this just reflects tap status: entered, up next, or waiting. */}
@@ -1523,30 +1669,31 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
             )}
           </tbody>
         </table>
+        </div>
         {editingRound !== null && (() => {
           const r = rounds.find(x => x.round === editingRound);
           if (!r) return null;
           return (
-            <div style={{ marginTop: 10, ...paperPanel({ padding: 12 }), background: PAPER.panelAlt }}>
-              <div style={{ ...paperHand, fontSize: 14, color: PAPER.goldDeep, marginBottom: 8 }}>Runde {editingRound} korrigieren</div>
+            <div style={{ marginTop: 10, background: PAPER.panelAlt, border: `1px solid ${PAPER.line}`, padding: 12 }}>
+              <div style={{ ...paperHand, fontSize: 17, color: PAPER.goldDeep, marginBottom: 8 }}>Runde {editingRound} korrigieren</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {players.map(p => (
                   <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ flex: 1, fontSize: 12.5, color: PAPER.ink }}>{p.display_name}</span>
+                    <span style={{ flex: 1, ...archivo, fontWeight: 500, fontSize: 12.5, color: PAPER.ink }}>{p.display_name}</span>
                     <input type="number" min={0} max={editingRound} placeholder="Ansage" value={editBid[p.player_index] ?? ""}
                       onChange={e => setEditBid(prev => ({ ...prev, [p.player_index]: e.target.value }))}
-                      style={{ ...paperInput, width: 52, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
+                      style={{ ...paperFlatInput, width: 52, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
                     <span style={{ fontSize: 11.5, color: PAPER.inkDim }}>/</span>
                     <input type="number" min={0} max={editingRound} placeholder="Stiche" value={editGot[p.player_index] ?? ""}
                       onChange={e => setEditGot(prev => ({ ...prev, [p.player_index]: e.target.value }))}
-                      style={{ ...paperInput, width: 52, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
+                      style={{ ...paperFlatInput, width: 52, padding: "5px 4px", fontSize: 12, textAlign: "center" }} />
                   </div>
                 ))}
               </div>
               {editError && <div style={{ color: PAPER.danger, fontSize: 11, marginTop: 8 }}>{editError}</div>}
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                <button onClick={cancelEditRound} style={{ ...paperBtn(false), flex: 1, padding: "8px 0", fontSize: 12.5 }}>Abbrechen</button>
-                <button onClick={() => saveEditedRound(r)} disabled={editSaving} style={{ ...paperBtn(), flex: 1, padding: "8px 0", fontSize: 12.5, opacity: editSaving ? 0.5 : 1 }}>
+                <button onClick={cancelEditRound} style={paperFlatGhostBtn({ flex: 1, textAlign: "center", justifyContent: "center", display: "flex", fontSize: 12.5, minHeight: 38 })}>Abbrechen</button>
+                <button onClick={() => saveEditedRound(r)} disabled={editSaving} style={{ ...paperFlatPrimaryBtn(editSaving), flex: 1, justifyContent: "center", padding: "8px 0", fontSize: 12.5, minHeight: 38 }}>
                   {editSaving ? "…" : "Speichern"}
                 </button>
               </div>
@@ -1554,21 +1701,24 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
           );
         })()}
         {!isDone && pendingBids && nextGoter && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
-              <div style={{ ...paperHand, fontSize: 15, color: PAPER.goldDeep }}>
-                WIE VIELE STICHE HAT <span style={{ color: PAPER.ink }}>{nextGoter.display_name}</span> GEHOLT? (0–{currentRoundNum})
+          <div style={{ marginTop: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8, gap: 8 }}>
+              <div>
+                <div style={{ ...paperHand, fontSize: 17, color: PAPER.goldDeep, lineHeight: 1.2 }}>
+                  Wie viele Stiche hat <span style={{ color: PAPER.ink }}>{nextGoter.display_name}</span> geholt?
+                </div>
               </div>
-              {players.some(p => gots[p.player_index] !== undefined) && (
-                <button onClick={undoLastGot} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11, padding: "2px 0", display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
-                  <IconArrowLeft size={11} /> zurück
-                </button>
-              )}
+              <div style={{ ...paperFlatLabel, whiteSpace: "nowrap", flexShrink: 0 }}>Ergebnis · 0–{currentRoundNum}</div>
             </div>
+            {players.some(p => gots[p.player_index] !== undefined) && (
+              <button onClick={undoLastGot} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11, padding: "2px 0", marginBottom: 6, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                <IconArrowLeft size={11} /> zurück
+              </button>
+            )}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
               {Array.from({ length: currentRoundNum + 1 }, (_, i) => (
                 <button key={i} onClick={() => recordGot(nextGoter.player_index, i)} disabled={saving}
-                  style={{ ...paperBtn(), padding: "9px 14px", fontSize: 15, opacity: saving ? 0.5 : 1, minWidth: 40 }}>
+                  style={paperFlatGhostBtn({ flex: 1, minWidth: 44, textAlign: "center", justifyContent: "center", display: "flex", padding: "9px 0", fontSize: 17, opacity: saving ? 0.5 : 1 })}>
                   {i}
                 </button>
               ))}
@@ -1576,26 +1726,27 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
           </div>
         )}
         {!isDone && !pendingBids && nextBidder && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
-              <div style={{ ...paperHand, fontSize: 15, color: PAPER.goldDeep }}>
-                WIE VIELE STICHE? (0–{currentRoundNum}) – <span style={{ color: PAPER.ink }}>{nextBidder.display_name}</span>
+          <div style={{ marginTop: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8, gap: 8 }}>
+              <div style={{ ...paperHand, fontSize: 17, color: PAPER.goldDeep, lineHeight: 1.2 }}>
+                Wie viele Stiche sagt <span style={{ color: PAPER.ink }}>{nextBidder.display_name}</span> an?
               </div>
-              {biddingOrder.some(p => bids[p.player_index] !== undefined) && (
-                <button onClick={undoLastBid} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11, padding: "2px 0", display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
-                  <IconArrowLeft size={11} /> zurück
-                </button>
-              )}
+              <div style={{ ...paperFlatLabel, whiteSpace: "nowrap", flexShrink: 0 }}>Ansage · 0–{currentRoundNum}</div>
             </div>
+            {biddingOrder.some(p => bids[p.player_index] !== undefined) && (
+              <button onClick={undoLastBid} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11, padding: "2px 0", marginBottom: 6, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                <IconArrowLeft size={11} /> zurück
+              </button>
+            )}
             {dealerForbiddenBid !== null && (
-              <div style={{ color: PAPER.danger, fontSize: 10.5, marginBottom: 8, background: "rgba(162,58,46,0.1)", border: `1px solid rgba(162,58,46,0.35)`, borderRadius: 6, padding: "5px 9px" }}>
+              <div style={{ color: PAPER.danger, fontSize: 10.5, marginBottom: 8, background: "rgba(162,58,46,0.1)", border: `1px solid rgba(162,58,46,0.35)`, padding: "5px 9px" }}>
                 ⚠ Stichzwang: {dealerForbiddenBid} ist verboten
               </div>
             )}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
               {Array.from({ length: currentRoundNum + 1 }, (_, i) => (
                 <button key={i} onClick={() => recordBid(nextBidder.player_index, i)} disabled={i === dealerForbiddenBid || locking}
-                  style={{ ...paperBtn(i !== dealerForbiddenBid), padding: "9px 14px", fontSize: 15, opacity: i === dealerForbiddenBid ? 0.25 : locking ? 0.5 : 1, minWidth: 40 }}>
+                  style={paperFlatGhostBtn({ flex: 1, minWidth: 44, textAlign: "center", justifyContent: "center", display: "flex", padding: "9px 0", fontSize: 17, opacity: i === dealerForbiddenBid ? 0.25 : locking ? 0.5 : 1 })}>
                   {i}
                 </button>
               ))}
@@ -1604,21 +1755,21 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
         )}
         {!isDone && pendingBids && currentRoundNum > 1 && gotSum > 0 && gotSum !== currentRoundNum && (
           <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
-            <div style={{ fontSize: 10.5, color: PAPER.inkDim, textAlign: "right" }}>Summe Stiche ({gotSum}) ≠ Runde ({currentRoundNum}) - bei einer Bombe normal.</div>
+            <div style={{ ...archivo, fontWeight: 400, fontSize: 10.5, color: PAPER.inkDim, textAlign: "right" }}>Summe Stiche ({gotSum}) ≠ Runde ({currentRoundNum}) - bei einer Bombe normal.</div>
           </div>
         )}
         {!isDone && pendingBids && !wolkePicking && (
-          <button onClick={() => setWolkePicking(true)} style={{ marginTop: 10, background: "none", border: `1px solid ${PAPER.line}`, borderRadius: RADIUS.sm, color: PAPER.inkDim, cursor: "pointer", fontSize: 11.5, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <button onClick={() => setWolkePicking(true)} style={{ marginTop: 14, background: "none", border: `1px solid ${PAPER.line}`, color: PAPER.inkDim, cursor: "pointer", ...archivo, fontWeight: 400, fontSize: 11.5, padding: "6px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}>
             🚂 9¾ – Vorhersage anpassen
           </button>
         )}
         {!isDone && pendingBids && wolkePicking && wolkePlayer === null && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 11, color: PAPER.inkDim, marginBottom: 6 }}>Wer hat den Stich mit der Wolke gewonnen?</div>
+          <div style={{ marginTop: 14 }}>
+            <div style={{ ...archivo, fontWeight: 400, fontSize: 11, color: PAPER.inkDim, marginBottom: 6 }}>Wer hat den Stich mit der Wolke gewonnen?</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {players.map(p => (
                 <button key={p.id} onClick={() => setWolkePlayer(p.player_index)}
-                  style={{ ...paperBtn(false), padding: "7px 12px", fontSize: 12 }}>{p.display_name}</button>
+                  style={paperFlatGhostBtn({ padding: "7px 12px", fontSize: 12 })}>{p.display_name}</button>
               ))}
               <button onClick={() => setWolkePicking(false)} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 11.5, padding: "7px 4px" }}>Abbrechen</button>
             </div>
@@ -1628,17 +1779,17 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
           const p = players.find(pl => pl.player_index === wolkePlayer);
           const current = Number(effectiveBid(wolkePlayer) || 0);
           return (
-            <div style={{ marginTop: 10 }}>
-              <div style={{ fontSize: 11, color: PAPER.inkDim, marginBottom: 6 }}>
-                <span style={{ color: PAPER.goldDeep }}>{p?.display_name}</span> - aktuelle Ansage: <span style={{ color: PAPER.goldDeep, fontWeight: 700 }}>{current}</span>
+            <div style={{ marginTop: 14 }}>
+              <div style={{ ...archivo, fontWeight: 400, fontSize: 11, color: PAPER.inkDim, marginBottom: 6 }}>
+                <span style={{ color: PAPER.goldDeep, fontWeight: 600 }}>{p?.display_name}</span> — aktuelle Ansage: <span style={{ color: PAPER.goldDeep, fontWeight: 700 }}>{current}</span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => { adjustBid(wolkePlayer, -1); setWolkePicking(false); setWolkePlayer(null); }} disabled={current === 0}
-                  style={{ ...paperBtn(false), flex: 1, padding: "9px 0", fontSize: 13, opacity: current === 0 ? 0.4 : 1 }}>
+                  style={paperFlatGhostBtn({ flex: 1, textAlign: "center", justifyContent: "center", display: "flex", padding: "9px 0", fontSize: 13, opacity: current === 0 ? 0.4 : 1 })}>
                   −1 → {Math.max(0, current - 1)}
                 </button>
                 <button onClick={() => { adjustBid(wolkePlayer, 1); setWolkePicking(false); setWolkePlayer(null); }}
-                  style={{ ...paperBtn(), flex: 1, padding: "9px 0", fontSize: 13 }}>
+                  style={{ ...paperFlatPrimaryBtn(false), flex: 1, justifyContent: "center", padding: "9px 0", fontSize: 13 }}>
                   +1 → {current + 1}
                 </button>
               </div>
@@ -1648,16 +1799,17 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
         })()}
       </div>
 
-      {error && <div style={{ color: PAPER.danger, fontSize: 12, textAlign: "center" }}>{error}</div>}
+      {error && <div style={{ color: PAPER.danger, fontSize: 12, textAlign: "center", marginTop: 10 }}>{error}</div>}
 
-      <div style={{ display: "flex", gap: 10, width: "min(460px, 96vw)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", marginTop: 18 }}>
         {!isDone && pendingBids && (
-          <button onClick={() => saveRound()} disabled={saving} style={{ ...paperBtn(), flex: 1, padding: "12px 0", fontSize: 14, opacity: saving ? 0.5 : 1 }}>
-            {saving ? "…" : "Runde abschließen"}
+          <button onClick={() => saveRound()} disabled={saving} style={paperFlatPrimaryBtn(saving)}>
+            {saving ? "…" : "RUNDE ABSCHLIESSEN"}<span style={{ fontSize: 18 }}>→</span>
           </button>
         )}
-        <button onClick={finish} disabled={finishing || rounds.length === 0} style={{ ...paperBtn(isDone), flex: 1, padding: "12px 0", fontSize: 14, opacity: (finishing || rounds.length === 0) ? 0.5 : 1 }}>
-          {finishing ? "…" : "🏁 Spiel abschließen"}
+        <button onClick={finish} disabled={finishing || rounds.length === 0}
+          style={isDone ? paperFlatPrimaryBtn(finishing) : paperFlatGhostBtn({ width: "100%", textAlign: "center", justifyContent: "center", display: "flex", boxSizing: "border-box", opacity: (finishing || rounds.length === 0) ? 0.4 : 1 })}>
+          {finishing ? "…" : "SPIEL BEENDEN"}
         </button>
       </div>
     </>
@@ -1694,16 +1846,17 @@ function ManualFinishedGameView({ game, onBack }: { game: any; onBack: () => voi
     round === lastRoundNum && maxTotal > 0 && runningByRound[round]?.[playerIndex] === maxTotal;
 
   return (
-    <div className="paper-sheet" style={{ ...paperPanel({ padding: 16 }), width: "min(460px, 96vw)", overflowX: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 12, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={12} /> Zurück</button>
-        <div style={{ ...paperHand, fontSize: 13, color: PAPER.inkDim }}>
+    <div style={{ width: "100%", overflowX: "auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", ...archivo, fontWeight: 800, fontSize: 12, color: PAPER.ink, cursor: "pointer", padding: 0, minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>← ZURÜCK</button>
+        <div style={{ ...paperFlatLabel, marginLeft: "auto" }}>
           {game.edition === "anniversary" ? "30 Jahre" : "Classic"} · {new Date(game.created_at).toLocaleDateString("de-DE")}
         </div>
       </div>
       {loading ? (
-        <div className="skeleton" style={{ width: "100%", height: 120, borderRadius: 8 }} />
+        <div className="skeleton" style={{ width: "100%", height: 120 }} />
       ) : (
+        <div style={{ background: PAPER.panel, border: `1px solid ${PAPER.line}`, padding: 12 }}>
         <table style={{ borderCollapse: "collapse", width: "100%", fontVariantNumeric: "tabular-nums" as const }}>
           <thead>
             <tr>
@@ -1738,6 +1891,7 @@ function ManualFinishedGameView({ game, onBack }: { game: any; onBack: () => voi
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
@@ -1792,31 +1946,154 @@ function ManualScoreboardScreen({ session, onBack }: { session: Session; onBack:
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div style={{
-      ...paperBg, display: "flex", flexDirection: "column", alignItems: "center",
-      padding: `max(16px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left))`,
-      gap: "clamp(8px, 1.5vw, 16px)", justifyContent: "flex-start", paddingTop: "max(20px, env(safe-area-inset-top))",
-    }} className="fade-in">
-      <button onClick={onBack} style={{ alignSelf: "flex-start", background: "none", border: "none", color: PAPER.inkDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-      <div style={{ ...paperHand, fontSize: "clamp(20px,6vw,28px)", color: PAPER.ink, display: "flex", alignItems: "center", gap: 8 }}><IconClipboardList size={17} /> Rechenblock</div>
+    <div style={{ ...paperFlatScreen, minHeight: "auto" }} className="fade-in">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "56px 18px 12px" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", ...archivo, fontWeight: 800, fontSize: 12, color: PAPER.ink, cursor: "pointer", padding: 0, minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>← ZURÜCK</button>
+        <div style={{ ...paperFlatLabel, marginLeft: "auto" }}>Rechenblock</div>
+      </div>
+      <div style={paperFlatRule} />
 
-      {loading ? (
-        <div className="skeleton" style={{ width: 200, height: 40, borderRadius: 8 }} />
-      ) : viewingGame ? (
-        <ManualFinishedGameView game={viewingGame} onBack={() => setViewingGame(null)} />
-      ) : activeGame ? (
-        <ManualGamePlay session={session} game={activeGame} players={players} rounds={rounds} onChange={load} />
-      ) : (
-        <ManualGameSetup uid={uid} pastGames={pastGames} onCreated={load} onViewGame={setViewingGame} />
-      )}
+      <div style={{ padding: "22px 18px 30px" }}>
+        {loading ? (
+          <div className="skeleton" style={{ width: 200, height: 40 }} />
+        ) : viewingGame ? (
+          <ManualFinishedGameView game={viewingGame} onBack={() => setViewingGame(null)} />
+        ) : activeGame ? (
+          <ManualGamePlay session={session} game={activeGame} players={players} rounds={rounds} onChange={load} />
+        ) : (
+          <ManualGameSetup uid={uid} pastGames={pastGames} onCreated={load} onViewGame={setViewingGame} />
+        )}
+      </div>
     </div>
   );
 }
 
 // ─── Lobby ────────────────────────────────────────────────────────────────────
+// ─── Stats Screen ───────────────────────────────────────────────────────────
+function StatsScreen({ session, onBack }: { session: Session; onBack: () => void }) {
+  const [stats, setStats] = useState<any>(null);
+  useEffect(() => {
+    supabase.from("user_stats").select("*").eq("id", session.user.id).single().then(({ data }) => setStats(data));
+  }, [session.user.id]);
+
+  // One game_stats row per player per room - group by room_id to get the
+  // full standings for each of the user's own past games. game_stats has no
+  // per-game timestamp beyond played_at (that's on the user's own row,
+  // shared by all rows for that room since they're inserted together), and
+  // no direct FK to profiles.username, so a second query resolves names.
+  const [pastGames, setPastGames] = useState<{ roomId: string; playedAt: string; edition: string | null; place: number; score: number; totalRounds: number; rows: { userId: string; name: string; placement: number; score: number }[] }[] | null>(null);
+  const [openGame, setOpenGame] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data: mine } = await supabase.from("game_stats")
+        .select("room_id, placement, final_score, total_rounds, played_at")
+        .eq("user_id", session.user.id)
+        .order("played_at", { ascending: false })
+        .limit(20);
+      if (!mine || mine.length === 0) { setPastGames([]); return; }
+
+      const roomIds = mine.map(g => g.room_id);
+      const [{ data: allRows }, { data: rooms }] = await Promise.all([
+        supabase.from("game_stats").select("room_id, user_id, placement, final_score").in("room_id", roomIds),
+        supabase.from("rooms").select("id, edition").in("id", roomIds),
+      ]);
+      const userIds = Array.from(new Set((allRows ?? []).map(r => r.user_id)));
+      const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", userIds);
+      const nameById = new Map((profiles ?? []).map(p => [p.id, p.username]));
+      const editionByRoom = new Map((rooms ?? []).map(r => [r.id, r.edition]));
+
+      setPastGames(mine.map(g => ({
+        roomId: g.room_id, playedAt: g.played_at, edition: editionByRoom.get(g.room_id) ?? null,
+        place: g.placement, score: g.final_score, totalRounds: g.total_rounds,
+        rows: (allRows ?? [])
+          .filter(r => r.room_id === g.room_id)
+          .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
+          .sort((a, b) => a.placement - b.placement),
+      })));
+    })();
+  }, [session.user.id]);
+
+  const accuracyPct = stats?.bid_accuracy_pct != null ? Math.round(stats.bid_accuracy_pct) : 0;
+
+  return (
+    <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
+      <div style={{ padding: "56px 18px 12px", display: "flex", alignItems: "baseline" }}>
+        <div style={{ ...archivo, fontWeight: 800, fontSize: 19, lineHeight: 1 }}>STATISTIK</div>
+        <div style={{ ...flatLabel, marginLeft: "auto" }}>user_stats</div>
+      </div>
+      <div style={flatRule} />
+
+      <div style={{ display: "flex", flexWrap: "wrap" }}>
+        <div style={{ ...flatStat, width: "50%", boxSizing: "border-box" }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 40, lineHeight: 1 }}>{stats?.games_played ?? 0}</div>
+          <div style={{ ...flatLabel, marginTop: 6 }}>Spiele</div>
+        </div>
+        <div style={{ ...flatStat, width: "50%", boxSizing: "border-box", borderRight: "none" }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 40, lineHeight: 1 }}>{stats?.games_won ?? 0}</div>
+          <div style={{ ...flatLabel, marginTop: 6 }}>Siege</div>
+        </div>
+        <div style={{ ...flatStat, width: "50%", boxSizing: "border-box" }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 40, lineHeight: 1 }}>{stats?.avg_score ?? 0}</div>
+          <div style={{ ...flatLabel, marginTop: 6 }}>Ø Punkte</div>
+        </div>
+        <div style={{ ...flatStat, width: "50%", boxSizing: "border-box", borderRight: "none" }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 40, lineHeight: 1 }}>{stats?.avg_placement != null ? String(stats.avg_placement).replace(".", ",") : "–"}</div>
+          <div style={{ ...flatLabel, marginTop: 6 }}>Ø Platz</div>
+        </div>
+      </div>
+
+      <div style={{ padding: "22px 18px 0" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <div style={flatLabel}>Trefferquote der Ansagen</div>
+          <div style={{ marginLeft: "auto", ...archivo, fontWeight: 800, fontSize: 22, lineHeight: 1, color: C.gold }}>{accuracyPct}%</div>
+        </div>
+        <div style={{ height: 14, background: "rgba(255,255,255,0.07)", marginTop: 10, display: "flex" }}>
+          <div style={{ width: `${accuracyPct}%`, background: C.gold }} />
+        </div>
+        <div style={{ ...archivo, fontWeight: 400, fontSize: 11, lineHeight: 1.4, color: C.ivoryDim, marginTop: 8 }}>
+          {stats?.total_bid ?? 0} Stiche angesagt · {stats?.total_won ?? 0} erreicht. Der Wert kommt aus <span style={{ fontWeight: 600, color: C.ivory }}>bid_accuracy_pct</span> und zählt App- wie Rechenblock-Partien.
+        </div>
+      </div>
+
+      <div style={{ padding: "24px 18px 30px" }}>
+        <div style={{ ...flatLabel, marginBottom: 4 }}>Letzte Partien</div>
+        {pastGames === null && <div style={{ ...archivo, fontSize: 12, color: C.ivoryDim, padding: "20px 0" }}>Lädt…</div>}
+        {pastGames?.length === 0 && <div style={{ ...archivo, fontSize: 12, color: C.ivoryDim, padding: "20px 0" }}>Noch keine Partien gespielt.</div>}
+        {pastGames?.map((pg, i) => {
+          const isOpen = openGame === pg.roomId;
+          const date = new Date(pg.playedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+          return (
+            <div key={pg.roomId} style={{ ...flatRow(i === 0), flexDirection: "column", alignItems: "stretch", gap: 0 }}>
+              <button onClick={() => setOpenGame(isOpen ? null : pg.roomId)}
+                style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minHeight: 44, color: "inherit" }}>
+                <span style={{ ...archivo, fontWeight: 700, fontSize: 12.5, color: pg.place === 1 ? C.gold : C.ivory, minWidth: 18 }}>{pg.place}.</span>
+                <span style={{ flex: 1, ...archivo, fontWeight: 400, fontSize: 12.5, lineHeight: 1.3, color: C.ivoryDim }}>{pg.rows.length} Spieler · {pg.totalRounds} Runden · {date}</span>
+                <span style={{ ...archivo, fontWeight: 800, fontSize: 17, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{pg.score}</span>
+                <span style={{ ...archivo, fontWeight: 400, fontSize: 13, lineHeight: 1, color: C.ivoryDim }}>{isOpen ? "▴" : "▾"}</span>
+              </button>
+              {isOpen && (
+                <div style={{ padding: "10px 0 4px" }}>
+                  {pg.rows.map(pr => (
+                    <div key={pr.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.14)" }}>
+                      <span style={{ ...archivo, fontWeight: 600, fontSize: 12, color: C.ivoryDim, width: 14 }}>{pr.placement}</span>
+                      <span style={{ flex: 1, ...archivo, fontWeight: 500, fontSize: 13, lineHeight: 1.2 }}>{pr.name}</span>
+                      <span style={{ ...archivo, fontWeight: 700, fontSize: 13, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{pr.score}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function LobbyScreen({ session }: { session: Session }) {
-  const [view, setView] = useState<"home" | "create" | "join" | "rules" | "profile" | "scoreboard">("home");
-  const [showFriendsPanel, setShowFriendsPanel] = useState(false);
+  const [view, setView] = useState<"home" | "rules" | "profile" | "scoreboard" | "stats" | "friends">("home");
+  const [rulesTab, setRulesTab] = useState<"basics" | "score" | "cards" | "special">("basics");
   const [reconnectRoom, setReconnectRoom] = useState<{ roomId: string; code: string; phase: string } | null>(null);
 
   // Reconnect state now lives on the backend (room_players membership),
@@ -1836,6 +2113,7 @@ function LobbyScreen({ session }: { session: Session }) {
 
   useEffect(() => { checkReconnect(); }, [checkReconnect]);
   const [codeInput, setCodeInput] = useState("");
+  const [codeFocused, setCodeFocused] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
   // Set alongside roomId (never on its own) when entering via "Zuschauen"
   // instead of create/join/reconnect - decides whether roomId renders
@@ -1897,6 +2175,42 @@ function LobbyScreen({ session }: { session: Session }) {
     return () => { supabase.removeChannel(presenceCh); };
   }, [session.user.id]);
 
+  // Home-screen header avatar button.
+  const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.from("profiles").select("avatar_url").eq("id", session.user.id).single()
+      .then(({ data }) => setMyAvatarUrl(data?.avatar_url ?? null));
+  }, [session.user.id]);
+
+  // Home-screen stat tiles (Spiele / Siege / Treffer).
+  const [homeStats, setHomeStats] = useState<{ games_played: number; games_won: number; bid_accuracy_pct: number | null } | null>(null);
+  useEffect(() => {
+    supabase.from("user_stats").select("games_played, games_won, bid_accuracy_pct").eq("id", session.user.id).single()
+      .then(({ data }) => setHomeStats(data ?? null));
+  }, [session.user.id]);
+
+  // "Freunde spielen gerade": friends_active_rooms is one row per friend per
+  // room - group by room so two friends in the same game collapse into one
+  // row ("Marla, Jonas · Runde 6 · 4 Spieler") instead of two.
+  const [friendsPlaying, setFriendsPlaying] = useState<{ roomId: string; names: string[]; round: number; playerCount: number }[]>([]);
+  useEffect(() => {
+    const load = () => {
+      supabase.from("friends_active_rooms").select("*").then(({ data, error }) => {
+        if (error) { console.error("[LobbyScreen] friends_active_rooms fetch failed:", error.message); return; }
+        const byRoom = new Map<string, { roomId: string; names: string[]; round: number; playerCount: number }>();
+        for (const row of data ?? []) {
+          const entry = byRoom.get(row.room_id) ?? { roomId: row.room_id, names: [], round: row.round ?? 0, playerCount: row.player_count ?? 0 };
+          entry.names.push(row.friend_name ?? "Spieler");
+          byRoom.set(row.room_id, entry);
+        }
+        setFriendsPlaying(Array.from(byRoom.values()));
+      });
+    };
+    load();
+    const poll = setInterval(load, 10000);
+    return () => clearInterval(poll);
+  }, [session.user.id]);
+
   async function createRoom() {
     setLoading(true); setError("");
     const res = await callGameAction("", "createRoom", { username, edition });
@@ -1937,57 +2251,216 @@ function LobbyScreen({ session }: { session: Session }) {
 
   const screen = (() => {
   // ── Rules ──
-  if (view === "rules") return (
-    <div style={{ ...tableStyle, justifyContent: "flex-start", gap: 14, paddingTop: "max(20px, env(safe-area-inset-top))" }} className="fade-in">
-      <button onClick={() => setView("home")} style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-      <div style={{ ...cinzel, fontSize: "clamp(16px,5vw,22px)", color: C.gold }}>📖 Regeln</div>
+  if (view === "rules") {
+    const HOUSES: { name: string; color: string; img: string }[] = [
+      { name: "Gryffindor", color: "#E8503A", img: "Gryffindor_1" },
+      { name: "Ravenclaw", color: "#4A90D9", img: "Ravenclaw_1" },
+      { name: "Slytherin", color: "#2EA94B", img: "Slytherin_1" },
+      { name: "Hufflepuff", color: "#F7C948", img: "Hufflepuff_1" },
+    ];
+    const SPECIALS: { title: string; tag: string; desc: string; img: string }[] = [
+      { title: "Drache", tag: "sticht alles", img: "Special_Dragon", desc: "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen." },
+      { title: "Fee", tag: "verliert immer", img: "Special_Fairy", desc: "Verliert immer – außer wenn der Drache gespielt wurde. Dann gewinnt die Fee." },
+      { title: "Hexe", tag: "gilt als Narr", img: "Special_Witch", desc: "Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden." },
+      { title: "Werwolf", tag: "wählt Farbe", img: "Special_Werewolf", desc: "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde." },
+      { title: "Vampir", tag: "kopiert Trumpf", img: "Special_Vampire", desc: "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr." },
+      { title: "Bombe", tag: "annulliert", img: "Special_Bomb", desc: "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen." },
+      { title: "Jongleur (7½)", tag: "Wert 7,5", img: "Special_George", desc: "Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter." },
+      { title: "Wolke (9¾)", tag: "Wert 9,75", img: "Special_Platform9", desc: "Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)." },
+      { title: "Zauberernarr", tag: "beides möglich", img: "Special_Ron", desc: "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?" },
+    ];
+    const cardStyle: React.CSSProperties = {
+      width: 76, height: 114, overflow: "hidden", position: "relative", border: "1px solid rgba(201,168,76,0.2)",
+      boxShadow: "0 3px 10px rgba(0,0,0,0.6)", flexShrink: 0, backgroundSize: "cover", backgroundPosition: "center top",
+    };
+    const cardStyleS: React.CSSProperties = {
+      width: 36, height: 54, overflow: "hidden", position: "relative", border: "1px solid rgba(201,168,76,0.2)",
+      boxShadow: "0 3px 10px rgba(0,0,0,0.6)", flexShrink: 0, backgroundSize: "cover", backgroundPosition: "center top",
+    };
+    const cardCorner: React.CSSProperties = {
+      position: "absolute", background: "rgba(0,0,0,0.7)", padding: "1px 4px",
+      display: "flex", flexDirection: "column", alignItems: "center", ...cinzel, lineHeight: 1.2, fontSize: 10,
+    };
 
-      {/* Basic rules */}
-      <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>GRUNDREGELN</div>
-        {[
-          ["Ziel", "Genau so viele Stiche machen wie angesagt"],
-          ["Treffer", "+20 Punkte + 10 pro angesagtem Stich"],
-          ["Fehler", "-10 Punkte pro Differenz"],
-          ["Zauberer", "Schlägt alles (außer Drachen)"],
-          ["Narr", "Verliert immer"],
-          ["Stichzwang", "Der Dealer darf nicht die Zahl bieten, die die Gesamtansagen gleich der Rundenzahl macht"],
-          ["Farbzwang", "Angespielte Farbe muss bedient werden wenn möglich"],
-        ].map(([title, desc]) => (
-          <div key={title} style={{ display: "flex", gap: 10, padding: "6px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
-            <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 90 }}>{title}</div>
-            <div style={{ fontSize: 11, color: C.ivoryDim, flex: 1 }}>{desc}</div>
-          </div>
-        ))}
-      </div>
+    return (
+      <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "56px 18px 12px" }}>
+          <button onClick={() => setView("home")} style={{ background: "none", border: "none", ...archivo, fontWeight: 800, fontSize: 12, color: C.ivory, cursor: "pointer", padding: 0, minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>← ZURÜCK</button>
+          <div style={{ ...flatLabel, marginLeft: "auto" }}>Regeln</div>
+        </div>
+        <div style={flatRule} />
 
-      {/* Special cards */}
-      <div style={{ ...glass({ padding: 16 }), width: "min(680px,96vw)", display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ ...cinzel, fontSize: 12, color: C.gold, letterSpacing: 2 }}>⚡ 30 JAHRE EDITION – SPEZIALKARTEN</div>
-        {[
-          [<DragonArt />, "Drache", "Schlägt ALLES – auch Zauberer. Einzige Ausnahme: die Fee gewinnt gegen den Drachen."],
-          [<FairyArt />, "Fee", "Verliert immer – außer wenn der Drache gespielt wurde. Dann gewinnt die Fee."],
-          [<WitchArt />, "Hexe", "Gilt als Narr. Nach dem Stich darf eine beliebige Karte aus dem Stich gegen eine Handkarte getauscht werden."],
-          [<WerewolfArt />, "Werwolf", "Wird als Trumpfkarte aufgedeckt oder beim Ziehen sofort getauscht. Der Spieler wählt die Anspielfarbe für die gesamte Runde."],
-          [<VampireArt />, "Vampir", "Kopiert die aufgedeckte Trumpfkarte für diesen einen Stich. Ist Trumpf ein Narr (oder kein Trumpf), wirkt der Vampir als Narr."],
-          [<BombArt />, "Bombe", "Annulliert den Stich – niemand gewinnt ihn. Vorhersagen können dadurch aufgehen."],
-          [<Rainbow7Art />, "Jongleur (7½)", "Wert 7,5. Spieler wählt die Farbe. Nach dem Stich gibt JEDER Spieler eine Karte seiner Wahl an den linken Nachbarn weiter."],
-          [<Rainbow9Art />, "Wolke (9¾)", "Wert 9,75. Spieler wählt die Farbe. Der Stichgewinner muss seine Vorhersage um 1 erhöhen oder senken (nicht unter 0)."],
-          [<WizardFoolArt />, "Zauberernarr", "Beim Ausspielen entscheidet der Spieler: Zauberer oder Narr?"],
-        ].map(([icon, title, desc], i) => (
-          <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
-            <CardIcon size={26}>{icon}</CardIcon>
-            <div style={{ ...cinzel, fontSize: 11, color: C.gold, minWidth: 90 }}>{title}</div>
-            <div style={{ fontSize: 11, color: C.ivoryDim, flex: 1, lineHeight: 1.5 }}>{desc}</div>
+        <div style={{ display: "flex", borderBottom: "2px solid rgba(201,168,76,0.45)" }}>
+          {([["basics", "Grundregeln"], ["score", "Wertung"], ["cards", "Karten"], ["special", "Spezial"]] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setRulesTab(key)} style={{
+              flex: 1, border: "none", cursor: "pointer", padding: "13px 6px", minHeight: 46,
+              ...archivo, fontWeight: 800, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase",
+              background: rulesTab === key ? C.gold : "transparent", color: rulesTab === key ? C.bgDark : C.ivoryDim,
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {rulesTab === "basics" && (
+          <div style={{ padding: "22px 18px 30px" }}>
+            <div style={{ ...archivo, fontWeight: 800, fontSize: 30, lineHeight: 1.05, letterSpacing: "-0.02em" }}>Ziel des Spiels</div>
+            <div style={{ ...archivo, fontWeight: 400, fontSize: 14, lineHeight: 1.6, color: C.ivoryDim, marginTop: 10 }}>
+              Sage vor jeder Runde genau voraus, wie viele Stiche du machen wirst. Wer am Ende die meisten Punkte hat, gewinnt — nicht wer die meisten Stiche holt.
+            </div>
+
+            <div style={{ ...flatLabel, margin: "26px 0 4px" }}>Rundenablauf</div>
+            {[
+              ["Geben", "In Runde 1 bekommt jeder 1 Karte, in Runde 2 zwei, und so weiter. Die oberste Karte des Stapels bestimmt den Trumpf."],
+              ["Ansagen", "Reihum sagt jeder seine Stichzahl. Der Geber sagt zuletzt an — und darf die Zahl nicht wählen, mit der die Summe aller Ansagen genau der Rundenzahl entspricht (Stichzwang)."],
+              ["Stechen", "Farbzwang: wenn du die angespielte Farbe hast, musst du sie bedienen. Zauberer und Narren darfst du immer legen."],
+              ["Werten", "Nach dem letzten Stich werden die Punkte verteilt und die nächste Runde beginnt."],
+            ].map(([title, desc], i) => (
+              <div key={title} style={{ ...flatRow(i === 0), alignItems: "flex-start" }}>
+                <div style={{ ...archivo, fontWeight: 800, fontSize: 13, lineHeight: 1.2, color: C.gold, width: 20 }}>{i + 1}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.3 }}>{title}</div>
+                  <div style={{ ...archivo, fontWeight: 400, fontSize: 12, lineHeight: 1.5, color: C.ivoryDim, marginTop: 3 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ ...flatLabel, margin: "26px 0 4px" }}>Wer gewinnt den Stich?</div>
+            {[
+              ["#C9A84C", <>Der <b style={{ color: C.ivory, fontWeight: 600 }}>erste gelegte Zauberer</b> sticht alles.</>],
+              ["#C9A84C", <>Sonst die <b style={{ color: C.ivory, fontWeight: 600 }}>höchste Trumpfkarte</b>.</>],
+              ["#C9A84C", <>Sonst die <b style={{ color: C.ivory, fontWeight: 600 }}>höchste Karte der angespielten Farbe</b>.</>],
+              ["rgba(184,169,138,0.4)", <>Nur Narren im Stich? Dann gewinnt der <b style={{ color: C.ivory, fontWeight: 600 }}>erste Narr</b>.</>],
+            ].map(([dot, text], i) => (
+              <div key={i} style={flatRow(i === 0)}>
+                <div style={{ width: 7, height: 7, background: dot as string, flexShrink: 0 }} />
+                <div style={{ flex: 1, ...archivo, fontWeight: 400, fontSize: 13, lineHeight: 1.5, color: C.ivoryDim }}>{text}</div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
+
+        {rulesTab === "score" && (
+          <div style={{ padding: "22px 18px 30px" }}>
+            <div style={{ ...archivo, fontWeight: 800, fontSize: 30, lineHeight: 1.05, letterSpacing: "-0.02em" }}>Punkte</div>
+            <div style={{ ...archivo, fontWeight: 400, fontSize: 14, lineHeight: 1.6, color: C.ivoryDim, marginTop: 10 }}>
+              Nur die exakte Ansage zahlt sich aus. Ein Stich zu viel ist genauso teuer wie einer zu wenig.
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", marginTop: 22, borderTop: "2px solid rgba(201,168,76,0.45)" }}>
+              <div style={{ ...flatStat, width: "50%", boxSizing: "border-box" }}><div style={{ ...archivo, fontWeight: 800, fontSize: 30, lineHeight: 1, color: C.success }}>+20</div><div style={{ ...flatLabel, marginTop: 6 }}>Ansage getroffen</div></div>
+              <div style={{ ...flatStat, width: "50%", boxSizing: "border-box", borderRight: "none" }}><div style={{ ...archivo, fontWeight: 800, fontSize: 30, lineHeight: 1, color: C.success }}>+10</div><div style={{ ...flatLabel, marginTop: 6 }}>Je Stich dazu</div></div>
+              <div style={{ ...flatStat, width: "50%", boxSizing: "border-box" }}><div style={{ ...archivo, fontWeight: 800, fontSize: 30, lineHeight: 1, color: C.error }}>−10</div><div style={{ ...flatLabel, marginTop: 6 }}>Je Stich Abweichung</div></div>
+              <div style={{ ...flatStat, width: "50%", boxSizing: "border-box", borderRight: "none" }}><div style={{ ...archivo, fontWeight: 800, fontSize: 30, lineHeight: 1 }}>13</div><div style={{ ...flatLabel, marginTop: 6 }}>Runden bei 4 Spielern</div></div>
+            </div>
+
+            <div style={{ ...flatLabel, margin: "26px 0 4px" }}>Beispiele</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "8px 6px", ...flatLabel, borderBottom: "2px solid rgba(201,168,76,0.45)" }}>Ansage</th>
+                  <th style={{ textAlign: "right", padding: "8px 6px", ...flatLabel, borderBottom: "2px solid rgba(201,168,76,0.45)" }}>Stiche</th>
+                  <th style={{ textAlign: "right", padding: "8px 6px", ...flatLabel, borderBottom: "2px solid rgba(201,168,76,0.45)" }}>Punkte</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[[2, 2, 40], [0, 0, 20], [1, 0, -10], [1, 3, -20]].map(([bid, got, pts], i) => (
+                  <tr key={i}>
+                    <td style={{ padding: "11px 6px", ...archivo, fontSize: 14, color: C.ivoryDim, borderBottom: "1px solid rgba(201,168,76,0.22)" }}>{bid}</td>
+                    <td style={{ padding: "11px 6px", textAlign: "right", ...archivo, fontSize: 14, color: C.ivoryDim, borderBottom: "1px solid rgba(201,168,76,0.22)" }}>{got}</td>
+                    <td style={{ padding: "11px 6px", textAlign: "right", ...archivo, fontWeight: 800, fontSize: 14, color: pts > 0 ? C.success : C.error, borderBottom: "1px solid rgba(201,168,76,0.22)" }}>
+                      {pts > 0 ? `+${pts}` : `−${Math.abs(pts)}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ ...archivo, fontWeight: 400, fontSize: 12, lineHeight: 1.5, color: C.ivoryDim, marginTop: 14 }}>
+              Die Rundenzahl richtet sich nach der Spielerzahl: 60 Karten geteilt durch die Anzahl Spieler — bei 6 Spielern also 10 Runden, bei 3 Spielern 20.
+            </div>
+          </div>
+        )}
+
+        {rulesTab === "cards" && (
+          <div style={{ padding: "22px 18px 30px" }}>
+            <div style={{ ...archivo, fontWeight: 800, fontSize: 30, lineHeight: 1.05, letterSpacing: "-0.02em" }}>Das Blatt</div>
+            <div style={{ ...archivo, fontWeight: 400, fontSize: 14, lineHeight: 1.6, color: C.ivoryDim, marginTop: 10 }}>
+              60 Karten: vier Häuser mit je 1–13, dazu vier Zauberer und vier Narren.
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 20, flexWrap: "wrap" }}>
+              {[
+                { img: "Wizard_2", label: "Z", color: "#C9A84C", title: "ZAUBERER", desc: "sticht alles" },
+                { img: "Fool_1", label: "N", color: "#E8DAEF", title: "NARR", desc: "verliert immer" },
+                { img: "Hufflepuff_13", label: "13", color: "#F7C948", title: "HAUSKARTE", desc: "1 bis 13" },
+              ].map(c => (
+                <div key={c.title} style={{ textAlign: "center" }}>
+                  <div style={{ ...cardStyle, backgroundImage: `url(/cards/${c.img}.webp)` }}>
+                    <div style={{ ...cardCorner, top: 3, left: 4, color: c.color }}>{c.label}</div>
+                    <div style={{ ...cardCorner, bottom: 3, right: 4, color: c.color, transform: "rotate(180deg)" }}>{c.label}</div>
+                  </div>
+                  <div style={{ ...cinzel, fontSize: 9, color: C.gold, marginTop: 5 }}>{c.title}</div>
+                  <div style={{ ...archivo, fontWeight: 400, fontSize: 9, lineHeight: 1.3, color: C.ivoryDim }}>{c.desc}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ ...flatLabel, margin: "26px 0 4px" }}>Die vier Häuser</div>
+            {HOUSES.map((h, i) => (
+              <div key={h.name} style={flatRow(i === 0)}>
+                <div style={{ width: 9, height: 9, background: h.color, flexShrink: 0 }} />
+                <div style={{ flex: 1, ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{h.name}</div>
+                <div style={{ ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim }}>1–13</div>
+              </div>
+            ))}
+
+            <div style={{ border: "2px solid rgba(201,168,76,0.4)", padding: 16, marginTop: 26 }}>
+              <div style={{ ...flatLabel, color: C.gold }}>30 Jahre Edition · 69 Karten</div>
+              <div style={{ ...archivo, fontWeight: 400, fontSize: 12, lineHeight: 1.6, color: C.ivoryDim, marginTop: 8 }}>
+                Neun Sonderkarten kommen hinzu: Bombe, Regenbogen-7 und -9, Drache, Fee, Hexe, Werwolf, Vampir und der Zauberer-Narr. Sie greifen mitten im Stich ein — wer sie legt, dreht die Runde.
+              </div>
+              <button onClick={() => setRulesTab("special")} style={flatGhostBtn({ marginTop: 12, padding: "9px 12px", fontSize: 11, minHeight: 38 })}>SONDERKARTEN ANSEHEN</button>
+            </div>
+          </div>
+        )}
+
+        {rulesTab === "special" && (
+          <div style={{ padding: "22px 18px 30px" }}>
+            <div style={{ ...archivo, fontWeight: 800, fontSize: 30, lineHeight: 1.05, letterSpacing: "-0.02em" }}>Spezialkarten</div>
+            <div style={{ ...archivo, fontWeight: 400, fontSize: 14, lineHeight: 1.6, color: C.ivoryDim, marginTop: 10 }}>
+              Neun Karten der 30-Jahre-Edition. Jede greift anders in den Stich ein — sie sind der Grund, warum eine sichere Ansage plötzlich platzt.
+            </div>
+
+            {SPECIALS.map(sp => (
+              <div key={sp.title} style={{ display: "flex", gap: 12, padding: "16px 0", borderBottom: "1px solid rgba(201,168,76,0.22)", alignItems: "flex-start" }}>
+                <div style={{ ...cardStyleS, backgroundImage: `url(/cards/${sp.img}.webp)` }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                    <div style={{ ...cinzel, fontSize: 14, color: C.gold, fontWeight: 700 }}>{sp.title}</div>
+                    <div style={{ ...flatLabel, marginLeft: "auto", whiteSpace: "nowrap" }}>{sp.tag}</div>
+                  </div>
+                  <div style={{ ...archivo, fontWeight: 400, fontSize: 12, lineHeight: 1.6, color: C.ivoryDim, marginTop: 5 }}>{sp.desc}</div>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ border: "2px solid rgba(201,168,76,0.4)", padding: 16, marginTop: 22 }}>
+              <div style={{ ...flatLabel, color: C.gold }}>Stichhierarchie mit Spezialkarten</div>
+              <div style={{ ...archivo, fontWeight: 400, fontSize: 12, lineHeight: 1.7, color: C.ivoryDim, marginTop: 8 }}>
+                Fee (nur gegen Drache) → Drache → Zauberer → Trumpf → Anspielfarbe → Narr, Hexe, Vampir ohne Trumpf. Die Bombe hebt den Stich komplett auf.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  }
 
   if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
 
   if (view === "scoreboard") return <ManualScoreboardScreen session={session} onBack={() => setView("home")} />;
+
+  if (view === "stats") return <StatsScreen session={session} onBack={() => setView("home")} />;
+
+  if (view === "friends") return <FriendsScreen session={session} onClose={() => setView("home")} onlineUserIds={onlineUserIds} onSpectate={(rid) => { setView("home"); setIsSpectating(true); setRoomId(rid); }} />;
 
   if (roomId && isSpectating) return <SpectatorRoom roomId={roomId} session={session} voice={voice} onLeave={() => {
     callGameAction(roomId, "leaveSpectating", {});
@@ -1998,126 +2471,110 @@ function LobbyScreen({ session }: { session: Session }) {
   if (roomId) return <GameRoom roomId={roomId} session={session} edition={edition} onlineUserIds={onlineUserIds} voice={voice} onLeave={() => { setRoomId(null); checkReconnect(); }} />;
 
   // compact: skips the big mascot/title hero (only makes sense once, on the
-  // home screen) so content-heavy sub-screens like "create" don't push their
-  // primary action button below the fold and force scrolling to reach it.
-  const HeaderBlock = ({ compact = false, showProfile = true }: { compact?: boolean; showProfile?: boolean } = {}) => (
-    <>
-      {!compact && (
-        <div style={{ textAlign: "center" }}>
-          <WizardMascot size={42} style={{ margin: "0 auto 8px" }} />
-          <div style={{ ...cinzel, fontSize: "clamp(28px,5vw,48px)", fontWeight: 700, color: C.gold, letterSpacing: "clamp(4px,1vw,10px)" }}>WIZZO</div>
-        </div>
-      )}
-      {showProfile && (
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setShowFriendsPanel(true)} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, position: "relative", display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <IconUsers size={14} /> Freunde
-            {pendingFriendCount > 0 && (
-              <span style={{ position: "absolute", top: -4, right: -4, background: C.error, color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 999, minWidth: 15, height: 15, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
-                {pendingFriendCount}
-              </span>
-            )}
-          </button>
-          <button onClick={() => setView("profile")} style={{ ...goldBtn(false), padding: "6px 14px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><IconSettings size={14} /> Profil</button>
-        </div>
-      )}
-      <GoldDivider />
-    </>
-  );
-
   if (view === "home") return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
-      <HeaderBlock />
+    <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "56px 18px 12px" }}>
+        <div style={{ ...archivo, fontWeight: 800, fontSize: 19, lineHeight: 1, letterSpacing: "-0.01em", marginRight: "auto" }}>WIZZO</div>
+        <button onClick={() => setView("profile")} style={{ width: 32, height: 32, border: "none", cursor: "pointer", padding: 0, background: myAvatarUrl ? `url(${myAvatarUrl}) center/cover` : avatarColor(session.user.id), display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 800, fontSize: 14, color: "#fff" }}>
+          {!myAvatarUrl && username.charAt(0).toUpperCase()}
+        </button>
+      </div>
+      <div style={flatRule} />
+
       {reconnectRoom && (
-        <div style={{ ...glass({ padding: "12px 16px" }), width: "min(320px,92vw)", display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ background: C.gold, color: C.bgDark, padding: "14px 18px", display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ ...cinzel, fontSize: 12, color: C.gold }}>Laufendes Spiel gefunden</div>
-            <div style={{ fontSize: 11, color: C.ivoryDim, marginTop: 2 }}>Raum: {reconnectRoom.code}</div>
+            <div style={{ ...archivo, fontWeight: 600, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.75 }}>Laufende Partie</div>
+            <div style={{ ...archivo, fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "0.06em", marginTop: 4 }}>{reconnectRoom.code}</div>
           </div>
-          <button onClick={reconnect} style={{ ...goldBtn(), padding: "8px 14px", fontSize: 12 }}>Zurück</button>
-          <button onClick={() => {
-            // Only actually leave the room server-side pre-start - mid-game,
-            // dismissing the banner is just hiding it, the seat stays reserved.
-            if (reconnectRoom.phase === "lobby") callGameAction(reconnectRoom.roomId, "leaveRoom", {});
-            setReconnectRoom(null);
-          }} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
+          <button onClick={reconnect} style={{ ...archivo, background: C.bgDark, color: C.goldLight, border: "none", fontWeight: 800, fontSize: 12, padding: "12px 14px", cursor: "pointer", minHeight: 44 }}>FORTSETZEN →</button>
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "min(320px, 92vw)" }}>
-        <button onClick={() => setView("create")} style={{ ...goldBtn(), width: "100%", padding: "16px 0", fontSize: 15 }}>
-          Spiel erstellen
-        </button>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => setView("join")} style={tileBtn}>
-            <span style={{ fontSize: 18 }}>⬡</span>
-            Beitreten
-          </button>
-          <button onClick={() => setView("rules")} style={tileBtn}>
-            <span style={{ fontSize: 18 }}>📖</span>
-            Regeln
-          </button>
-          <button onClick={() => setView("scoreboard")} style={tileBtn}>
-            <IconClipboardList size={18} />
-            Rechenblock
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
-  if (view === "create") return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
-      <HeaderBlock compact showProfile={false} />
-      <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
-        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-        <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Neues Spiel</div>
-        {/* Edition */}
-        <div>
-          <div style={{ ...cinzel, fontSize: 10, color: C.ivoryDim, letterSpacing: 2, marginBottom: 8 }}>EDITION</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setEdition("classic")}
-              style={{ ...goldBtn(edition === "classic"), flex: 1, padding: "10px 0", fontSize: 12, flexDirection: "column", display: "flex", alignItems: "center", gap: 2 }}>
-              <CardIcon size={16}><WizardArt index={0} /></CardIcon>
-              <span>Classic</span>
-              <span style={{ fontSize: 9, opacity: 0.7 }}>60 Karten</span>
-            </button>
-            <button onClick={() => setEdition("anniversary")}
-              style={{ ...goldBtn(edition === "anniversary"), flex: 1, padding: "10px 0", fontSize: 12, flexDirection: "column", display: "flex", alignItems: "center", gap: 2 }}>
-              <span style={{ fontSize: 16 }}>⚡</span>
-              <span>30 Jahre</span>
-              <span style={{ fontSize: 9, opacity: 0.7 }}>69 Karten</span>
-            </button>
+      <div style={{ padding: "20px 18px 0" }}>
+        <div style={{ ...flatLabel, marginBottom: 9 }}>Neue Partie</div>
+        <div style={{ ...flatSegTrack, marginBottom: 12 }}>
+          <button onClick={() => setEdition("classic")} style={flatSegBtn(edition === "classic")}>Classic · 60</button>
+          <button onClick={() => setEdition("anniversary")} style={flatSegBtn(edition === "anniversary")}>30 Jahre · 69</button>
+        </div>
+        <button onClick={createRoom} disabled={loading} style={flatPrimaryBtn(loading)}>
+          {loading ? "…" : "SPIEL ERSTELLEN"}<span style={{ fontSize: 18 }}>→</span>
+        </button>
+        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center", marginTop: 10 }}>{error}</div>}
+      </div>
+
+      <div style={{ padding: "22px 18px 0" }}>
+        <div style={{ ...flatLabel, marginBottom: 9 }}>Mit Code beitreten</div>
+        <div style={{ position: "relative", marginBottom: 11 }}>
+          <div style={{ display: "flex", gap: 7 }}>
+            {Array.from({ length: 5 }, (_, i) => {
+              const ch = codeInput[i] ?? "";
+              const isNextEmpty = codeFocused && i === codeInput.length && codeInput.length < 5;
+              return (
+                <div key={i} style={{
+                  flex: 1, aspectRatio: "1", border: `2px solid ${ch || isNextEmpty ? C.gold : "rgba(201,168,76,0.3)"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 800, fontSize: 22,
+                }}>
+                  {ch || (isNextEmpty ? <span style={{ color: C.gold }}>|</span> : <span style={{ color: C.ivoryDim }}>·</span>)}
+                </div>
+              );
+            })}
           </div>
+          <input
+            value={codeInput}
+            onChange={e => setCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5))}
+            onFocus={() => setCodeFocused(true)}
+            onBlur={() => setCodeFocused(false)}
+            onKeyDown={e => e.key === "Enter" && codeInput.length === 5 && joinRoom()}
+            maxLength={5} inputMode="text" autoCapitalize="characters" autoCorrect="off" spellCheck={false}
+            aria-label="Raumcode"
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, border: "none", background: "transparent", fontSize: 16, color: "transparent", caretColor: "transparent", cursor: "pointer" }}
+          />
         </div>
-
-        <button onClick={createRoom} disabled={loading}
-          style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading?0.5:1 }}>
-          {loading ? "Erstelle Raum…" : "✦ Raum erstellen"}
-        </button>
-        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
-      <HeaderBlock compact showProfile={false} />
-      <div style={{ ...glass({ padding: 24 }), width: "min(420px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
-        <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}><IconArrowLeft size={13} /> Zurück</button>
-        <div style={{ ...cinzel, fontSize: 16, color: C.gold }}>Spiel beitreten</div>
-        <input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())}
-          placeholder="XXXXX" maxLength={5}
-          style={{ ...inputStyle, textAlign: "center", letterSpacing: 8, fontSize: 22, ...cinzel }}
-          onKeyDown={e => e.key==="Enter" && joinRoom()} autoFocus />
         <button onClick={() => joinRoom()} disabled={loading || codeInput.length < 5}
-          style={{ ...goldBtn(), width: "100%", padding: "13px 0", fontSize: 14, opacity: loading||codeInput.length<5?0.5:1 }}>
-          {loading ? "Suche Raum…" : "⬡ Beitreten"}
+          style={flatGhostBtn({ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", boxSizing: "border-box", opacity: loading || codeInput.length < 5 ? 0.4 : 1 })}>
+          {codeInput.length === 5 ? `BEITRETEN · ${codeInput}` : "CODE VERVOLLSTÄNDIGEN"}<span>→</span>
         </button>
-        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center" }}>{error}</div>}
+        {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center", marginTop: 10 }}>{error}</div>}
+      </div>
+
+      {friendsPlaying.length > 0 && (
+        <div style={{ padding: "22px 18px 0" }}>
+          <div style={{ ...flatLabel, marginBottom: 9 }}>Freunde spielen gerade</div>
+          {friendsPlaying.map((fp, i) => (
+            <div key={fp.roomId} style={flatRow(i === 0)}>
+              <div style={{ width: 8, height: 8, background: C.success, flexShrink: 0 }} />
+              <div style={{ flex: 1, ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>
+                {fp.names.join(", ")}
+                <div style={{ ...archivo, fontWeight: 400, fontSize: 11, lineHeight: 1.3, color: C.ivoryDim, marginTop: 2 }}>
+                  Runde {fp.round} · {fp.playerCount} Spieler
+                </div>
+              </div>
+              <button onClick={async () => {
+                const res = await callGameAction(fp.roomId, "spectateRoom", {});
+                if (!res?.error) { setIsSpectating(true); setRoomId(fp.roomId); }
+              }} style={flatGhostBtn({ padding: "8px 11px", fontSize: 11, minHeight: 36 })}>ZUSCHAUEN</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", margin: "22px 0 0", borderTop: "2px solid rgba(201,168,76,0.45)" }}>
+        <div style={flatStat}><div style={{ ...archivo, fontWeight: 800, fontSize: 26, lineHeight: 1 }}>{homeStats?.games_played ?? 0}</div><div style={{ ...flatLabel, marginTop: 5 }}>Spiele</div></div>
+        <div style={flatStat}><div style={{ ...archivo, fontWeight: 800, fontSize: 26, lineHeight: 1 }}>{homeStats?.games_won ?? 0}</div><div style={{ ...flatLabel, marginTop: 5 }}>Siege</div></div>
+        <div style={{ ...flatStat, borderRight: "none" }}><div style={{ ...archivo, fontWeight: 800, fontSize: 26, lineHeight: 1, color: C.gold }}>{homeStats?.bid_accuracy_pct != null ? `${Math.round(homeStats.bid_accuracy_pct)}%` : "–"}</div><div style={{ ...flatLabel, marginTop: 5 }}>Treffer</div></div>
+      </div>
+
+      <div style={{ padding: "18px 18px 30px", display: "flex", gap: 10 }}>
+        <button onClick={() => setView("scoreboard")} style={flatGhostBtn({ flex: 1, textAlign: "center", justifyContent: "center", display: "flex" })}>RECHENBLOCK</button>
+        <button onClick={() => setView("rules")} style={flatGhostBtn({ flex: 1, textAlign: "center", justifyContent: "center", display: "flex" })}>REGELN</button>
       </div>
     </div>
   );
   })();
+
+  const activeTab: TabKey | null =
+    view === "home" ? "home" : view === "friends" ? "friends" : view === "stats" ? "stats" : view === "profile" ? "profile" : null;
 
   return (
     <>
@@ -2134,8 +2591,12 @@ function LobbyScreen({ session }: { session: Session }) {
           </div>
         </div>
       )}
-      {showFriendsPanel && <FriendsScreen session={session} onClose={() => setShowFriendsPanel(false)} onlineUserIds={onlineUserIds} onSpectate={(rid) => { setShowFriendsPanel(false); setIsSpectating(true); setRoomId(rid); }} />}
-      {screen}
+      {activeTab ? (
+        <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
+          <div style={{ flex: 1 }}>{screen}</div>
+          <TabBar active={activeTab} onChange={setView} friendBadge={pendingFriendCount} />
+        </div>
+      ) : screen}
     </>
   );
 }
@@ -2561,15 +3022,14 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   const [loading, setLoading] = useState(false);
   const [showScoresheet, setShowScoresheet] = useState(false);
 
-  // Invite a friend into the Warteraum: fetched on demand, not on mount.
-  const [showInvite, setShowInvite] = useState(false);
+  // Invite a friend into the Warteraum: list is shown permanently once
+  // seated (loaded via the effect below), not behind a toggle anymore.
   const [inviteFriends, setInviteFriends] = useState<{ id: string; username: string; avatar_url: string | null }[] | null>(null);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
   const [inviteSending, setInviteSending] = useState<string | null>(null);
   const inviteInFlight = useRef<Set<string>>(new Set());
 
   async function openInvitePicker() {
-    setShowInvite(true);
     if (inviteFriends !== null) return;
     const uid = session.user.id;
     const [{ data }, { data: pending }] = await Promise.all([
@@ -2761,6 +3221,13 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [roomId, loadSpectators]);
+
+  // Redesigned waiting room shows "Freunde einladen" permanently (not behind
+  // a toggle) - load it as soon as we're actually sitting in a lobby-phase
+  // room, same data openInvitePicker always fetched, just no click needed.
+  useEffect(() => {
+    if (room?.phase === "lobby" && inviteFriends === null) openInvitePicker();
+  }, [room?.phase]);
 
   useEffect(() => {
     // Both fetches below silently no-op on failure (RLS hiccup, transient
@@ -3071,80 +3538,70 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
     // spielen ausschließlich die tatsächlich beigetretenen Menschen mit.
     const effectiveAiCount = Math.max(0, 3 - players.length);
+    const seatCount = 6;
     return (
-      <div style={{ ...tableStyle, justifyContent: "center", gap: 20 }} className="fade-in">
-        <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) { callGameAction(roomId, "leaveRoom", {}); onLeave(); } }}
-          style={{ alignSelf: "flex-start", background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <IconArrowLeft size={13} /> Zurück
-        </button>
-        <div style={{ ...cinzel, fontSize: 24, color: C.gold, display: "flex", alignItems: "center", gap: 10 }}>
-          <WizardMascot size={20} />
-          Warteraum
-        </div>
-        <div style={{ ...glass({ padding: "8px 24px" }), ...cinzel, fontSize: 20, letterSpacing: 6, color: C.goldLight }}>{room.code}</div>
-        <div style={{ fontSize: 11, color: C.ivoryDim }}>Code mit Freunden teilen</div>
-        <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim, display: "flex", alignItems: "center", gap: 6 }}>
-          {room?.edition === "anniversary" ? <>⚡ 30 Jahre Edition</> : <><CardIcon size={11}><WizardArt index={0} /></CardIcon> Classic Edition</>}
-        </div>
-        {spectatorBadge}
-
-        {!showInvite ? (
-          <button onClick={openInvitePicker} style={{ ...goldBtn(false), padding: "7px 16px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><IconUsers size={13} /> Freund einladen</button>
-        ) : (
-          <div style={{ ...glass({ padding: 14 }), width: "min(320px, 92vw)", display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ ...cinzel, fontSize: 11, color: C.gold, letterSpacing: 1 }}>FREUND EINLADEN</div>
-              <button onClick={() => setShowInvite(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={14} /></button>
-            </div>
-            {inviteFriends === null ? (
-              [0, 1].map(i => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div className="skeleton" style={{ width: 7, height: 7, borderRadius: "50%" }} />
-                  <div className="skeleton" style={{ width: `${80 - i * 16}px`, height: 13, borderRadius: 4, flex: "none" }} />
-                  <div className="skeleton" style={{ width: 62, height: 24, borderRadius: 16, marginLeft: "auto" }} />
-                </div>
-              ))
-            ) : inviteFriends.length === 0 ? (
-              <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" }}>Noch keine Freunde hinzugefügt</div>
-            ) : inviteFriends.map(f => (
-              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ position: "relative" as const }}>
-                  <Avatar userId={f.id} username={f.username} avatarUrl={f.avatar_url} size={24} />
-                  <span style={{ position: "absolute" as const, bottom: -1, right: -1, width: 8, height: 8, borderRadius: "50%", background: onlineUserIds.has(f.id) ? C.success : "rgba(255,255,255,0.25)", boxShadow: `0 0 0 2px ${C.bgDark}` }} title={onlineUserIds.has(f.id) ? "Online" : "Offline"} />
-                </div>
-                <div style={{ fontSize: 13, color: C.ivory, flex: 1 }}>{f.username}</div>
-                <button onClick={() => inviteFriend(f.id)} disabled={invitedIds.has(f.id) || inviteSending === f.id}
-                  style={{ ...goldBtn(!invitedIds.has(f.id)), padding: "5px 12px", fontSize: 11, opacity: invitedIds.has(f.id) ? 0.5 : 1 }}>
-                  {invitedIds.has(f.id) ? "Eingeladen ✓" : "Einladen"}
-                </button>
-              </div>
-            ))}
+      <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "56px 18px 12px" }}>
+          <button onClick={() => { if (players.length <= 1 || confirm("Warteraum verlassen?")) { callGameAction(roomId, "leaveRoom", {}); onLeave(); } }}
+            style={{ background: "none", border: "none", ...archivo, fontWeight: 800, fontSize: 12, color: C.ivory, cursor: "pointer", padding: 0, minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>
+            ← ZURÜCK
+          </button>
+          <div style={{ ...flatLabel, marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            Warteraum
+            {spectatorBadge}
           </div>
-        )}
+        </div>
+        <div style={flatRule} />
 
-        <div style={{ ...glass({ padding: 16 }), width: "min(320px, 92vw)" }}>
-          {players.map((p: any) => {
+        <div style={{ background: C.gold, color: C.bgDark, padding: "26px 18px 22px" }}>
+          <div style={{ ...archivo, fontWeight: 600, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", opacity: 0.75 }}>Raumcode</div>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 62, lineHeight: 0.95, letterSpacing: "0.04em", margin: "8px 0 6px" }}>{room.code}</div>
+          <div style={{ ...archivo, fontWeight: 400, fontSize: 12, lineHeight: 1.4, opacity: 0.8 }}>Code teilen oder Freunde direkt einladen — beide Wege landen im selben Raum.</div>
+        </div>
+
+        <div style={{ padding: "8px 18px 0", display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ ...glass({ padding: "4px 14px" }), fontSize: 11, color: room?.edition === "anniversary" ? "#F7DC6F" : C.ivoryDim, display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+            {room?.edition === "anniversary" ? <>⚡ 30 Jahre Edition</> : <><CardIcon size={11}><WizardArt index={0} /></CardIcon> Classic Edition</>}
+          </div>
+        </div>
+
+        <div style={{ padding: "12px 18px 0" }}>
+          <div style={{ ...flatLabel, marginBottom: 4 }}>Am Tisch · {players.length} von {seatCount}</div>
+          {Array.from({ length: seatCount }, (_, i) => {
+            const p = players[i];
+            if (!p) return (
+              <div key={i} style={{ ...flatRow(i === 0), color: C.ivoryDim }}>
+                <div style={{ ...archivo, fontWeight: 800, fontSize: 12, width: 16 }}>{i + 1}</div>
+                <div style={{ width: 26, height: 26, border: "2px dashed rgba(201,168,76,0.35)", flexShrink: 0 }} />
+                <div style={{ flex: 1, ...archivo, fontWeight: 500, fontSize: 14, lineHeight: 1.2 }}>KI wird beim Start ergänzt</div>
+              </div>
+            );
             const st = friendReqState[p.user_id];
-            // Hidden once sent/already connected - nothing left to do here
-            // regardless of whether the other side later accepts or declines.
             const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
+            const isMe = p.user_id === session.user.id;
             return (
-              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(201,168,76,0.1)" }}>
-                <div style={{ position: "relative" }}>
-                  <Avatar userId={p.user_id} username={p.ai_name} avatarUrl={avatars[p.user_id]} size={26} />
+              <div key={p.id} style={flatRow(i === 0)}>
+                <div style={{ ...archivo, fontWeight: 800, fontSize: 12, color: C.ivoryDim, width: 16 }}>{i + 1}</div>
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <div style={{ width: 26, height: 26, background: avatars[p.user_id] ? `url(${avatars[p.user_id]}) center/cover` : avatarColor(p.user_id || p.ai_name), color: "#E4C97A", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 800, fontSize: 11 }}>
+                    {!avatars[p.user_id] && (p.ai_name?.charAt(0).toUpperCase() ?? "?")}
+                  </div>
                   {!p.is_ai && (
                     <span style={{ position: "absolute", bottom: -1, right: -1, width: 8, height: 8, borderRadius: "50%", background: p.connected ? C.success : "rgba(255,255,255,0.25)", boxShadow: `0 0 0 2px ${C.bgDark}` }} title={p.connected ? "Verbunden" : "Getrennt"} />
                   )}
                 </div>
-                <div style={{ ...cinzel, fontSize: 13, color: p.user_id === session.user.id ? C.gold : C.ivory }}>
-                  {p.ai_name}
-                  {p.player_index === 0 && <span style={{ color: C.ivoryDim, fontWeight: 400 }}> (Host)</span>}
-                </div>
-                {p.user_id === session.user.id && <div style={{ fontSize: 10, color: C.ivoryDim, marginLeft: "auto" }}>Du</div>}
+                <div style={{ flex: 1, ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{p.ai_name}</div>
+                {isMe ? (
+                  <span style={{ background: C.gold, color: C.bgDark, ...archivo, fontWeight: 800, fontSize: 9, letterSpacing: "0.1em", padding: "5px 7px" }}>
+                    {p.player_index === 0 ? "HOST · DU" : "DU"}
+                  </span>
+                ) : !p.is_ai ? (
+                  <div style={{ width: 7, height: 7, background: p.connected ? C.success : "rgba(255,255,255,0.25)", flexShrink: 0 }} />
+                ) : null}
                 {canFriend && (
                   <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending"}
                     title="Als Freund hinzufügen"
-                    style={{ marginLeft: "auto", background: "none", border: "none", color: C.ivoryDim, cursor: st === "sending" ? "default" : "pointer", display: "flex", padding: 4, opacity: st === "sending" ? 0.5 : 1 }}>
+                    style={{ background: "none", border: "none", color: C.ivoryDim, cursor: st === "sending" ? "default" : "pointer", display: "flex", padding: 4, opacity: st === "sending" ? 0.5 : 1 }}>
                     <IconUserPlus size={16} />
                   </button>
                 )}
@@ -3153,17 +3610,56 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           })}
         </div>
 
+        <div style={{ padding: "20px 18px 0" }}>
+          <div style={{ ...flatLabel, marginBottom: 4 }}>Freunde einladen</div>
+          {inviteFriends === null ? (
+            [0, 1].map(i => (
+              <div key={i} style={flatRow(i === 0)}>
+                <div className="skeleton" style={{ width: 7, height: 7, borderRadius: "50%" }} />
+                <div className="skeleton" style={{ width: `${80 - i * 16}px`, height: 13, borderRadius: 4, flex: "none" }} />
+                <div className="skeleton" style={{ width: 62, height: 24, marginLeft: "auto" }} />
+              </div>
+            ))
+          ) : inviteFriends.length === 0 ? (
+            <div style={{ ...flatRow(true), ...archivo, fontSize: 12, color: C.ivoryDim }}>Noch keine Freunde hinzugefügt</div>
+          ) : inviteFriends.map((f, i) => {
+            const online = onlineUserIds.has(f.id);
+            const invited = invitedIds.has(f.id);
+            return (
+              <div key={f.id} style={flatRow(i === 0)}>
+                <div style={{ width: 8, height: 8, background: online ? C.success : "rgba(255,255,255,0.25)", flexShrink: 0 }} />
+                <div style={{ flex: 1, ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>
+                  {f.username} <span style={{ fontWeight: 400, fontSize: 11, color: C.ivoryDim }}>{online ? "" : "· offline"}</span>
+                </div>
+                <button onClick={() => inviteFriend(f.id)} disabled={invited || inviteSending === f.id || !online}
+                  style={flatGhostBtn({
+                    padding: "8px 11px", fontSize: 11, minHeight: 36,
+                    ...(invited ? { borderColor: C.gold, color: C.gold } : {}),
+                    opacity: (!online && !invited) ? 0.45 : 1,
+                  })}>
+                  {invited ? "EINGELADEN ✓" : "EINLADEN"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
         {isHost && effectiveAiCount > 0 && (
-          <div style={{ fontSize: 11, color: C.ivoryDim }}>+ {effectiveAiCount} KI {effectiveAiCount === 1 ? "wird" : "werden"} beim Start ergänzt</div>
+          <div style={{ padding: "14px 18px 0", ...archivo, fontSize: 11, color: C.ivoryDim }}>+ {effectiveAiCount} KI {effectiveAiCount === 1 ? "wird" : "werden"} beim Start ergänzt</div>
         )}
-        {isHost ? (
-          <button onClick={() => act("startGame", { aiCount: effectiveAiCount, edition: room?.edition ?? "classic" })} disabled={loading || players.length + effectiveAiCount < 2}
-            style={{ ...goldBtn(), padding: "13px 32px", fontSize: 14, opacity: loading ? 0.5 : 1 }}>
-            ✦ Spiel starten
-          </button>
-        ) : <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf den Host…</div>}
-        {error && <div style={{ color: "#FF8080", fontSize: 12 }}>{error}</div>}
-        {voicePanel}
+
+        <div style={{ padding: "24px 18px 30px" }}>
+          {isHost ? (
+            <button onClick={() => act("startGame", { aiCount: effectiveAiCount, edition: room?.edition ?? "classic" })} disabled={loading || players.length + effectiveAiCount < 2}
+              style={flatPrimaryBtn(loading || players.length + effectiveAiCount < 2)}>
+              SPIEL STARTEN<span style={{ fontSize: 18 }}>→</span>
+            </button>
+          ) : (
+            <div style={{ ...archivo, fontSize: 13, color: C.ivoryDim, textAlign: "center", padding: "17px 0" }}>Warte auf den Host…</div>
+          )}
+          {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center", marginTop: 10 }}>{error}</div>}
+          <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>{voicePanel}</div>
+        </div>
       </div>
     );
   }
@@ -3172,23 +3668,31 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   if (room.phase === "roundEnd" || room.phase === "gameEnd") {
     const sorted = [...players].sort((a: any, b: any) => b.score - a.score);
     const lastRound = roundHistory[roundHistory.length - 1];
+    const isGameEnd = room.phase === "gameEnd";
     return (
-      <div style={{ ...tableStyle, justifyContent: "center", gap: 14 }} className="fade-in">
-        <div style={{ ...cinzel, fontSize: "clamp(18px,5vw,26px)", color: C.gold }}>
-          {room.phase === "gameEnd" ? "🏆 Spiel beendet!" : `Runde ${room.round} beendet`}
+      <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
+        <div style={{ padding: "64px 18px 0" }}>
+          <div style={flatLabel}>{isGameEnd ? "Endstand" : "Rundenergebnis"}</div>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 46, lineHeight: 0.95, letterSpacing: "-0.02em", margin: "8px 0 4px" }}>
+            {isGameEnd ? "SPIEL BEENDET" : `RUNDE ${room.round}`}
+          </div>
+          {!isGameEnd && (
+            <div style={{ ...archivo, fontWeight: 600, fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", color: C.gold, display: "flex", alignItems: "center", gap: 8 }}>
+              Beendet · {room.round} von {room.max_rounds}
+              {spectatorBadge}
+            </div>
+          )}
         </div>
 
-        {/* Round detail */}
         {lastRound && (
-          <div style={{ ...glass({ padding: 16 }), width: "min(420px, 96vw)", overflowX: "auto" }}>
-            <div style={{ ...cinzel, fontSize: "var(--text-xs)", color: C.ivoryDim, letterSpacing: 2, marginBottom: 10, textTransform: "uppercase" as const }}>Rundenergebnis</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" as const }}>
+          <div style={{ padding: "22px 18px 0" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
               <thead>
                 <tr>
-                  <th style={{ textAlign: "left", padding: "6px 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Spieler</th>
-                  <th style={{ textAlign: "right", padding: "6px 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Ansage</th>
-                  <th style={{ textAlign: "right", padding: "6px 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Erg.</th>
-                  <th style={{ textAlign: "right", padding: "6px 8px 8px", color: C.ivoryDim, fontWeight: 600, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" as const, borderBottom: `1px solid rgba(201,168,76,0.12)` }}>Punkte</th>
+                  <th style={{ textAlign: "left", padding: "8px 6px", ...flatLabel, borderBottom: "2px solid rgba(201,168,76,0.45)" }}>Spieler</th>
+                  <th style={{ textAlign: "right", padding: "8px 6px", ...flatLabel, borderBottom: "2px solid rgba(201,168,76,0.45)" }}>Ansage</th>
+                  <th style={{ textAlign: "right", padding: "8px 6px", ...flatLabel, borderBottom: "2px solid rgba(201,168,76,0.45)" }}>Erg.</th>
+                  <th style={{ textAlign: "right", padding: "8px 6px", ...flatLabel, borderBottom: "2px solid rgba(201,168,76,0.45)" }}>Punkte</th>
                 </tr>
               </thead>
               <tbody>
@@ -3197,11 +3701,11 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
                   const delta = hit ? 20 + r.bid * 10 : -Math.abs(r.bid - r.got) * 10;
                   return (
                     <tr key={r.playerIndex}>
-                      <td style={{ padding: "9px 8px", borderTop: `1px solid rgba(201,168,76,0.10)`, color: C.ivory, fontSize: 13.5 }}>{r.name}</td>
-                      <td style={{ padding: "9px 8px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", color: C.ivoryDim, fontSize: 13.5 }}>{r.bid}</td>
-                      <td style={{ padding: "9px 8px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", color: C.ivoryDim, fontSize: 13.5 }}>{r.got}</td>
-                      <td style={{ padding: "9px 8px", borderTop: `1px solid rgba(201,168,76,0.10)`, textAlign: "right", fontWeight: 700, fontSize: 13.5, color: hit ? C.success : C.error }}>
-                        {delta > 0 ? "+" : ""}{delta}
+                      <td style={{ padding: "11px 6px", ...archivo, fontWeight: 600, fontSize: 14, color: C.ivory, borderBottom: "1px solid rgba(201,168,76,0.22)" }}>{r.name}</td>
+                      <td style={{ padding: "11px 6px", textAlign: "right", ...archivo, fontWeight: 400, fontSize: 14, color: C.ivoryDim, borderBottom: "1px solid rgba(201,168,76,0.22)" }}>{r.bid}</td>
+                      <td style={{ padding: "11px 6px", textAlign: "right", ...archivo, fontWeight: 400, fontSize: 14, color: C.ivoryDim, borderBottom: "1px solid rgba(201,168,76,0.22)" }}>{r.got}</td>
+                      <td style={{ padding: "11px 6px", textAlign: "right", ...archivo, fontWeight: 800, fontSize: 14, color: hit ? C.success : C.error, borderBottom: "1px solid rgba(201,168,76,0.22)" }}>
+                        {delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`}
                       </td>
                     </tr>
                   );
@@ -3211,49 +3715,45 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           </div>
         )}
 
-        {/* Ranking */}
-        <div style={{ ...glass({ padding: 14 }), width: "min(360px, 96vw)" }}>
-          <div style={{ ...cinzel, fontSize: "var(--text-xs)", color: C.ivoryDim, letterSpacing: 2, marginBottom: 8, textTransform: "uppercase" as const }}>Gesamtranking</div>
+        <div style={{ padding: "24px 18px 0" }}>
+          <div style={{ ...flatLabel, marginBottom: 4 }}>Gesamtstand</div>
           {sorted.map((p: any, i: number) => {
             const st = friendReqState[p.user_id];
             const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
+            const isFirst = i === 0;
             return (
-              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: i > 0 ? "1px solid rgba(201,168,76,0.10)" : "none" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: i === 0 ? C.gold : C.ivoryDim, width: 14, display: "inline-block" }}>{i + 1}</span>
-                  <Avatar userId={p.user_id} username={p.ai_name} avatarUrl={avatars[p.user_id]} size={22} />
-                  <span style={{ ...cinzel, fontSize: "clamp(13px,3.5vw,15px)", fontWeight: i === 0 ? 600 : 400, color: i === 0 ? C.gold : C.ivory }}>{p.ai_name}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ ...cinzel, fontWeight: 700, fontSize: "clamp(14px,4vw,17px)", fontVariantNumeric: "tabular-nums" as const, color: i === 0 ? C.gold : C.ivory }}>{p.score}</span>
-                  {canFriend && (
-                    <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending"}
-                      title="Als Freund hinzufügen"
-                      style={{ background: "none", border: "none", color: C.ivoryDim, cursor: st === "sending" ? "default" : "pointer", display: "flex", padding: 2, opacity: st === "sending" ? 0.5 : 1 }}>
-                      <IconUserPlus size={15} />
-                    </button>
-                  )}
-                </div>
+              <div key={p.id} style={flatRow(i === 0)}>
+                <div style={{ ...archivo, fontWeight: 800, fontSize: 12, width: 16, color: isFirst ? C.gold : C.ivoryDim }}>{i + 1}</div>
+                <div style={{ flex: 1, ...archivo, fontWeight: 600, fontSize: 15, lineHeight: 1.2, color: isFirst ? C.gold : C.ivory }}>{p.ai_name}</div>
+                <div style={{ ...archivo, fontWeight: 800, fontSize: 22, lineHeight: 1, fontVariantNumeric: "tabular-nums", color: isFirst ? C.gold : C.ivory }}>{p.score}</div>
+                {canFriend && (
+                  <button onClick={() => addFriendFromRoom(p.user_id)} disabled={st === "sending"}
+                    title="Als Freund hinzufügen"
+                    style={{ background: "none", border: "none", color: C.ivoryDim, cursor: st === "sending" ? "default" : "pointer", display: "flex", padding: 2, opacity: st === "sending" ? 0.5 : 1 }}>
+                    <IconUserPlus size={15} />
+                  </button>
+                )}
               </div>
             );
           })}
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-          {isHost && room.phase === "roundEnd" && (
-            <button onClick={() => act("nextRound")} disabled={loading} style={{ ...goldBtn(), padding: "12px 28px", opacity: loading ? 0.5 : 1, cursor: loading ? "default" : "pointer" }}>
-              {loading ? "…" : `Weiter → Runde ${room.round + 1}`}
-            </button>
+        <div style={{ padding: "24px 18px 30px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {isHost ? (
+            isGameEnd ? (
+              <button onClick={() => act("newGame")} style={flatPrimaryBtn(false)}>NOCHMAL SPIELEN<span style={{ fontSize: 18 }}>→</span></button>
+            ) : (
+              <button onClick={() => act("nextRound")} disabled={loading} style={flatPrimaryBtn(loading)}>
+                {loading ? "…" : `WEITER → RUNDE ${room.round + 1}`}<span style={{ fontSize: 18 }}>→</span>
+              </button>
+            )
+          ) : (
+            <div style={{ ...archivo, fontSize: 13, color: C.ivoryDim, textAlign: "center", padding: "17px 0" }}>Warte auf den Host…</div>
           )}
-          <button onClick={onLeave} style={{ ...goldBtn(false), padding: "8px 20px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}><IconHome size={14} /> Zurück zur Startseite</button>
-          {isHost && room.phase === "gameEnd" && (
-            <button onClick={() => act("newGame")} style={{ ...goldBtn(), padding: "12px 28px" }}>Nochmal spielen</button>
-          )}
-          {!isHost && <div style={{ color: C.ivoryDim, fontSize: 13 }}>Warte auf Host…</div>}
-          <button onClick={() => window.location.reload()} style={{ ...goldBtn(false), padding: "12px 20px", fontSize: 12 }}>Raum verlassen</button>
+          <button onClick={onLeave} style={flatGhostBtn({ width: "100%", textAlign: "center", justifyContent: "center", display: "flex", boxSizing: "border-box" })}>ZURÜCK ZUR STARTSEITE</button>
+          <button onClick={() => window.location.reload()} style={flatGhostBtn({ width: "100%", textAlign: "center", justifyContent: "center", display: "flex", boxSizing: "border-box", fontSize: 11, color: C.ivoryDim })}>Raum verlassen</button>
+          <div style={{ display: "flex", justifyContent: "center" }}>{voicePanel}</div>
         </div>
-        {spectatorBadge}
-        {voicePanel}
       </div>
     );
   }
@@ -3582,7 +4082,11 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           <button
             onClick={voice.enabled ? voice.toggleMute : voice.enableVoice}
             disabled={voice.connecting}
-            style={{ ...goldBtn(voice.enabled && !voice.muted), padding: "4px 7px", display: "flex", opacity: voice.connecting ? 0.5 : 1 }}
+            style={{
+              ...goldBtn(voice.enabled),
+              ...(voice.enabled && !voice.muted ? { background: C.success, color: C.ivory } : {}),
+              padding: "4px 7px", display: "flex", opacity: voice.connecting ? 0.5 : 1,
+            }}
             title={!voice.enabled ? "Sprachchat aktivieren" : voice.muted ? "Stummschaltung aufheben" : "Stummschalten"}
           >
             {voice.enabled && voice.muted ? <IconMicOff size={15} /> : <IconMic size={15} />}
@@ -3590,8 +4094,8 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
           {voice.enabled && (
             <button onClick={voice.disableVoice} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: "4px 7px", borderRadius: 6, display: "flex" }} title="Sprachchat verlassen"><IconX size={15} /></button>
           )}
-          <button onClick={() => setShowLog(v => !v)} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
-          <button onClick={() => setShowChat(v => !v)} style={{ ...goldBtn(showChat), padding: "4px 7px", position: "relative" as const, display: "flex" }} title="Chat">
+          <button onClick={() => { setShowLog(v => !v); setShowChat(false); }} style={{ ...goldBtn(showLog), padding: "4px 7px", display: "flex" }} title="Log"><IconHistory size={15} /></button>
+          <button onClick={() => { setShowChat(v => !v); setShowLog(false); }} style={{ ...goldBtn(showChat), padding: "4px 7px", position: "relative" as const, display: "flex" }} title="Chat">
             <IconMessageCircle size={15} />
             {unreadCount > 0 && (
               <span style={{
@@ -4337,7 +4841,11 @@ function SpectatorRoom({ roomId, session, voice, onLeave }: { roomId: string; se
           </div>
           <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
             <button onClick={voice.enabled ? voice.toggleMute : voice.enableVoice} disabled={voice.connecting}
-              style={{ ...goldBtn(voice.enabled && !voice.muted), padding: "4px 7px", display: "flex", opacity: voice.connecting ? 0.5 : 1 }}
+              style={{
+                ...goldBtn(voice.enabled),
+                ...(voice.enabled && !voice.muted ? { background: C.success, color: C.ivory } : {}),
+                padding: "4px 7px", display: "flex", opacity: voice.connecting ? 0.5 : 1,
+              }}
               title={!voice.enabled ? "Sprachchat beitreten" : voice.muted ? "Stummschaltung aufheben" : "Stummschalten"}>
               {voice.enabled && voice.muted ? <IconMicOff size={15} /> : <IconMic size={15} />}
             </button>
