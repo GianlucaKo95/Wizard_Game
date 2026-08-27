@@ -2175,7 +2175,7 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
 function LobbyScreen({ session }: { session: Session }) {
   const [view, setView] = useState<"home" | "rules" | "profile" | "scoreboard" | "stats" | "friends">("home");
   const [rulesTab, setRulesTab] = useState<"basics" | "score" | "cards" | "special">("basics");
-  const [reconnectRoom, setReconnectRoom] = useState<{ roomId: string; code: string; phase: string } | null>(null);
+  const [reconnectRoom, setReconnectRoom] = useState<{ roomId: string; code: string; phase: string; dismissible: boolean } | null>(null);
 
   // Reconnect state now lives on the backend (room_players membership),
   // not in localStorage - this is authoritative for any tab/device the
@@ -2186,9 +2186,15 @@ function LobbyScreen({ session }: { session: Session }) {
       .select("room_id, rooms:room_id(id, code, phase, created_at)")
       .eq("user_id", session.user.id)
       .order("created_at", { foreignTable: "rooms", ascending: false })
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         const active = (data ?? []).map((r: any) => r.rooms).find((r: any) => r && r.phase !== "gameEnd");
-        setReconnectRoom(active ? { roomId: active.id, code: active.code, phase: active.phase } : null);
+        if (!active) { setReconnectRoom(null); return; }
+        // Dismissible only once every other seat is AI - otherwise a real
+        // human is still relying on this seat and the edge function's
+        // leaveRoom will refuse it anyway (see index.ts).
+        const { data: others } = await supabase.from("room_players").select("is_ai, user_id").eq("room_id", active.id);
+        const dismissible = !(others ?? []).some(p => p.user_id !== session.user.id && !p.is_ai);
+        setReconnectRoom({ roomId: active.id, code: active.code, phase: active.phase, dismissible });
       });
   }, [session.user.id]);
 
@@ -2320,6 +2326,12 @@ function LobbyScreen({ session }: { session: Session }) {
     if (!reconnectRoom) return;
     setCodeInput(reconnectRoom.code);
     await joinRoom(reconnectRoom.code);
+  }
+
+  async function dismissReconnect() {
+    if (!reconnectRoom) return;
+    await callGameAction(reconnectRoom.roomId, "leaveRoom", {});
+    checkReconnect();
   }
 
   async function respondToInvite(accept: boolean) {
@@ -2574,6 +2586,10 @@ function LobbyScreen({ session }: { session: Session }) {
             <div style={{ ...archivo, fontWeight: 600, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.75 }}>Laufende Partie</div>
             <div style={{ ...archivo, fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "0.06em", marginTop: 4 }}>{reconnectRoom.code}</div>
           </div>
+          {reconnectRoom.dismissible && (
+            <button onClick={dismissReconnect} title="Verwerfen - nur noch KI im Raum"
+              style={{ background: "none", border: "none", color: C.bgDark, cursor: "pointer", display: "flex", padding: 6, opacity: 0.65 }}><IconX size={18} /></button>
+          )}
           <button onClick={reconnect} style={{ ...archivo, background: C.bgDark, color: C.goldLight, border: "none", fontWeight: 800, fontSize: 12, padding: "12px 14px", cursor: "pointer", minHeight: 44 }}>FORTSETZEN →</button>
         </div>
       )}
