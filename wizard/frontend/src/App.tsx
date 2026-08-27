@@ -2584,8 +2584,8 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={{ padding: "20px 18px 0" }}>
         <div style={{ ...flatLabel, marginBottom: 9 }}>Neue Partie</div>
         <div style={{ ...flatSegTrack, marginBottom: 12 }}>
-          <button onClick={() => setEdition("classic")} style={flatSegBtn(edition === "classic")}>Classic · 60</button>
-          <button onClick={() => setEdition("anniversary")} style={flatSegBtn(edition === "anniversary")}>30 Jahre · 69</button>
+          <button onClick={() => setEdition("classic")} style={flatSegBtn(edition === "classic")}>Classic</button>
+          <button onClick={() => setEdition("anniversary")} style={flatSegBtn(edition === "anniversary")}>30 Jahre</button>
         </div>
         <button onClick={createRoom} disabled={loading} style={flatPrimaryBtn(loading)}>
           {loading ? "…" : "SPIEL ERSTELLEN"}<span style={{ fontSize: 18 }}>→</span>
