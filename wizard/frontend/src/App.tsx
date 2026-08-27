@@ -1009,6 +1009,7 @@ function FriendProfileScreen({ friendId, friendName, friendAvatar, onBack }: { f
   }, [friendId]);
 
   const accuracyPct = stats?.bid_accuracy_pct != null ? Math.round(stats.bid_accuracy_pct) : 0;
+  const accuracyLabel = stats?.bid_accuracy_pct != null ? `${accuracyPct}%` : "–";
 
   return (
     <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
@@ -1053,7 +1054,7 @@ function FriendProfileScreen({ friendId, friendName, friendAvatar, onBack }: { f
       <div style={{ padding: "22px 18px 30px" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
           <div style={flatLabel}>Trefferquote der Ansagen</div>
-          <div style={{ marginLeft: "auto", ...archivo, fontWeight: 800, fontSize: 22, lineHeight: 1, color: C.gold }}>{accuracyPct}%</div>
+          <div style={{ marginLeft: "auto", ...archivo, fontWeight: 800, fontSize: 22, lineHeight: 1, color: C.gold }}>{accuracyLabel}</div>
         </div>
         <div style={{ height: 14, background: "rgba(255,255,255,0.07)", marginTop: 10, display: "flex" }}>
           <div style={{ width: `${accuracyPct}%`, background: C.gold }} />
@@ -2034,13 +2035,20 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
 
       const roomIds = mine.map(g => g.room_id).filter((id): id is string => !!id);
       // Manual (Rechenblock) games have room_id null - there's no rooms row
-      // for them - so their participant count comes from manual_game_players
-      // instead, keyed by manual_game_id.
+      // for them, and no game_stats row for guest players either (no
+      // account to attribute stats to) - so their standings can't be
+      // reconstructed from game_stats/allRows the way online games' can.
+      // manual_game_rounds isn't subject to the round_history-gets-deleted
+      // problem online rooms have (nothing cleans up manual games), so
+      // recompute the same per-player totals finishManualGame itself uses,
+      // straight from the rounds - this covers every player including
+      // guests, not just the ones with an account.
       const manualGameIds = Array.from(new Set(mine.map(g => g.manual_game_id).filter((id): id is string => !!id)));
-      const [{ data: allRows }, { data: rooms }, { data: manualPlayers }] = await Promise.all([
+      const [{ data: allRows }, { data: rooms }, { data: manualPlayers }, { data: manualRounds }] = await Promise.all([
         roomIds.length ? supabase.from("game_stats").select("room_id, user_id, placement, final_score").in("room_id", roomIds) : Promise.resolve({ data: [] }),
         roomIds.length ? supabase.from("rooms").select("id, edition").in("id", roomIds) : Promise.resolve({ data: [] }),
-        manualGameIds.length ? supabase.from("manual_game_players").select("manual_game_id").in("manual_game_id", manualGameIds) : Promise.resolve({ data: [] }),
+        manualGameIds.length ? supabase.from("manual_game_players").select("manual_game_id, player_index, display_name").in("manual_game_id", manualGameIds) : Promise.resolve({ data: [] }),
+        manualGameIds.length ? supabase.from("manual_game_rounds").select("manual_game_id, results").in("manual_game_id", manualGameIds) : Promise.resolve({ data: [] }),
       ]);
       const userIds = Array.from(new Set((allRows ?? []).map(r => r.user_id)));
       const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", userIds);
@@ -2048,6 +2056,21 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
       const editionByRoom = new Map((rooms ?? []).map(r => [r.id, r.edition]));
       const manualPlayerCountByGame = new Map<string, number>();
       for (const mp of manualPlayers ?? []) manualPlayerCountByGame.set(mp.manual_game_id, (manualPlayerCountByGame.get(mp.manual_game_id) ?? 0) + 1);
+      const manualRowsByGame = new Map<string, { userId: string; name: string; placement: number; score: number }[]>();
+      for (const gameId of manualGameIds) {
+        const playersForGame = (manualPlayers ?? []).filter(p => p.manual_game_id === gameId);
+        const roundsForGame = (manualRounds ?? []).filter(r => r.manual_game_id === gameId);
+        const totals = playersForGame.map(p => {
+          let score = 0;
+          for (const r of roundsForGame) {
+            const entry = (r.results ?? []).find((e: any) => e.playerIndex === p.player_index);
+            if (entry) score += entry.delta ?? 0;
+          }
+          return { userId: `${gameId}-${p.player_index}`, name: p.display_name, score };
+        });
+        const sorted = [...totals].sort((a, b) => b.score - a.score);
+        manualRowsByGame.set(gameId, sorted.map((t, idx) => ({ ...t, placement: idx + 1 })));
+      }
 
       setPastGames(mine.map(g => ({
         gameKey: g.room_id ?? g.manual_game_id ?? g.played_at, playedAt: g.played_at, edition: g.room_id ? editionByRoom.get(g.room_id) ?? null : null,
@@ -2055,15 +2078,18 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
         playerCount: g.room_id
           ? (allRows ?? []).filter(r => r.room_id === g.room_id).length
           : manualPlayerCountByGame.get(g.manual_game_id ?? "") ?? 0,
-        rows: (allRows ?? [])
-          .filter(r => r.room_id === g.room_id)
-          .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
-          .sort((a, b) => a.placement - b.placement),
+        rows: g.room_id
+          ? (allRows ?? [])
+            .filter(r => r.room_id === g.room_id)
+            .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
+            .sort((a, b) => a.placement - b.placement)
+          : manualRowsByGame.get(g.manual_game_id ?? "") ?? [],
       })));
     })();
   }, [session.user.id]);
 
   const accuracyPct = stats?.bid_accuracy_pct != null ? Math.round(stats.bid_accuracy_pct) : 0;
+  const accuracyLabel = stats?.bid_accuracy_pct != null ? `${accuracyPct}%` : "–";
 
   return (
     <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
@@ -2094,7 +2120,7 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
       <div style={{ padding: "22px 18px 0" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
           <div style={flatLabel}>Trefferquote der Ansagen</div>
-          <div style={{ marginLeft: "auto", ...archivo, fontWeight: 800, fontSize: 22, lineHeight: 1, color: C.gold }}>{accuracyPct}%</div>
+          <div style={{ marginLeft: "auto", ...archivo, fontWeight: 800, fontSize: 22, lineHeight: 1, color: C.gold }}>{accuracyLabel}</div>
         </div>
         <div style={{ height: 14, background: "rgba(255,255,255,0.07)", marginTop: 10, display: "flex" }}>
           <div style={{ width: `${accuracyPct}%`, background: C.gold }} />
