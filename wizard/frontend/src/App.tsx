@@ -264,7 +264,7 @@ function TabBar({ active, onChange, friendBadge }: { active: TabKey; onChange: (
     minHeight: 44, position: "relative",
   });
   return (
-    <div style={{ position: "fixed" as const, left: 0, right: 0, bottom: 0, zIndex: 50, borderTop: "2px solid rgba(201,168,76,0.45)", background: C.bgDark, display: "flex", paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
+    <div style={{ position: "fixed" as const, left: 0, right: 0, bottom: 0, zIndex: 50, borderTop: "2px solid rgba(201,168,76,0.45)", background: C.bgDark, display: "flex", paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
       <button onClick={() => onChange("home")} style={tabBtn(active === "home")}><IconHome size={19} />Spielen</button>
       <button onClick={() => onChange("friends")} style={tabBtn(active === "friends")}>
         <IconUsers size={19} />Freunde
@@ -2680,7 +2680,7 @@ function LobbyScreen({ session }: { session: Session }) {
       )}
       {activeTab ? (
         <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
-          <div style={{ flex: 1, paddingBottom: "calc(64px + max(18px, env(safe-area-inset-bottom)))" }}>{screen}</div>
+          <div style={{ flex: 1, paddingBottom: "calc(64px + max(8px, env(safe-area-inset-bottom)))" }}>{screen}</div>
           <TabBar active={activeTab} onChange={setView} friendBadge={pendingFriendCount} />
         </div>
       ) : screen}
