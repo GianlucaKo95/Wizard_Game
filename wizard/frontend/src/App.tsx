@@ -579,7 +579,7 @@ async function unsubscribeFromPush(userId: string): Promise<void> {
 }
 
 // ─── Profile Screen ───────────────────────────────────────────────────────────
-function ProfileScreen({ session, onBack }: { session: Session; onBack: () => void }) {
+function ProfileScreen({ session }: { session: Session }) {
   const username = session.user.user_metadata?.username ?? "Spieler";
   const [nameInput, setNameInput] = useState(username);
   const [nameSaving, setNameSaving] = useState(false);
@@ -701,9 +701,8 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 
   return (
     <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "56px 18px 12px" }}>
-        <button onClick={onBack} style={{ background: "none", border: "none", ...archivo, fontWeight: 800, fontSize: 12, color: C.ivory, cursor: "pointer", padding: 0, minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>← ZURÜCK</button>
-        <div style={{ ...flatLabel, marginLeft: "auto" }}>Profil</div>
+      <div style={{ padding: "56px 18px 12px" }}>
+        <div style={{ ...archivo, fontWeight: 800, fontSize: 19, lineHeight: 1 }}>PROFIL</div>
       </div>
       <div style={flatRule} />
 
@@ -2102,9 +2101,8 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
 
   return (
     <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
-      <div style={{ padding: "56px 18px 12px", display: "flex", alignItems: "baseline" }}>
+      <div style={{ padding: "56px 18px 12px" }}>
         <div style={{ ...archivo, fontWeight: 800, fontSize: 19, lineHeight: 1 }}>STATISTIK</div>
-        <div style={{ ...flatLabel, marginLeft: "auto" }}>user_stats</div>
       </div>
       <div style={flatRule} />
 
@@ -2328,10 +2326,16 @@ function LobbyScreen({ session }: { session: Session }) {
     await joinRoom(reconnectRoom.code);
   }
 
+  const [dismissingReconnect, setDismissingReconnect] = useState(false);
   async function dismissReconnect() {
     if (!reconnectRoom) return;
-    await callGameAction(reconnectRoom.roomId, "leaveRoom", {});
-    checkReconnect();
+    setDismissingReconnect(true);
+    const res = await callGameAction(reconnectRoom.roomId, "leaveRoom", {});
+    setDismissingReconnect(false);
+    // Clear immediately instead of waiting on a second round trip through
+    // checkReconnect's two sequential queries - that stacked delay on top
+    // of this request's own is what made the banner feel slow to disappear.
+    if (!res?.error) setReconnectRoom(null);
   }
 
   async function respondToInvite(accept: boolean) {
@@ -2553,7 +2557,7 @@ function LobbyScreen({ session }: { session: Session }) {
     );
   }
 
-  if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
+  if (view === "profile") return <ProfileScreen session={session} />;
 
   if (view === "scoreboard") return <ManualScoreboardScreen session={session} onBack={() => setView("home")} />;
 
@@ -2581,16 +2585,20 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={flatRule} />
 
       {reconnectRoom && (
-        <div style={{ background: C.gold, color: C.bgDark, padding: "14px 18px", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ ...archivo, fontWeight: 600, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.75 }}>Laufende Partie</div>
-            <div style={{ ...archivo, fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "0.06em", marginTop: 4 }}>{reconnectRoom.code}</div>
+        <div style={{ background: C.gold, color: C.bgDark, padding: "14px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ ...archivo, fontWeight: 600, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.75 }}>Laufende Partie</div>
+              <div style={{ ...archivo, fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "0.06em", marginTop: 4 }}>{reconnectRoom.code}</div>
+            </div>
+            <button onClick={reconnect} style={{ ...archivo, background: C.bgDark, color: C.goldLight, border: "none", fontWeight: 800, fontSize: 12, padding: "12px 14px", cursor: "pointer", minHeight: 44 }}>FORTSETZEN →</button>
           </div>
           {reconnectRoom.dismissible && (
-            <button onClick={dismissReconnect} title="Verwerfen - nur noch KI im Raum"
-              style={{ background: "none", border: "none", color: C.bgDark, cursor: "pointer", display: "flex", padding: 6, opacity: 0.65 }}><IconX size={18} /></button>
+            <button onClick={dismissReconnect} disabled={dismissingReconnect}
+              style={{ ...archivo, background: "none", border: "1px solid rgba(23,24,20,0.4)", color: C.bgDark, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", padding: "8px 0", marginTop: 10, width: "100%", cursor: dismissingReconnect ? "default" : "pointer", opacity: dismissingReconnect ? 0.6 : 0.85, minHeight: 36 }}>
+              {dismissingReconnect ? "Wird verworfen…" : "VERWERFEN"}
+            </button>
           )}
-          <button onClick={reconnect} style={{ ...archivo, background: C.bgDark, color: C.goldLight, border: "none", fontWeight: 800, fontSize: 12, padding: "12px 14px", cursor: "pointer", minHeight: 44 }}>FORTSETZEN →</button>
         </div>
       )}
 
