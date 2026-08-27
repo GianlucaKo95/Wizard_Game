@@ -2797,6 +2797,13 @@ function useVoiceChat(roomId: string | null, session: Session) {
   const [error, setError] = useState("");
   const [participantIds, setParticipantIds] = useState<Set<string>>(new Set());
   const [speakingIds, setSpeakingIds] = useState<Set<string>>(new Set());
+  // Session-only, local to this device - never written anywhere shared, so
+  // it doesn't survive leaving the room and can't affect what anyone else
+  // hears. Kept in a ref alongside the state so the ontrack callback (which
+  // closes over this hook's first render) always sees the current set,
+  // not a stale one, when a peer's audio element gets (re)created later.
+  const [mutedPeerIds, setMutedPeerIdsState] = useState<Set<string>>(new Set());
+  const mutedPeerIdsRef = useRef<Set<string>>(new Set());
 
   const localStreamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -2876,6 +2883,7 @@ function useVoiceChat(roomId: string | null, session: Session) {
         audioElsRef.current.set(otherId, el);
       }
       el.srcObject = e.streams[0];
+      el.muted = mutedPeerIdsRef.current.has(otherId);
       // The `autoplay` attribute alone is unreliable for an element created
       // outside the direct call stack of a user gesture (it's set here,
       // inside an async ontrack callback, not inside the click handler that
@@ -3067,7 +3075,19 @@ function useVoiceChat(roomId: string | null, session: Session) {
     setMuted(next);
   }
 
-  return { enabled, connecting, muted, error, participantIds, speakingIds, enableVoice, disableVoice, toggleMute };
+  // Muting a peer only affects local playback - the audio keeps arriving
+  // over the connection, it's just silenced on this one device, so it
+  // never touches what that person or anyone else hears.
+  function togglePeerMute(otherId: string) {
+    const next = new Set(mutedPeerIdsRef.current);
+    if (next.has(otherId)) next.delete(otherId); else next.add(otherId);
+    mutedPeerIdsRef.current = next;
+    setMutedPeerIdsState(next);
+    const el = audioElsRef.current.get(otherId);
+    if (el) el.muted = next.has(otherId);
+  }
+
+  return { enabled, connecting, muted, error, participantIds, speakingIds, mutedPeerIds, enableVoice, disableVoice, toggleMute, togglePeerMute };
 }
 
 // ─── Game Room ────────────────────────────────────────────────────────────────
@@ -3226,6 +3246,15 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
   // ── Chat state ──
   const [showChat, setShowChat] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
+  // Session-only, local to this device - never written anywhere shared, so
+  // it doesn't survive leaving the room and can't affect what anyone else
+  // sees.
+  const [mutedChatIds, setMutedChatIds] = useState<Set<string>>(new Set());
+  const toggleChatMute = (id: string) => setMutedChatIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [chatInput, setChatInput] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -3584,6 +3613,13 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
             <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: voice.speakingIds.has(id) ? C.success : C.ivoryDim }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: voice.speakingIds.has(id) ? C.success : "rgba(255,255,255,0.25)" }} />
               {voiceNameFor(id)}
+              {id !== session.user.id && (
+                <button onClick={() => voice.togglePeerMute(id)}
+                  title={voice.mutedPeerIds.has(id) ? "Stummschaltung aufheben" : "Für dich stummschalten"}
+                  style={{ background: "none", border: "none", padding: 0, marginLeft: 2, display: "flex", cursor: "pointer", color: voice.mutedPeerIds.has(id) ? C.error : C.ivoryDim, opacity: voice.mutedPeerIds.has(id) ? 1 : 0.45 }}>
+                  {voice.mutedPeerIds.has(id) ? <IconMicOff size={11} /> : <IconMic size={11} />}
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -3958,16 +3994,35 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
         <div style={{ ...cinzel, fontSize: 14, color: C.gold, display: "flex", alignItems: "center", gap: 6 }}><IconMessageCircle size={15} /> Chat</div>
         <button onClick={() => setShowChat(false)} style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex" }}><IconX size={18} /></button>
       </div>
+      {/* Muted senders - the only way back to unmute once their messages are hidden below */}
+      {mutedChatIds.size > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 6, padding: "8px 12px", borderBottom: `1px solid ${C.glassBorder}` }}>
+          {Array.from(mutedChatIds).map(id => (
+            <button key={id} onClick={() => toggleChatMute(id)}
+              style={{ ...archivo, fontSize: 10, background: "rgba(255,255,255,0.08)", border: "none", color: C.ivoryDim, padding: "4px 8px", borderRadius: 10, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+              {players.find((p: any) => p.user_id === id)?.ai_name ?? "Nutzer"} <IconX size={9} />
+            </button>
+          ))}
+        </div>
+      )}
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto" as const, padding: "10px 12px", display: "flex", flexDirection: "column" as const, gap: 8 }}>
         {chatMessages.length === 0 && (
           <div style={{ fontSize: 12, color: C.ivoryDim, textAlign: "center" as const, marginTop: 20 }}>Noch keine Nachrichten</div>
         )}
-        {chatMessages.map((m: any) => {
+        {chatMessages.filter((m: any) => m.user_id === session.user.id || !mutedChatIds.has(m.user_id)).map((m: any) => {
           const mine = m.user_id === session.user.id;
           return (
             <div key={m.id} style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "85%" }}>
-              {!mine && <div style={{ fontSize: 9, color: C.gold, marginBottom: 2, ...cinzel }}>{m.username}</div>}
+              {!mine && (
+                <div style={{ fontSize: 9, color: C.gold, marginBottom: 2, ...cinzel, display: "flex", alignItems: "center", gap: 5 }}>
+                  {m.username}
+                  <button onClick={() => toggleChatMute(m.user_id)} title="Nutzer im Chat stummschalten"
+                    style={{ background: "none", border: "none", padding: 0, display: "flex", cursor: "pointer", color: C.ivoryDim, opacity: 0.5 }}>
+                    <IconMicOff size={9} />
+                  </button>
+                </div>
+              )}
               <div style={{
                 background: mine ? "rgba(201,168,76,0.25)" : "rgba(255,255,255,0.08)",
                 border: `1px solid ${mine ? "rgba(201,168,76,0.4)" : "rgba(255,255,255,0.12)"}`,
