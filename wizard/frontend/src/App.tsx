@@ -264,7 +264,7 @@ function TabBar({ active, onChange, friendBadge }: { active: TabKey; onChange: (
     minHeight: 44, position: "relative",
   });
   return (
-    <div style={{ borderTop: "2px solid rgba(201,168,76,0.45)", background: C.bgDark, display: "flex", paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
+    <div style={{ position: "fixed" as const, left: 0, right: 0, bottom: 0, zIndex: 50, borderTop: "2px solid rgba(201,168,76,0.45)", background: C.bgDark, display: "flex", paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
       <button onClick={() => onChange("home")} style={tabBtn(active === "home")}><IconHome size={19} />Spielen</button>
       <button onClick={() => onChange("friends")} style={tabBtn(active === "friends")}>
         <IconUsers size={19} />Freunde
@@ -1001,7 +1001,7 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
               ) : (
                 <button disabled={!online} style={flatGhostBtn({ fontSize: 11, padding: "8px 11px", minHeight: 36, opacity: online ? 1 : 0.4 })}>EINLADEN</button>
               )}
-              <button onClick={() => remove(f.id)} disabled={busyId === f.id}
+              <button onClick={() => { if (confirm(`${names[otherId] ?? "Diesen Freund"} wirklich entfernen?`)) remove(f.id); }} disabled={busyId === f.id}
                 style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", padding: 4 }}><IconX size={16} /></button>
             </div>
           );
@@ -1981,31 +1981,41 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
   // per-game timestamp beyond played_at (that's on the user's own row,
   // shared by all rows for that room since they're inserted together), and
   // no direct FK to profiles.username, so a second query resolves names.
-  const [pastGames, setPastGames] = useState<{ roomId: string; playedAt: string; edition: string | null; place: number; score: number; totalRounds: number; rows: { userId: string; name: string; placement: number; score: number }[] }[] | null>(null);
+  const [pastGames, setPastGames] = useState<{ gameKey: string; playedAt: string; edition: string | null; place: number; score: number; totalRounds: number; playerCount: number; rows: { userId: string; name: string; placement: number; score: number }[] }[] | null>(null);
   const [openGame, setOpenGame] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       const { data: mine } = await supabase.from("game_stats")
-        .select("room_id, placement, final_score, total_rounds, played_at")
+        .select("room_id, manual_game_id, placement, final_score, total_rounds, played_at")
         .eq("user_id", session.user.id)
         .order("played_at", { ascending: false })
         .limit(20);
       if (!mine || mine.length === 0) { setPastGames([]); return; }
 
-      const roomIds = mine.map(g => g.room_id);
-      const [{ data: allRows }, { data: rooms }] = await Promise.all([
-        supabase.from("game_stats").select("room_id, user_id, placement, final_score").in("room_id", roomIds),
-        supabase.from("rooms").select("id, edition").in("id", roomIds),
+      const roomIds = mine.map(g => g.room_id).filter((id): id is string => !!id);
+      // Manual (Rechenblock) games have room_id null - there's no rooms row
+      // for them - so their participant count comes from manual_game_players
+      // instead, keyed by manual_game_id.
+      const manualGameIds = Array.from(new Set(mine.map(g => g.manual_game_id).filter((id): id is string => !!id)));
+      const [{ data: allRows }, { data: rooms }, { data: manualPlayers }] = await Promise.all([
+        roomIds.length ? supabase.from("game_stats").select("room_id, user_id, placement, final_score").in("room_id", roomIds) : Promise.resolve({ data: [] }),
+        roomIds.length ? supabase.from("rooms").select("id, edition").in("id", roomIds) : Promise.resolve({ data: [] }),
+        manualGameIds.length ? supabase.from("manual_game_players").select("manual_game_id").in("manual_game_id", manualGameIds) : Promise.resolve({ data: [] }),
       ]);
       const userIds = Array.from(new Set((allRows ?? []).map(r => r.user_id)));
       const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", userIds);
       const nameById = new Map((profiles ?? []).map(p => [p.id, p.username]));
       const editionByRoom = new Map((rooms ?? []).map(r => [r.id, r.edition]));
+      const manualPlayerCountByGame = new Map<string, number>();
+      for (const mp of manualPlayers ?? []) manualPlayerCountByGame.set(mp.manual_game_id, (manualPlayerCountByGame.get(mp.manual_game_id) ?? 0) + 1);
 
       setPastGames(mine.map(g => ({
-        roomId: g.room_id, playedAt: g.played_at, edition: editionByRoom.get(g.room_id) ?? null,
+        gameKey: g.room_id ?? g.manual_game_id ?? g.played_at, playedAt: g.played_at, edition: g.room_id ? editionByRoom.get(g.room_id) ?? null : null,
         place: g.placement, score: g.final_score, totalRounds: g.total_rounds,
+        playerCount: g.room_id
+          ? (allRows ?? []).filter(r => r.room_id === g.room_id).length
+          : manualPlayerCountByGame.get(g.manual_game_id ?? "") ?? 0,
         rows: (allRows ?? [])
           .filter(r => r.room_id === g.room_id)
           .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
@@ -2051,9 +2061,6 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
         <div style={{ height: 14, background: "rgba(255,255,255,0.07)", marginTop: 10, display: "flex" }}>
           <div style={{ width: `${accuracyPct}%`, background: C.gold }} />
         </div>
-        <div style={{ ...archivo, fontWeight: 400, fontSize: 11, lineHeight: 1.4, color: C.ivoryDim, marginTop: 8 }}>
-          {stats?.total_bid ?? 0} Stiche angesagt · {stats?.total_won ?? 0} erreicht. Der Wert kommt aus <span style={{ fontWeight: 600, color: C.ivory }}>bid_accuracy_pct</span> und zählt App- wie Rechenblock-Partien.
-        </div>
       </div>
 
       <div style={{ padding: "24px 18px 30px" }}>
@@ -2061,14 +2068,14 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
         {pastGames === null && <div style={{ ...archivo, fontSize: 12, color: C.ivoryDim, padding: "20px 0" }}>Lädt…</div>}
         {pastGames?.length === 0 && <div style={{ ...archivo, fontSize: 12, color: C.ivoryDim, padding: "20px 0" }}>Noch keine Partien gespielt.</div>}
         {pastGames?.map((pg, i) => {
-          const isOpen = openGame === pg.roomId;
+          const isOpen = openGame === pg.gameKey;
           const date = new Date(pg.playedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
           return (
-            <div key={pg.roomId} style={{ ...flatRow(i === 0), flexDirection: "column", alignItems: "stretch", gap: 0 }}>
-              <button onClick={() => setOpenGame(isOpen ? null : pg.roomId)}
+            <div key={pg.gameKey} style={{ ...flatRow(i === 0), flexDirection: "column", alignItems: "stretch", gap: 0 }}>
+              <button onClick={() => setOpenGame(isOpen ? null : pg.gameKey)}
                 style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minHeight: 44, color: "inherit" }}>
                 <span style={{ ...archivo, fontWeight: 700, fontSize: 12.5, color: pg.place === 1 ? C.gold : C.ivory, minWidth: 18 }}>{pg.place}.</span>
-                <span style={{ flex: 1, ...archivo, fontWeight: 400, fontSize: 12.5, lineHeight: 1.3, color: C.ivoryDim }}>{pg.rows.length} Spieler · {pg.totalRounds} Runden · {date}</span>
+                <span style={{ flex: 1, ...archivo, fontWeight: 400, fontSize: 12.5, lineHeight: 1.3, color: C.ivoryDim }}>{pg.playerCount} Spieler · {pg.totalRounds} Runden · {date}</span>
                 <span style={{ ...archivo, fontWeight: 800, fontSize: 17, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{pg.score}</span>
                 <span style={{ ...archivo, fontWeight: 400, fontSize: 13, lineHeight: 1, color: C.ivoryDim }}>{isOpen ? "▴" : "▾"}</span>
               </button>
@@ -2573,7 +2580,7 @@ function LobbyScreen({ session }: { session: Session }) {
   );
   })();
 
-  const activeTab: TabKey | null =
+  const activeTab: TabKey | null = roomId ? null :
     view === "home" ? "home" : view === "friends" ? "friends" : view === "stats" ? "stats" : view === "profile" ? "profile" : null;
 
   return (
@@ -2593,7 +2600,7 @@ function LobbyScreen({ session }: { session: Session }) {
       )}
       {activeTab ? (
         <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
-          <div style={{ flex: 1 }}>{screen}</div>
+          <div style={{ flex: 1, paddingBottom: "calc(64px + max(18px, env(safe-area-inset-bottom)))" }}>{screen}</div>
           <TabBar active={activeTab} onChange={setView} friendBadge={pendingFriendCount} />
         </div>
       ) : screen}
@@ -3538,7 +3545,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
     // spielen ausschließlich die tatsächlich beigetretenen Menschen mit.
     const effectiveAiCount = Math.max(0, 3 - players.length);
-    const seatCount = 6;
+    const seatCount = players.length + effectiveAiCount;
     return (
       <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "56px 18px 12px" }}>

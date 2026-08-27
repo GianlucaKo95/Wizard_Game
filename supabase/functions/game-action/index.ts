@@ -1057,7 +1057,7 @@ serve(async (req) => {
           if (!t.userId) continue; // guest, no account to attribute stats to
           const placement = sorted.findIndex(s => s.playerIndex === t.playerIndex) + 1;
           await upd(supabase.from("game_stats").insert({
-            room_id: null, user_id: t.userId, placement, final_score: t.score,
+            room_id: null, manual_game_id: manualGameId, user_id: t.userId, placement, final_score: t.score,
             total_rounds: mgRounds.length, tricks_bid: t.bidSum, tricks_won: t.gotSum,
           }), "finishManualGame.stats");
         }
