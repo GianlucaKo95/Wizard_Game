@@ -2573,7 +2573,7 @@ function LobbyScreen({ session }: { session: Session }) {
   );
   })();
 
-  const activeTab: TabKey | null =
+  const activeTab: TabKey | null = roomId ? null :
     view === "home" ? "home" : view === "friends" ? "friends" : view === "stats" ? "stats" : view === "profile" ? "profile" : null;
 
   return (
