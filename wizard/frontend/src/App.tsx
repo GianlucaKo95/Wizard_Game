@@ -2021,7 +2021,7 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
   // per-game timestamp beyond played_at (that's on the user's own row,
   // shared by all rows for that room since they're inserted together), and
   // no direct FK to profiles.username, so a second query resolves names.
-  const [pastGames, setPastGames] = useState<{ gameKey: string; playedAt: string; edition: string | null; place: number; score: number; totalRounds: number; playerCount: number; rows: { userId: string; name: string; placement: number; score: number }[] }[] | null>(null);
+  const [pastGames, setPastGames] = useState<{ gameKey: string; playedAt: string; edition: string | null; place: number; score: number; totalRounds: number; playerCount: number; rows: { userId: string; name: string; placement: number; score: number }[]; roomDataAvailable: boolean }[] | null>(null);
   const [openGame, setOpenGame] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2072,19 +2072,30 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
         manualRowsByGame.set(gameId, sorted.map((t, idx) => ({ ...t, placement: idx + 1 })));
       }
 
-      setPastGames(mine.map(g => ({
-        gameKey: g.room_id ?? g.manual_game_id ?? g.played_at, playedAt: g.played_at, edition: g.room_id ? editionByRoom.get(g.room_id) ?? null : null,
-        place: g.placement, score: g.final_score, totalRounds: g.total_rounds,
-        playerCount: g.room_id
-          ? (allRows ?? []).filter(r => r.room_id === g.room_id).length
-          : manualPlayerCountByGame.get(g.manual_game_id ?? "") ?? 0,
-        rows: g.room_id
-          ? (allRows ?? [])
-            .filter(r => r.room_id === g.room_id)
-            .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
-            .sort((a, b) => a.placement - b.placement)
-          : manualRowsByGame.get(g.manual_game_id ?? "") ?? [],
-      })));
+      setPastGames(mine.map(g => {
+        const isManual = !!g.manual_game_id;
+        // An online game (no manual_game_id) whose room_id is null didn't
+        // start out that way - it lost its room row to cleanup_stale_rooms()
+        // after finishing (room_id -> SET NULL, see 019). That also takes
+        // round_history with it, and room_id was the only link between this
+        // player's game_stats row and their opponents' - there's nothing left
+        // to join on, so the standings for that game are gone for good.
+        const roomDataAvailable = isManual || !!g.room_id;
+        return {
+          gameKey: g.room_id ?? g.manual_game_id ?? g.played_at, playedAt: g.played_at, edition: g.room_id ? editionByRoom.get(g.room_id) ?? null : null,
+          place: g.placement, score: g.final_score, totalRounds: g.total_rounds,
+          roomDataAvailable,
+          playerCount: isManual
+            ? manualPlayerCountByGame.get(g.manual_game_id ?? "") ?? 0
+            : (allRows ?? []).filter(r => r.room_id === g.room_id).length,
+          rows: isManual
+            ? manualRowsByGame.get(g.manual_game_id ?? "") ?? []
+            : (allRows ?? [])
+              .filter(r => r.room_id === g.room_id)
+              .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
+              .sort((a, b) => a.placement - b.placement),
+        };
+      }));
     })();
   }, [session.user.id]);
 
@@ -2139,19 +2150,23 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
               <button onClick={() => setOpenGame(isOpen ? null : pg.gameKey)}
                 style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minHeight: 44, color: "inherit" }}>
                 <span style={{ ...archivo, fontWeight: 700, fontSize: 12.5, color: pg.place === 1 ? C.gold : C.ivory, minWidth: 18 }}>{pg.place}.</span>
-                <span style={{ flex: 1, ...archivo, fontWeight: 400, fontSize: 12.5, lineHeight: 1.3, color: C.ivoryDim }}>{pg.playerCount} Spieler · {pg.totalRounds} Runden · {date}</span>
+                <span style={{ flex: 1, ...archivo, fontWeight: 400, fontSize: 12.5, lineHeight: 1.3, color: C.ivoryDim }}>{pg.roomDataAvailable ? `${pg.playerCount} Spieler · ` : ""}{pg.totalRounds} Runden · {date}</span>
                 <span style={{ ...archivo, fontWeight: 800, fontSize: 17, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{pg.score}</span>
                 <span style={{ ...archivo, fontWeight: 400, fontSize: 13, lineHeight: 1, color: C.ivoryDim }}>{isOpen ? "▴" : "▾"}</span>
               </button>
               {isOpen && (
                 <div style={{ padding: "10px 0 4px" }}>
-                  {pg.rows.map(pr => (
+                  {pg.roomDataAvailable ? pg.rows.map(pr => (
                     <div key={pr.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.14)" }}>
                       <span style={{ ...archivo, fontWeight: 600, fontSize: 12, color: C.ivoryDim, width: 14 }}>{pr.placement}</span>
                       <span style={{ flex: 1, ...archivo, fontWeight: 500, fontSize: 13, lineHeight: 1.2 }}>{pr.name}</span>
                       <span style={{ ...archivo, fontWeight: 700, fontSize: 13, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{pr.score}</span>
                     </div>
-                  ))}
+                  )) : (
+                    <div style={{ ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.14)" }}>
+                      Mitspieler-Daten für diese Partie sind nicht mehr verfügbar.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
