@@ -2328,10 +2328,16 @@ function LobbyScreen({ session }: { session: Session }) {
     await joinRoom(reconnectRoom.code);
   }
 
+  const [dismissingReconnect, setDismissingReconnect] = useState(false);
   async function dismissReconnect() {
     if (!reconnectRoom) return;
-    await callGameAction(reconnectRoom.roomId, "leaveRoom", {});
-    checkReconnect();
+    setDismissingReconnect(true);
+    const res = await callGameAction(reconnectRoom.roomId, "leaveRoom", {});
+    setDismissingReconnect(false);
+    // Clear immediately instead of waiting on a second round trip through
+    // checkReconnect's two sequential queries - that stacked delay on top
+    // of this request's own is what made the banner feel slow to disappear.
+    if (!res?.error) setReconnectRoom(null);
   }
 
   async function respondToInvite(accept: boolean) {
@@ -2581,16 +2587,20 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={flatRule} />
 
       {reconnectRoom && (
-        <div style={{ background: C.gold, color: C.bgDark, padding: "14px 18px", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ ...archivo, fontWeight: 600, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.75 }}>Laufende Partie</div>
-            <div style={{ ...archivo, fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "0.06em", marginTop: 4 }}>{reconnectRoom.code}</div>
+        <div style={{ background: C.gold, color: C.bgDark, padding: "14px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ ...archivo, fontWeight: 600, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.75 }}>Laufende Partie</div>
+              <div style={{ ...archivo, fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "0.06em", marginTop: 4 }}>{reconnectRoom.code}</div>
+            </div>
+            <button onClick={reconnect} style={{ ...archivo, background: C.bgDark, color: C.goldLight, border: "none", fontWeight: 800, fontSize: 12, padding: "12px 14px", cursor: "pointer", minHeight: 44 }}>FORTSETZEN →</button>
           </div>
           {reconnectRoom.dismissible && (
-            <button onClick={dismissReconnect} title="Verwerfen - nur noch KI im Raum"
-              style={{ background: "none", border: "none", color: C.bgDark, cursor: "pointer", display: "flex", padding: 6, opacity: 0.65 }}><IconX size={18} /></button>
+            <button onClick={dismissReconnect} disabled={dismissingReconnect}
+              style={{ ...archivo, background: "none", border: "1px solid rgba(23,24,20,0.4)", color: C.bgDark, fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", padding: "8px 0", marginTop: 10, width: "100%", cursor: dismissingReconnect ? "default" : "pointer", opacity: dismissingReconnect ? 0.6 : 0.85, minHeight: 36 }}>
+              {dismissingReconnect ? "Wird verworfen…" : "VERWERFEN"}
+            </button>
           )}
-          <button onClick={reconnect} style={{ ...archivo, background: C.bgDark, color: C.goldLight, border: "none", fontWeight: 800, fontSize: 12, padding: "12px 14px", cursor: "pointer", minHeight: 44 }}>FORTSETZEN →</button>
         </div>
       )}
 
