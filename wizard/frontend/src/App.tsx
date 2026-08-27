@@ -2189,12 +2189,18 @@ function LobbyScreen({ session }: { session: Session }) {
       .then(({ data }) => setMyAvatarUrl(data?.avatar_url ?? null));
   }, [session.user.id]);
 
-  // Home-screen stat tiles (Spiele / Siege / Treffer).
+  // Home-screen stat tiles (Spiele / Siege / Treffer). Refetches every time
+  // the home tab becomes active, not just once on mount - LobbyScreen never
+  // unmounts between tabs, so a mount-only fetch would (a) never pick up a
+  // game finished since, and (b) never recover from a request that failed
+  // because the very first load raced an unrefreshed/expired session token
+  // (common right after reopening a PWA that's been closed for a while).
   const [homeStats, setHomeStats] = useState<{ games_played: number; games_won: number; bid_accuracy_pct: number | null } | null>(null);
   useEffect(() => {
+    if (view !== "home") return;
     supabase.from("user_stats").select("games_played, games_won, bid_accuracy_pct").eq("id", session.user.id).single()
       .then(({ data }) => setHomeStats(data ?? null));
-  }, [session.user.id]);
+  }, [session.user.id, view]);
 
   // "Freunde spielen gerade": friends_active_rooms is one row per friend per
   // room - group by room so two friends in the same game collapse into one
