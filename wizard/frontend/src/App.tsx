@@ -2540,7 +2540,7 @@ function LobbyScreen({ session }: { session: Session }) {
         </div>
         <button onClick={() => joinRoom()} disabled={loading || codeInput.length < 5}
           style={flatGhostBtn({ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", boxSizing: "border-box", opacity: loading || codeInput.length < 5 ? 0.4 : 1 })}>
-          {codeInput.length === 5 ? `BEITRETEN · ${codeInput}` : "CODE VERVOLLSTÄNDIGEN"}<span>→</span>
+          {codeInput.length === 5 ? `BEITRETEN · ${codeInput}` : "RAUM BEITRETEN"}<span>→</span>
         </button>
         {error && <div style={{ color: "#FF8080", fontSize: 12, textAlign: "center", marginTop: 10 }}>{error}</div>}
       </div>
