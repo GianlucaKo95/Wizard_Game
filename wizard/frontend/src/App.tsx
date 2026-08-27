@@ -3580,15 +3580,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
 
         <div style={{ padding: "12px 18px 0" }}>
           <div style={{ ...flatLabel, marginBottom: 4 }}>Am Tisch · {players.length} von {seatCount}</div>
-          {Array.from({ length: seatCount }, (_, i) => {
-            const p = players[i];
-            if (!p) return (
-              <div key={i} style={{ ...flatRow(i === 0), color: C.ivoryDim }}>
-                <div style={{ ...archivo, fontWeight: 800, fontSize: 12, width: 16 }}>{i + 1}</div>
-                <div style={{ width: 26, height: 26, border: "2px dashed rgba(201,168,76,0.35)", flexShrink: 0 }} />
-                <div style={{ flex: 1, ...archivo, fontWeight: 500, fontSize: 14, lineHeight: 1.2 }}>KI wird beim Start ergänzt</div>
-              </div>
-            );
+          {players.map((p, i) => {
             const st = friendReqState[p.user_id];
             const canFriend = !p.is_ai && p.user_id && p.user_id !== session.user.id && st !== "sent" && st !== "exists";
             const isMe = p.user_id === session.user.id;
