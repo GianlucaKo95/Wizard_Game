@@ -908,7 +908,7 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
     <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
       <div style={{ padding: "56px 18px 12px", display: "flex", alignItems: "baseline" }}>
         <div style={{ ...archivo, fontWeight: 800, fontSize: 19, lineHeight: 1 }}>FREUNDE</div>
-        <div style={{ ...flatLabel, marginLeft: "auto" }}>{accepted.length} verbunden</div>
+        <div style={{ ...flatLabel, marginLeft: "auto" }}>{accepted.length} Freunde</div>
       </div>
       <div style={flatRule} />
 
@@ -992,7 +992,7 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{names[otherId] ?? "…"}</div>
                 <div style={{ ...archivo, fontWeight: 400, fontSize: 11, color: C.ivoryDim, marginTop: 1 }}>
-                  {activeRoom ? `Spielt gerade · Runde ${activeRoom.round}` : online ? "Online" : "Zuletzt offline"}
+                  {activeRoom ? `Spielt gerade · Runde ${activeRoom.round}` : online ? "Online" : "Offline"}
                 </div>
               </div>
               {activeRoom ? (
