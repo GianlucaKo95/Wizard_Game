@@ -255,7 +255,7 @@ const flatRow = (first = false): React.CSSProperties => ({
 // spec, everywhere else - table, waiting room, rules, scoreboard, round end -
 // stays without it so those screens keep every pixel of vertical space).
 type TabKey = "home" | "friends" | "stats" | "profile";
-function TabBar({ active, onChange, friendBadge }: { active: TabKey; onChange: (t: TabKey) => void; friendBadge?: number }) {
+function TabBar({ active, onChange, friendBadge, onlineFriendCount }: { active: TabKey; onChange: (t: TabKey) => void; friendBadge?: number; onlineFriendCount?: number }) {
   const tabBtn = (on: boolean): React.CSSProperties => ({
     flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
     padding: "9px 0 4px", border: "none", borderTop: `3px solid ${on ? C.gold : "transparent"}`,
@@ -271,6 +271,11 @@ function TabBar({ active, onChange, friendBadge }: { active: TabKey; onChange: (
         {!!friendBadge && (
           <span style={{ position: "absolute", top: 2, right: "28%", background: C.error, color: "#fff", fontSize: 9, fontWeight: 700, minWidth: 15, height: 15, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
             {friendBadge}
+          </span>
+        )}
+        {!!onlineFriendCount && (
+          <span style={{ position: "absolute", top: 2, left: "28%", background: C.success, color: "#fff", fontSize: 9, fontWeight: 700, minWidth: 15, height: 15, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", borderRadius: "50%" }}>
+            {onlineFriendCount}
           </span>
         )}
       </button>
@@ -865,6 +870,7 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
   const accepted = (rows ?? []).filter((f: any) => f.status === "accepted");
   const incoming = (rows ?? []).filter((f: any) => f.status === "pending" && f.addressee_id === uid);
   const outgoing = (rows ?? []).filter((f: any) => f.status === "pending" && f.requester_id === uid);
+  const onlineFriendCount = accepted.filter((f: any) => onlineUserIds.has(f.requester_id === uid ? f.addressee_id : f.requester_id)).length;
 
   async function search() {
     const q = query.trim();
@@ -913,7 +919,7 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
     <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
       <div style={{ padding: "56px 18px 12px", display: "flex", alignItems: "baseline" }}>
         <div style={{ ...archivo, fontWeight: 800, fontSize: 19, lineHeight: 1 }}>FREUNDE</div>
-        <div style={{ ...flatLabel, marginLeft: "auto" }}>{accepted.length} Freunde</div>
+        <div style={{ ...flatLabel, marginLeft: "auto" }}>{accepted.length} Freunde{onlineFriendCount > 0 ? ` · ${onlineFriendCount} Online` : ""}</div>
       </div>
       <div style={flatRule} />
 
@@ -2214,7 +2220,11 @@ function LobbyScreen({ session }: { session: Session }) {
 
   // Pending friend requests (badge) + incoming room invites (popup): initial
   // fetch, then live via realtime so they arrive even while sitting idle.
+  // Accepted friend ids are tracked the same way, so the tab bar can show
+  // how many are currently online without FriendsScreen having to be
+  // mounted (it unmounts whenever the user leaves that tab).
   const [pendingFriendCount, setPendingFriendCount] = useState(0);
+  const [acceptedFriendIds, setAcceptedFriendIds] = useState<Set<string>>(new Set());
   const [incomingInvite, setIncomingInvite] = useState<{ id: string; room_code: string; from_username: string } | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
 
@@ -2225,13 +2235,22 @@ function LobbyScreen({ session }: { session: Session }) {
         .eq("addressee_id", uid).eq("status", "pending")
         .then(({ count }) => setPendingFriendCount(count ?? 0));
     };
+    const refreshAcceptedFriends = () => {
+      supabase.from("friends").select("requester_id, addressee_id").eq("status", "accepted")
+        .or(`requester_id.eq.${uid},addressee_id.eq.${uid}`)
+        .then(({ data }) => {
+          setAcceptedFriendIds(new Set((data ?? []).map(f => f.requester_id === uid ? f.addressee_id : f.requester_id)));
+        });
+    };
     refreshPendingCount();
+    refreshAcceptedFriends();
     supabase.from("room_invites").select("id, room_code, from_username").eq("to_user_id", uid)
       .order("created_at", { ascending: false }).limit(1)
       .then(({ data }) => { if (data && data[0]) setIncomingInvite(data[0]); });
 
     const ch = supabase.channel(`social:${uid}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "friends", filter: `addressee_id=eq.${uid}` }, refreshPendingCount)
+      .on("postgres_changes", { event: "*", schema: "public", table: "friends", filter: `addressee_id=eq.${uid}` }, () => { refreshPendingCount(); refreshAcceptedFriends(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "friends", filter: `requester_id=eq.${uid}` }, refreshAcceptedFriends)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "room_invites", filter: `to_user_id=eq.${uid}` }, payload => {
         setIncomingInvite(payload.new as any);
       })
@@ -2705,7 +2724,8 @@ function LobbyScreen({ session }: { session: Session }) {
       {activeTab ? (
         <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
           <div style={{ flex: 1, paddingBottom: "calc(64px + max(8px, env(safe-area-inset-bottom)))" }}>{screen}</div>
-          <TabBar active={activeTab} onChange={setView} friendBadge={pendingFriendCount} />
+          <TabBar active={activeTab} onChange={setView} friendBadge={pendingFriendCount}
+            onlineFriendCount={Array.from(acceptedFriendIds).filter(id => onlineUserIds.has(id)).length} />
         </div>
       ) : screen}
     </>
