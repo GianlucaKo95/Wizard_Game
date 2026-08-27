@@ -264,7 +264,7 @@ function TabBar({ active, onChange, friendBadge }: { active: TabKey; onChange: (
     minHeight: 44, position: "relative",
   });
   return (
-    <div style={{ borderTop: "2px solid rgba(201,168,76,0.45)", background: C.bgDark, display: "flex", paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
+    <div style={{ position: "fixed" as const, left: 0, right: 0, bottom: 0, zIndex: 50, borderTop: "2px solid rgba(201,168,76,0.45)", background: C.bgDark, display: "flex", paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
       <button onClick={() => onChange("home")} style={tabBtn(active === "home")}><IconHome size={19} />Spielen</button>
       <button onClick={() => onChange("friends")} style={tabBtn(active === "friends")}>
         <IconUsers size={19} />Freunde
@@ -1001,7 +1001,7 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
               ) : (
                 <button disabled={!online} style={flatGhostBtn({ fontSize: 11, padding: "8px 11px", minHeight: 36, opacity: online ? 1 : 0.4 })}>EINLADEN</button>
               )}
-              <button onClick={() => remove(f.id)} disabled={busyId === f.id}
+              <button onClick={() => { if (confirm(`${names[otherId] ?? "Diesen Freund"} wirklich entfernen?`)) remove(f.id); }} disabled={busyId === f.id}
                 style={{ background: "none", border: "none", color: C.ivoryDim, cursor: "pointer", display: "flex", padding: 4 }}><IconX size={16} /></button>
             </div>
           );
@@ -2593,7 +2593,7 @@ function LobbyScreen({ session }: { session: Session }) {
       )}
       {activeTab ? (
         <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
-          <div style={{ flex: 1 }}>{screen}</div>
+          <div style={{ flex: 1, paddingBottom: "calc(64px + max(18px, env(safe-area-inset-bottom)))" }}>{screen}</div>
           <TabBar active={activeTab} onChange={setView} friendBadge={pendingFriendCount} />
         </div>
       ) : screen}
@@ -3538,7 +3538,7 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
     // KI füllt nur auf 3 auf, wenn nicht genug echte Spieler da sind - darüber
     // spielen ausschließlich die tatsächlich beigetretenen Menschen mit.
     const effectiveAiCount = Math.max(0, 3 - players.length);
-    const seatCount = 6;
+    const seatCount = players.length + effectiveAiCount;
     return (
       <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "56px 18px 12px" }}>
