@@ -579,7 +579,7 @@ async function unsubscribeFromPush(userId: string): Promise<void> {
 }
 
 // ─── Profile Screen ───────────────────────────────────────────────────────────
-function ProfileScreen({ session, onBack }: { session: Session; onBack: () => void }) {
+function ProfileScreen({ session }: { session: Session }) {
   const username = session.user.user_metadata?.username ?? "Spieler";
   const [nameInput, setNameInput] = useState(username);
   const [nameSaving, setNameSaving] = useState(false);
@@ -701,9 +701,8 @@ function ProfileScreen({ session, onBack }: { session: Session; onBack: () => vo
 
   return (
     <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "56px 18px 12px" }}>
-        <button onClick={onBack} style={{ background: "none", border: "none", ...archivo, fontWeight: 800, fontSize: 12, color: C.ivory, cursor: "pointer", padding: 0, minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>← ZURÜCK</button>
-        <div style={{ ...flatLabel, marginLeft: "auto" }}>Profil</div>
+      <div style={{ padding: "56px 18px 12px" }}>
+        <div style={{ ...archivo, fontWeight: 800, fontSize: 19, lineHeight: 1 }}>PROFIL</div>
       </div>
       <div style={flatRule} />
 
@@ -2102,9 +2101,8 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
 
   return (
     <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
-      <div style={{ padding: "56px 18px 12px", display: "flex", alignItems: "baseline" }}>
+      <div style={{ padding: "56px 18px 12px" }}>
         <div style={{ ...archivo, fontWeight: 800, fontSize: 19, lineHeight: 1 }}>STATISTIK</div>
-        <div style={{ ...flatLabel, marginLeft: "auto" }}>user_stats</div>
       </div>
       <div style={flatRule} />
 
@@ -2559,7 +2557,7 @@ function LobbyScreen({ session }: { session: Session }) {
     );
   }
 
-  if (view === "profile") return <ProfileScreen session={session} onBack={() => setView("home")} />;
+  if (view === "profile") return <ProfileScreen session={session} />;
 
   if (view === "scoreboard") return <ManualScoreboardScreen session={session} onBack={() => setView("home")} />;
 
