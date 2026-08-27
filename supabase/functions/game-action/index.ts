@@ -493,9 +493,11 @@ async function endRound(supabase, roomId, room, players) {
     const totalsByPlayer = new Map();
     for (const rh of allRounds ?? []) {
       for (const entry of rh.results ?? []) {
-        const t = totalsByPlayer.get(entry.playerIndex) ?? { bid: 0, got: 0 };
+        const t = totalsByPlayer.get(entry.playerIndex) ?? { bid: 0, got: 0, hit: 0, played: 0 };
         t.bid += entry.bid ?? 0;
         t.got += entry.got ?? 0;
+        t.played += 1;
+        if (entry.bid === entry.got) t.hit += 1;
         totalsByPlayer.set(entry.playerIndex, t);
       }
     }
@@ -504,12 +506,14 @@ async function endRound(supabase, roomId, room, players) {
       if (!p.is_ai && p.user_id) {
         const sorted = [...results].sort((a, b) => b.totalScore - a.totalScore);
         const placement = sorted.findIndex(s => s.playerIndex === r.playerIndex) + 1;
-        const totals = totalsByPlayer.get(r.playerIndex) ?? { bid: r.bid, got: r.got };
+        const totals = totalsByPlayer.get(r.playerIndex) ?? { bid: r.bid, got: r.got, hit: r.bid === r.got ? 1 : 0, played: 1 };
         await supabase.from("game_stats").insert({
           room_id: roomId, user_id: p.user_id, placement,
           final_score: r.totalScore, total_rounds: room.max_rounds,
           tricks_bid: totals.bid,
           tricks_won: totals.got,
+          rounds_hit: totals.hit,
+          rounds_played: totals.played,
         });
       }
     }
@@ -1103,12 +1107,16 @@ serve(async (req) => {
         if (!mgRounds || mgRounds.length === 0) return json({ error: "Keine Runden erfasst" }, 400);
 
         const totals = mgPlayers.map(p => {
-          let score = 0, bidSum = 0, gotSum = 0;
+          let score = 0, bidSum = 0, gotSum = 0, hitSum = 0, playedSum = 0;
           for (const r of mgRounds) {
             const entry = (r.results ?? []).find((e: any) => e.playerIndex === p.player_index);
-            if (entry) { score += entry.delta ?? 0; bidSum += entry.bid ?? 0; gotSum += entry.got ?? 0; }
+            if (entry) {
+              score += entry.delta ?? 0; bidSum += entry.bid ?? 0; gotSum += entry.got ?? 0;
+              playedSum += 1;
+              if (entry.bid === entry.got) hitSum += 1;
+            }
           }
-          return { playerIndex: p.player_index, userId: p.user_id, score, bidSum, gotSum };
+          return { playerIndex: p.player_index, userId: p.user_id, score, bidSum, gotSum, hitSum, playedSum };
         });
         const sorted = [...totals].sort((a, b) => b.score - a.score);
         for (const t of totals) {
@@ -1117,6 +1125,7 @@ serve(async (req) => {
           await upd(supabase.from("game_stats").insert({
             room_id: null, manual_game_id: manualGameId, user_id: t.userId, placement, final_score: t.score,
             total_rounds: mgRounds.length, tricks_bid: t.bidSum, tricks_won: t.gotSum,
+            rounds_hit: t.hitSum, rounds_played: t.playedSum,
           }), "finishManualGame.stats");
         }
         await upd(supabase.from("manual_games").update({ finished_at: new Date().toISOString() }).eq("id", manualGameId), "finishManualGame.finish");
