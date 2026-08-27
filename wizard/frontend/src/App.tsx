@@ -813,6 +813,7 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
   const [searching, setSearching] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [viewingFriend, setViewingFriend] = useState<{ id: string; name: string; avatar: string | null } | null>(null);
 
   // Rooms where an accepted friend is currently seated (lobby through active
   // play - friends_active_rooms drops a room the moment their room_players
@@ -904,6 +905,11 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
     load();
   }
 
+  if (viewingFriend) return (
+    <FriendProfileScreen friendId={viewingFriend.id} friendName={viewingFriend.name} friendAvatar={viewingFriend.avatar}
+      onBack={() => setViewingFriend(null)} />
+  );
+
   return (
     <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
       <div style={{ padding: "56px 18px 12px", display: "flex", alignItems: "baseline" }}>
@@ -989,12 +995,13 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
           return (
             <div key={f.id} style={flatRow(i === 0)}>
               <div style={{ width: 8, height: 8, background: online ? C.success : "rgba(255,255,255,0.25)", flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <button onClick={() => setViewingFriend({ id: otherId, name: names[otherId] ?? "Spieler", avatar: avatars[otherId] ?? null })}
+                style={{ flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", color: "inherit" }}>
                 <div style={{ ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{names[otherId] ?? "…"}</div>
                 <div style={{ ...archivo, fontWeight: 400, fontSize: 11, color: C.ivoryDim, marginTop: 1 }}>
                   {activeRoom ? `Spielt gerade · Runde ${activeRoom.round}` : online ? "Online" : "Offline"}
                 </div>
-              </div>
+              </button>
               {activeRoom ? (
                 <button onClick={() => spectate(activeRoom.room_id)} disabled={spectatingId === activeRoom.room_id}
                   style={flatGhostBtn({ fontSize: 11, padding: "8px 11px", minHeight: 36, opacity: spectatingId === activeRoom.room_id ? 0.5 : 1 })}>ZUSCHAUEN</button>
@@ -1020,6 +1027,73 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Friend Profile (read-only: avatar, member-since, user_stats) ─────────
+// user_stats is already readable for any id, not just the caller's own -
+// same broad game_stats/profiles select policies the caller's own
+// StatsScreen relies on - so this needs no new RLS or migration.
+function FriendProfileScreen({ friendId, friendName, friendAvatar, onBack }: { friendId: string; friendName: string; friendAvatar: string | null; onBack: () => void }) {
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  useEffect(() => {
+    supabase.from("profiles").select("created_at").eq("id", friendId).single().then(({ data }) => setCreatedAt(data?.created_at ?? null));
+    supabase.from("user_stats").select("*").eq("id", friendId).single().then(({ data }) => setStats(data ?? null));
+  }, [friendId]);
+
+  const accuracyPct = stats?.bid_accuracy_pct != null ? Math.round(stats.bid_accuracy_pct) : 0;
+
+  return (
+    <div style={{ ...flatScreen, minHeight: "auto" }} className="fade-in">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "56px 18px 12px" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", ...archivo, fontWeight: 800, fontSize: 12, color: C.ivory, cursor: "pointer", padding: 0, minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>← ZURÜCK</button>
+        <div style={{ ...flatLabel, marginLeft: "auto" }}>Profil</div>
+      </div>
+      <div style={flatRule} />
+
+      <div style={{ padding: "22px 18px 20px", display: "flex", gap: 14, alignItems: "center" }}>
+        <div style={{ width: 72, height: 72, flexShrink: 0, background: friendAvatar ? `url(${friendAvatar}) center/cover` : avatarColor(friendId), display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 800, fontSize: 30, color: "#fff" }}>
+          {!friendAvatar && friendName.charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 20, lineHeight: 1.2 }}>{friendName}</div>
+          <div style={{ ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim, marginTop: 3 }}>
+            {createdAt ? `Seit ${new Date(createdAt).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}` : ""} · {stats?.games_played ?? 0} Partien
+          </div>
+        </div>
+      </div>
+      <div style={flatRuleThin} />
+
+      <div style={{ display: "flex", flexWrap: "wrap" }}>
+        <div style={{ ...flatStat, width: "50%", boxSizing: "border-box" }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 40, lineHeight: 1 }}>{stats?.games_played ?? 0}</div>
+          <div style={{ ...flatLabel, marginTop: 6 }}>Spiele</div>
+        </div>
+        <div style={{ ...flatStat, width: "50%", boxSizing: "border-box", borderRight: "none" }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 40, lineHeight: 1 }}>{stats?.games_won ?? 0}</div>
+          <div style={{ ...flatLabel, marginTop: 6 }}>Siege</div>
+        </div>
+        <div style={{ ...flatStat, width: "50%", boxSizing: "border-box" }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 40, lineHeight: 1 }}>{stats?.avg_score ?? 0}</div>
+          <div style={{ ...flatLabel, marginTop: 6 }}>Ø Punkte</div>
+        </div>
+        <div style={{ ...flatStat, width: "50%", boxSizing: "border-box", borderRight: "none" }}>
+          <div style={{ ...archivo, fontWeight: 800, fontSize: 40, lineHeight: 1 }}>{stats?.avg_placement != null ? String(stats.avg_placement).replace(".", ",") : "–"}</div>
+          <div style={{ ...flatLabel, marginTop: 6 }}>Ø Platz</div>
+        </div>
+      </div>
+
+      <div style={{ padding: "22px 18px 30px" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <div style={flatLabel}>Trefferquote der Ansagen</div>
+          <div style={{ marginLeft: "auto", ...archivo, fontWeight: 800, fontSize: 22, lineHeight: 1, color: C.gold }}>{accuracyPct}%</div>
+        </div>
+        <div style={{ height: 14, background: "rgba(255,255,255,0.07)", marginTop: 10, display: "flex" }}>
+          <div style={{ width: `${accuracyPct}%`, background: C.gold }} />
+        </div>
+      </div>
     </div>
   );
 }
