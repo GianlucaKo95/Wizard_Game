@@ -1132,8 +1132,17 @@ serve(async (req) => {
       // phase). A lobby they've actually walked away from should stop
       // showing up as "reconnect" though, so this cleans that case up
       // immediately instead of waiting on the inactivity reaper.
-      if (room.phase !== "lobby") return json({ error: "Laufendes Spiel kann nicht so verlassen werden" }, 400);
       if (callerIdx < 0) return json({ error: "Nicht in diesem Raum" }, 400);
+      if (room.phase !== "lobby") {
+        // Exception: if every other seat is AI, no other human's game state
+        // depends on this player_index anymore, so there's nothing left to
+        // protect by keeping the room around - let them dismiss it instead
+        // of waiting on the inactivity reaper.
+        const hasOtherHuman = players.some((p, i) => i !== callerIdx && !p.is_ai);
+        if (hasOtherHuman) return json({ error: "Laufendes Spiel kann nicht so verlassen werden" }, 400);
+        await upd(supabase.from("rooms").delete().eq("id", roomId), "leaveRoom.soloAiRoom");
+        return json({ ok: true });
+      }
       await upd(supabase.from("room_players").delete().eq("room_id", roomId).eq("user_id", user.id), "leaveRoom.player");
       const { data: remaining } = await supabase.from("room_players").select("id").eq("room_id", roomId);
       if (!remaining || remaining.length === 0) {
