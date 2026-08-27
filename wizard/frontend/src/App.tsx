@@ -2027,13 +2027,24 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
   useEffect(() => {
     (async () => {
       const { data: mine } = await supabase.from("game_stats")
-        .select("room_id, manual_game_id, placement, final_score, total_rounds, played_at")
+        .select("room_id, manual_game_id, game_session_id, placement, final_score, total_rounds, played_at")
         .eq("user_id", session.user.id)
         .order("played_at", { ascending: false })
         .limit(20);
       if (!mine || mine.length === 0) { setPastGames([]); return; }
 
       const roomIds = mine.map(g => g.room_id).filter((id): id is string => !!id);
+      const sessionIds = mine.map(g => g.game_session_id).filter((id): id is string => !!id);
+      // Games from before game_session_id existed that already lost room_id
+      // to room cleanup (see 022_game_session_id.sql) have no join key left
+      // at all - room_id was the only thing tying their player rows
+      // together. As a best-effort fallback, look for other orphaned rows
+      // (same total_rounds, played within a few seconds - game_stats rows
+      // for one game are inserted back-to-back at game end) and only trust
+      // the match if it forms a complete, non-overlapping placement set;
+      // legit ambiguity (e.g. two such games finishing seconds apart) then
+      // correctly falls through to "not available" instead of guessing wrong.
+      const legacyOrphans = mine.filter(g => !g.room_id && !g.manual_game_id && !g.game_session_id);
       // Manual (Rechenblock) games have room_id null - there's no rooms row
       // for them, and no game_stats row for guest players either (no
       // account to attribute stats to) - so their standings can't be
@@ -2044,13 +2055,25 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
       // straight from the rounds - this covers every player including
       // guests, not just the ones with an account.
       const manualGameIds = Array.from(new Set(mine.map(g => g.manual_game_id).filter((id): id is string => !!id)));
-      const [{ data: allRows }, { data: rooms }, { data: manualPlayers }, { data: manualRounds }] = await Promise.all([
+      const [{ data: roomRows }, { data: sessionRows }, { data: rooms }, { data: manualPlayers }, { data: manualRounds }, ...orphanResults] = await Promise.all([
         roomIds.length ? supabase.from("game_stats").select("room_id, user_id, placement, final_score").in("room_id", roomIds) : Promise.resolve({ data: [] }),
+        sessionIds.length ? supabase.from("game_stats").select("game_session_id, user_id, placement, final_score").in("game_session_id", sessionIds) : Promise.resolve({ data: [] }),
         roomIds.length ? supabase.from("rooms").select("id, edition").in("id", roomIds) : Promise.resolve({ data: [] }),
         manualGameIds.length ? supabase.from("manual_game_players").select("manual_game_id, player_index, display_name").in("manual_game_id", manualGameIds) : Promise.resolve({ data: [] }),
         manualGameIds.length ? supabase.from("manual_game_rounds").select("manual_game_id, results").in("manual_game_id", manualGameIds) : Promise.resolve({ data: [] }),
+        ...legacyOrphans.map(g => {
+          const windowMs = 5000;
+          const lo = new Date(new Date(g.played_at).getTime() - windowMs).toISOString();
+          const hi = new Date(new Date(g.played_at).getTime() + windowMs).toISOString();
+          return supabase.from("game_stats").select("user_id, placement, final_score, played_at")
+            .is("room_id", null).is("manual_game_id", null).is("game_session_id", null)
+            .eq("total_rounds", g.total_rounds).gte("played_at", lo).lte("played_at", hi);
+        }),
       ]);
-      const userIds = Array.from(new Set((allRows ?? []).map(r => r.user_id)));
+      const allRows = [...(roomRows ?? []), ...(sessionRows ?? []).map(r => ({ ...r, room_id: r.game_session_id }))];
+      const orphanRowsByPlayedAt = new Map(legacyOrphans.map((g, i) => [g.played_at, orphanResults[i]?.data ?? []]));
+
+      const userIds = Array.from(new Set([...allRows.map(r => r.user_id), ...[...orphanRowsByPlayedAt.values()].flat().map(r => r.user_id)]));
       const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", userIds);
       const nameById = new Map((profiles ?? []).map(p => [p.id, p.username]));
       const editionByRoom = new Map((rooms ?? []).map(r => [r.id, r.edition]));
@@ -2071,29 +2094,51 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
         const sorted = [...totals].sort((a, b) => b.score - a.score);
         manualRowsByGame.set(gameId, sorted.map((t, idx) => ({ ...t, placement: idx + 1 })));
       }
+      // Only trust a heuristic match if the candidates form a clean,
+      // complete placement set (1..N, no gaps or duplicates) - anything
+      // messier means two unrelated orphaned games probably overlapped in
+      // the time window, and guessing which rows belong together would risk
+      // showing someone's real opponent as a stranger's, or vice versa.
+      const reconstructOrphan = (candidates: { user_id: string; placement: number; final_score: number }[]) => {
+        const byUser = new Map(candidates.map(c => [c.user_id, c]));
+        const unique = [...byUser.values()];
+        const placements = unique.map(c => c.placement).sort((a, b) => a - b);
+        const isCleanSet = placements.length > 0 && placements.every((p, i) => p === i + 1);
+        if (!isCleanSet) return null;
+        return unique
+          .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
+          .sort((a, b) => a.placement - b.placement);
+      };
 
       setPastGames(mine.map(g => {
         const isManual = !!g.manual_game_id;
-        // An online game (no manual_game_id) whose room_id is null didn't
-        // start out that way - it lost its room row to cleanup_stale_rooms()
-        // after finishing (room_id -> SET NULL, see 019). That also takes
+        const groupKey = g.game_session_id ?? g.room_id;
+        const reconstructed = (!isManual && !groupKey) ? reconstructOrphan(orphanRowsByPlayedAt.get(g.played_at) ?? []) : null;
+        // An online game (no manual_game_id, no game_session_id) whose
+        // room_id is null didn't start out that way - it lost its room row
+        // to cleanup_stale_rooms() after finishing (room_id -> SET NULL, see
+        // 019), predating game_session_id (022). That also takes
         // round_history with it, and room_id was the only link between this
-        // player's game_stats row and their opponents' - there's nothing left
-        // to join on, so the standings for that game are gone for good.
-        const roomDataAvailable = isManual || !!g.room_id;
+        // player's game_stats row and their opponents' - there's nothing
+        // left to join on except the best-effort played_at heuristic above.
+        const roomDataAvailable = isManual || !!groupKey || reconstructed !== null;
         return {
-          gameKey: g.room_id ?? g.manual_game_id ?? g.played_at, playedAt: g.played_at, edition: g.room_id ? editionByRoom.get(g.room_id) ?? null : null,
+          gameKey: groupKey ?? g.played_at, playedAt: g.played_at, edition: g.room_id ? editionByRoom.get(g.room_id) ?? null : null,
           place: g.placement, score: g.final_score, totalRounds: g.total_rounds,
           roomDataAvailable,
           playerCount: isManual
             ? manualPlayerCountByGame.get(g.manual_game_id ?? "") ?? 0
-            : (allRows ?? []).filter(r => r.room_id === g.room_id).length,
+            : groupKey
+              ? allRows.filter(r => r.room_id === groupKey).length
+              : reconstructed?.length ?? 0,
           rows: isManual
             ? manualRowsByGame.get(g.manual_game_id ?? "") ?? []
-            : (allRows ?? [])
-              .filter(r => r.room_id === g.room_id)
-              .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
-              .sort((a, b) => a.placement - b.placement),
+            : groupKey
+              ? allRows
+                .filter(r => r.room_id === groupKey)
+                .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
+                .sort((a, b) => a.placement - b.placement)
+              : reconstructed ?? [],
         };
       }));
     })();

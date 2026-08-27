@@ -501,6 +501,10 @@ async function endRound(supabase, roomId, room, players) {
         totalsByPlayer.set(entry.playerIndex, t);
       }
     }
+    // Shared across every player's row for this game so their standings can
+    // still be grouped together after room_id is cleared by room cleanup
+    // (see 022_game_session_id.sql) - room_id alone doesn't survive that.
+    const gameSessionId = crypto.randomUUID();
     for (const r of results) {
       const p = players[r.playerIndex];
       if (!p.is_ai && p.user_id) {
@@ -508,7 +512,7 @@ async function endRound(supabase, roomId, room, players) {
         const placement = sorted.findIndex(s => s.playerIndex === r.playerIndex) + 1;
         const totals = totalsByPlayer.get(r.playerIndex) ?? { bid: r.bid, got: r.got, hit: r.bid === r.got ? 1 : 0, played: 1 };
         await supabase.from("game_stats").insert({
-          room_id: roomId, user_id: p.user_id, placement,
+          room_id: roomId, game_session_id: gameSessionId, user_id: p.user_id, placement,
           final_score: r.totalScore, total_rounds: room.max_rounds,
           tricks_bid: totals.bid,
           tricks_won: totals.got,
