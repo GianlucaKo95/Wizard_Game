@@ -3834,7 +3834,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
             <div style={{ ...archivo, fontSize: 13, color: C.ivoryDim, textAlign: "center", padding: "17px 0" }}>Warte auf den Host…</div>
           )}
           <button onClick={onLeave} style={flatGhostBtn({ width: "100%", textAlign: "center", justifyContent: "center", display: "flex", boxSizing: "border-box" })}>ZURÜCK ZUR STARTSEITE</button>
-          <button onClick={() => window.location.reload()} style={flatGhostBtn({ width: "100%", textAlign: "center", justifyContent: "center", display: "flex", boxSizing: "border-box", fontSize: 11, color: C.ivoryDim })}>Raum verlassen</button>
           <div style={{ display: "flex", justifyContent: "center" }}>{voicePanel}</div>
         </div>
       </div>
