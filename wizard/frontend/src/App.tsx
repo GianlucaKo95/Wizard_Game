@@ -2584,8 +2584,8 @@ function LobbyScreen({ session }: { session: Session }) {
       <div style={{ padding: "20px 18px 0" }}>
         <div style={{ ...flatLabel, marginBottom: 9 }}>Neue Partie</div>
         <div style={{ ...flatSegTrack, marginBottom: 12 }}>
-          <button onClick={() => setEdition("classic")} style={flatSegBtn(edition === "classic")}>Classic · 60</button>
-          <button onClick={() => setEdition("anniversary")} style={flatSegBtn(edition === "anniversary")}>30 Jahre · 69</button>
+          <button onClick={() => setEdition("classic")} style={flatSegBtn(edition === "classic")}>Classic</button>
+          <button onClick={() => setEdition("anniversary")} style={flatSegBtn(edition === "anniversary")}>30 Jahre</button>
         </div>
         <button onClick={createRoom} disabled={loading} style={flatPrimaryBtn(loading)}>
           {loading ? "…" : "SPIEL ERSTELLEN"}<span style={{ fontSize: 18 }}>→</span>
@@ -3834,7 +3834,6 @@ function GameRoom({ roomId, session, edition, onlineUserIds, voice, onLeave }: {
             <div style={{ ...archivo, fontSize: 13, color: C.ivoryDim, textAlign: "center", padding: "17px 0" }}>Warte auf den Host…</div>
           )}
           <button onClick={onLeave} style={flatGhostBtn({ width: "100%", textAlign: "center", justifyContent: "center", display: "flex", boxSizing: "border-box" })}>ZURÜCK ZUR STARTSEITE</button>
-          <button onClick={() => window.location.reload()} style={flatGhostBtn({ width: "100%", textAlign: "center", justifyContent: "center", display: "flex", boxSizing: "border-box", fontSize: 11, color: C.ivoryDim })}>Raum verlassen</button>
           <div style={{ display: "flex", justifyContent: "center" }}>{voicePanel}</div>
         </div>
       </div>
