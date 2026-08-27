@@ -26,6 +26,23 @@ function rateLimited(userId: string): boolean {
   return hits.length > 20;
 }
 
+// Separate, stricter limit for sendFriendRequest attempts that didn't
+// result in a new row (no such user, already friends/pending, self) - a
+// burst of exactly those is what username enumeration looks like, even
+// though each individual response is identical to a real send.
+const friendFailMap = new Map<string, number[]>();
+function friendLookupLocked(userId: string): boolean {
+  const now = Date.now();
+  const hits = (friendFailMap.get(userId) ?? []).filter(t => now - t < 60_000);
+  return hits.length >= 4;
+}
+function recordFriendLookupFailure(userId: string) {
+  const now = Date.now();
+  const hits = (friendFailMap.get(userId) ?? []).filter(t => now - t < 60_000);
+  hits.push(now);
+  friendFailMap.set(userId, hits);
+}
+
 const DEBUG = Deno.env.get("WIZARD_DEBUG") === "1";
 const dbg = (...a: unknown[]) => { if (DEBUG) console.log(...a); };
 
@@ -1039,11 +1056,34 @@ serve(async (req) => {
 
   if (rateLimited(user.id)) return json({ error: "Zu viele Anfragen" }, 429);
 
-  // createRoom/joinRoom/finishManualGame don't operate on an existing roomId
-  // (createRoom makes one, joinRoom resolves the room from a room code,
-  // finishManualGame operates on a manual_games row instead) - skip the lookup.
-  if (action === "createRoom" || action === "joinRoom" || action === "finishManualGame") {
+  // createRoom/joinRoom/finishManualGame/sendFriendRequest don't operate on
+  // an existing roomId (createRoom makes one, joinRoom resolves the room
+  // from a room code, finishManualGame operates on a manual_games row,
+  // sendFriendRequest doesn't touch a room at all) - skip the lookup.
+  if (action === "createRoom" || action === "joinRoom" || action === "finishManualGame" || action === "sendFriendRequest") {
     switch (action) {
+      case "sendFriendRequest": {
+        // profiles.username is openly readable (needed for the game itself -
+        // showing names at the table, etc.), so a client-side substring
+        // search or any response here that differs based on whether the
+        // username exists, is already a friend, or is the caller themself
+        // would let anyone enumerate real accounts. Every outcome below
+        // returns the exact same { ok: true } - only whether a row actually
+        // got inserted differs, invisibly to the caller.
+        const targetUsername = (body.username ?? "").toString().trim().slice(0, 32);
+        if (!targetUsername) return json({ error: "Bitte einen Usernamen eingeben" }, 400);
+        if (friendLookupLocked(user.id)) {
+          return json({ error: "Zu viele erfolglose Anfragen - bitte kurz warten" }, 429);
+        }
+        const { data: target } = await supabase.from("profiles").select("id").ilike("username", targetUsername).maybeSingle();
+        let sent = false;
+        if (target && target.id !== user.id) {
+          const { error: insErr } = await supabase.from("friends").insert({ requester_id: user.id, addressee_id: target.id, status: "pending" });
+          sent = !insErr;
+        }
+        if (!sent) recordFriendLookupFailure(user.id);
+        return json({ ok: true });
+      }
       case "finishManualGame": {
         // Manual (paper-replacement) games are otherwise entirely client-
         // written (see 010_manual_games.sql) - RLS already restricts every

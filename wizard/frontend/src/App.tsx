@@ -813,8 +813,7 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
   const [names, setNames] = useState<Record<string, string>>({});
   const [avatars, setAvatars] = useState<Record<string, string | null>>({});
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<{ id: string; username: string }[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewingFriend, setViewingFriend] = useState<{ id: string; name: string; avatar: string | null } | null>(null);
@@ -872,27 +871,20 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
   const outgoing = (rows ?? []).filter((f: any) => f.status === "pending" && f.requester_id === uid);
   const onlineFriendCount = accepted.filter((f: any) => onlineUserIds.has(f.requester_id === uid ? f.addressee_id : f.requester_id)).length;
 
-  async function search() {
-    const q = query.trim();
-    if (q.length < 2) { setResults([]); return; }
-    setSearching(true);
-    const { data } = await supabase.from("profiles").select("id, username").ilike("username", `%${q}%`).neq("id", uid).limit(8);
-    setSearching(false);
-    setResults(data ?? []);
-  }
-
-  function statusFor(id: string): "friend" | "incoming" | "outgoing" | "none" {
-    if (accepted.some((f: any) => f.requester_id === id || f.addressee_id === id)) return "friend";
-    if (incoming.some((f: any) => f.requester_id === id)) return "incoming";
-    if (outgoing.some((f: any) => f.addressee_id === id)) return "outgoing";
-    return "none";
-  }
-
-  async function sendRequest(id: string) {
-    setBusyId(id); setMsg(null);
-    const { error } = await supabase.from("friends").insert({ requester_id: uid, addressee_id: id, status: "pending" });
-    setBusyId(null);
-    if (error) setMsg({ text: "Anfrage konnte nicht gesendet werden", ok: false });
+  // Deliberately can't tell the caller whether targetUsername exists, is
+  // already a friend, or is themself - see the sendFriendRequest case in
+  // the edge function for why. The same generic message covers a real
+  // send and a silent no-op alike; only a genuine rate-limit error (too
+  // many unsuccessful lookups) is shown differently, since that reveals
+  // nothing about any specific username.
+  async function sendRequest() {
+    const uname = query.trim();
+    if (!uname) return;
+    setSending(true); setMsg(null);
+    const res = await callGameAction("", "sendFriendRequest", { username: uname });
+    setSending(false);
+    setQuery("");
+    if (res?.error) setMsg({ text: res.error, ok: false });
     else { setMsg({ text: "Anfrage gesendet ✓", ok: true }); load(); }
   }
 
@@ -925,44 +917,12 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
 
       <div style={{ padding: "22px 18px 0" }}>
         <div style={{ display: "flex", gap: 8 }}>
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Username suchen"
-            style={{ ...flatInput, flex: 1 }} onKeyDown={e => e.key === "Enter" && search()} />
-          <button onClick={() => { if (query.trim()) { setQuery(""); setResults([]); } else search(); }}
-            disabled={searching || (query.trim().length < 2 && results.length === 0 && !query.trim())}
-            style={flatGhostBtn({ opacity: searching ? 0.5 : 1 })}>
-            {searching ? "…" : results.length > 0 || query.trim() ? "LEEREN" : "SUCHEN"}
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Username eingeben"
+            style={{ ...flatInput, flex: 1 }} onKeyDown={e => e.key === "Enter" && sendRequest()} />
+          <button onClick={sendRequest} disabled={sending || !query.trim()} style={flatPrimaryBtn(sending || !query.trim())}>
+            {sending ? "…" : "SENDEN"}
           </button>
         </div>
-        {query.trim().length >= 2 && results.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ ...flatLabel, marginBottom: 4 }}>Treffer</div>
-            {results.map((r, i) => {
-              const st = statusFor(r.id);
-              return (
-                <div key={r.id} style={flatRow(i === 0)}>
-                  <div style={{ width: 26, height: 26, background: avatarColor(r.id), color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 600, fontSize: 11, flexShrink: 0 }}>
-                    {r.username.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ ...archivo, fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{r.username}</div>
-                    <div style={{ ...archivo, fontWeight: 400, fontSize: 11, color: C.ivoryDim, marginTop: 1 }}>
-                      {st === "friend" ? "Freund" : st === "incoming" ? "Hat dich angefragt" : st === "outgoing" ? "Angefragt" : "Noch nicht verbunden"}
-                    </div>
-                  </div>
-                  {st === "none" && (
-                    <button onClick={() => sendRequest(r.id)} disabled={busyId === r.id} style={flatPrimaryBtn(busyId === r.id)}>HINZUFÜGEN</button>
-                  )}
-                  {st === "outgoing" && (
-                    <span style={{ ...flatPrimaryBtn(true), background: C.accent, color: C.goldLight, opacity: 1 }}>ANGEFRAGT ✓</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {query.trim().length >= 2 && results.length === 0 && !searching && (
-          <div style={{ ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim, marginTop: 10 }}>Kein Nutzer „{query.trim()}" gefunden.</div>
-        )}
         {msg && <div style={{ fontSize: 11, color: msg.ok ? C.success : C.error, marginTop: 8 }}>{msg.text}</div>}
       </div>
 
