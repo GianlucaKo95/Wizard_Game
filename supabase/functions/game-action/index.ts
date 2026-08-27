@@ -464,17 +464,35 @@ async function endRound(supabase, roomId, room, players) {
 
   if (room.round >= room.max_rounds) {
     await supabase.from("rooms").update({ phase: "gameEnd", log: room.log }).eq("id", roomId);
-    // Save stats
+    // Save stats. tricks_bid/tricks_won must be each player's own bid/got
+    // summed across every round of the game - results here only holds the
+    // round that just finished, and summing across rr in that array sums
+    // everyone's bid together instead of one player's own. Reconstruct the
+    // real per-player totals from round_history, which by now already has
+    // this round's row (apply_round_scores inserts it in the same
+    // transaction as the score update, and the fallback path above inserts
+    // it before this block runs).
+    const { data: allRounds } = await supabase.from("round_history").select("results").eq("room_id", roomId);
+    const totalsByPlayer = new Map();
+    for (const rh of allRounds ?? []) {
+      for (const entry of rh.results ?? []) {
+        const t = totalsByPlayer.get(entry.playerIndex) ?? { bid: 0, got: 0 };
+        t.bid += entry.bid ?? 0;
+        t.got += entry.got ?? 0;
+        totalsByPlayer.set(entry.playerIndex, t);
+      }
+    }
     for (const r of results) {
       const p = players[r.playerIndex];
       if (!p.is_ai && p.user_id) {
         const sorted = [...results].sort((a, b) => b.totalScore - a.totalScore);
         const placement = sorted.findIndex(s => s.playerIndex === r.playerIndex) + 1;
+        const totals = totalsByPlayer.get(r.playerIndex) ?? { bid: r.bid, got: r.got };
         await supabase.from("game_stats").insert({
           room_id: roomId, user_id: p.user_id, placement,
           final_score: r.totalScore, total_rounds: room.max_rounds,
-          tricks_bid: results.reduce((a, rr) => a + rr.bid, 0),
-          tricks_won: results.reduce((a, rr) => a + rr.got, 0),
+          tricks_bid: totals.bid,
+          tricks_won: totals.got,
         });
       }
     }
