@@ -996,6 +996,183 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
   );
 }
 
+// ─── Shared: past-games list (StatsScreen + FriendProfileScreen) ──────────
+// One game_stats row per player per game - group by game_session_id (or,
+// for older games, room_id while their room still exists) to get the full
+// standings. Works for any userId the caller may read game_stats for -
+// gs_select is broad (any authenticated user, see 012) - so the exact same
+// query and grouping doubles as the friend-profile "Letzte Partien" source.
+// RLS on manual_game_rounds still applies per-game (host or a linked
+// participant only), so a manual game the viewer had no part in naturally
+// degrades to "not available" instead of leaking or erroring.
+type PastGame = { gameKey: string; playedAt: string; edition: string | null; place: number; score: number; totalRounds: number; playerCount: number; rows: { userId: string; name: string; placement: number; score: number }[]; roomDataAvailable: boolean };
+
+function usePastGames(userId: string): PastGame[] | null {
+  const [pastGames, setPastGames] = useState<PastGame[] | null>(null);
+
+  useEffect(() => {
+    setPastGames(null);
+    (async () => {
+      const { data: mine } = await supabase.from("game_stats")
+        .select("room_id, manual_game_id, game_session_id, placement, final_score, total_rounds, played_at")
+        .eq("user_id", userId)
+        .order("played_at", { ascending: false })
+        .limit(20);
+      if (!mine || mine.length === 0) { setPastGames([]); return; }
+
+      const roomIds = mine.map(g => g.room_id).filter((id): id is string => !!id);
+      const sessionIds = mine.map(g => g.game_session_id).filter((id): id is string => !!id);
+      // Games from before game_session_id existed that already lost room_id
+      // to room cleanup (see 022_game_session_id.sql) have no join key left
+      // at all - room_id was the only thing tying their player rows
+      // together. As a best-effort fallback, look for other orphaned rows
+      // (same total_rounds, played within a few seconds - game_stats rows
+      // for one game are inserted back-to-back at game end) and only trust
+      // the match if it forms a complete, non-overlapping placement set;
+      // legit ambiguity (e.g. two such games finishing seconds apart) then
+      // correctly falls through to "not available" instead of guessing wrong.
+      const legacyOrphans = mine.filter(g => !g.room_id && !g.manual_game_id && !g.game_session_id);
+      // Manual (Rechenblock) games have room_id null. Their rounds carry
+      // each entry's own display name (see saveRound), so the ranking is
+      // reconstructed straight from manual_game_rounds alone - deliberately
+      // not manual_game_players, whose RLS only lets a non-host participant
+      // see their own roster row (manual_game_rounds is visible to any
+      // participant in full, via is_manual_game_player). This also covers
+      // guests, who have no game_stats row of their own to derive it from.
+      const manualGameIds = Array.from(new Set(mine.map(g => g.manual_game_id).filter((id): id is string => !!id)));
+      const [{ data: roomRows }, { data: sessionRows }, { data: rooms }, { data: manualRounds }, ...orphanResults] = await Promise.all([
+        roomIds.length ? supabase.from("game_stats").select("room_id, user_id, placement, final_score").in("room_id", roomIds) : Promise.resolve({ data: [] }),
+        sessionIds.length ? supabase.from("game_stats").select("game_session_id, user_id, placement, final_score").in("game_session_id", sessionIds) : Promise.resolve({ data: [] }),
+        roomIds.length ? supabase.from("rooms").select("id, edition").in("id", roomIds) : Promise.resolve({ data: [] }),
+        manualGameIds.length ? supabase.from("manual_game_rounds").select("manual_game_id, results").in("manual_game_id", manualGameIds) : Promise.resolve({ data: [] }),
+        ...legacyOrphans.map(g => {
+          const windowMs = 5000;
+          const lo = new Date(new Date(g.played_at).getTime() - windowMs).toISOString();
+          const hi = new Date(new Date(g.played_at).getTime() + windowMs).toISOString();
+          return supabase.from("game_stats").select("user_id, placement, final_score, played_at")
+            .is("room_id", null).is("manual_game_id", null).is("game_session_id", null)
+            .eq("total_rounds", g.total_rounds).gte("played_at", lo).lte("played_at", hi);
+        }),
+      ]);
+      const allRows = [...(roomRows ?? []), ...(sessionRows ?? []).map(r => ({ ...r, room_id: r.game_session_id }))];
+      const orphanRowsByPlayedAt = new Map(legacyOrphans.map((g, i) => [g.played_at, orphanResults[i]?.data ?? []]));
+
+      const userIds = Array.from(new Set([...allRows.map(r => r.user_id), ...[...orphanRowsByPlayedAt.values()].flat().map(r => r.user_id)]));
+      const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", userIds);
+      const nameById = new Map((profiles ?? []).map(p => [p.id, p.username]));
+      const editionByRoom = new Map((rooms ?? []).map(r => [r.id, r.edition]));
+
+      const manualRowsByGame = new Map<string, { userId: string; name: string; placement: number; score: number }[]>();
+      for (const gameId of manualGameIds) {
+        const roundsForGame = (manualRounds ?? []).filter(r => r.manual_game_id === gameId);
+        if (roundsForGame.length === 0) continue; // no rounds visible (RLS) or none recorded
+        const totalsByIndex = new Map<number, { name: string; score: number }>();
+        for (const r of roundsForGame) {
+          for (const entry of r.results ?? []) {
+            const t = totalsByIndex.get(entry.playerIndex) ?? { name: entry.name, score: 0 };
+            t.score += entry.delta ?? 0;
+            totalsByIndex.set(entry.playerIndex, t);
+          }
+        }
+        const totals = [...totalsByIndex.entries()].map(([playerIndex, t]) => ({ userId: `${gameId}-${playerIndex}`, name: t.name, score: t.score }));
+        const sorted = [...totals].sort((a, b) => b.score - a.score);
+        manualRowsByGame.set(gameId, sorted.map((t, idx) => ({ ...t, placement: idx + 1 })));
+      }
+      // Only trust a heuristic match if the candidates form a clean,
+      // complete placement set (1..N, no gaps or duplicates) - anything
+      // messier means two unrelated orphaned games probably overlapped in
+      // the time window, and guessing which rows belong together would risk
+      // showing someone's real opponent as a stranger's, or vice versa.
+      const reconstructOrphan = (candidates: { user_id: string; placement: number; final_score: number }[]) => {
+        const byUser = new Map(candidates.map(c => [c.user_id, c]));
+        const unique = [...byUser.values()];
+        const placements = unique.map(c => c.placement).sort((a, b) => a - b);
+        const isCleanSet = placements.length > 0 && placements.every((p, i) => p === i + 1);
+        if (!isCleanSet) return null;
+        return unique
+          .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
+          .sort((a, b) => a.placement - b.placement);
+      };
+
+      setPastGames(mine.map(g => {
+        const isManual = !!g.manual_game_id;
+        const groupKey = g.game_session_id ?? g.room_id;
+        const reconstructed = (!isManual && !groupKey) ? reconstructOrphan(orphanRowsByPlayedAt.get(g.played_at) ?? []) : null;
+        const manualRows = isManual ? manualRowsByGame.get(g.manual_game_id ?? "") : undefined;
+        // An online game (no manual_game_id, no game_session_id) whose
+        // room_id is null didn't start out that way - it lost its room row
+        // to cleanup_stale_rooms() after finishing (room_id -> SET NULL, see
+        // 019), predating game_session_id (022). That also takes
+        // round_history with it, and room_id was the only link between this
+        // player's game_stats row and their opponents' - there's nothing
+        // left to join on except the best-effort played_at heuristic above.
+        const roomDataAvailable = isManual ? manualRows !== undefined : (!!groupKey || reconstructed !== null);
+        return {
+          gameKey: groupKey ?? g.played_at, playedAt: g.played_at, edition: g.room_id ? editionByRoom.get(g.room_id) ?? null : null,
+          place: g.placement, score: g.final_score, totalRounds: g.total_rounds,
+          roomDataAvailable,
+          playerCount: isManual
+            ? manualRows?.length ?? 0
+            : groupKey
+              ? allRows.filter(r => r.room_id === groupKey).length
+              : reconstructed?.length ?? 0,
+          rows: isManual
+            ? manualRows ?? []
+            : groupKey
+              ? allRows
+                .filter(r => r.room_id === groupKey)
+                .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
+                .sort((a, b) => a.placement - b.placement)
+              : reconstructed ?? [],
+        };
+      }));
+    })();
+  }, [userId]);
+
+  return pastGames;
+}
+
+function PastGamesList({ pastGames }: { pastGames: PastGame[] | null }) {
+  const [openGame, setOpenGame] = useState<string | null>(null);
+  return (
+    <div style={{ padding: "24px 18px 30px" }}>
+      <div style={{ ...flatLabel, marginBottom: 4 }}>Letzte Partien</div>
+      {pastGames === null && <div style={{ ...archivo, fontSize: 12, color: C.ivoryDim, padding: "20px 0" }}>Lädt…</div>}
+      {pastGames?.length === 0 && <div style={{ ...archivo, fontSize: 12, color: C.ivoryDim, padding: "20px 0" }}>Noch keine Partien gespielt.</div>}
+      {pastGames?.map((pg, i) => {
+        const isOpen = openGame === pg.gameKey;
+        const date = new Date(pg.playedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+        return (
+          <div key={pg.gameKey} style={{ ...flatRow(i === 0), flexDirection: "column", alignItems: "stretch", gap: 0 }}>
+            <button onClick={() => setOpenGame(isOpen ? null : pg.gameKey)}
+              style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minHeight: 44, color: "inherit" }}>
+              <span style={{ ...archivo, fontWeight: 700, fontSize: 12.5, color: pg.place === 1 ? C.gold : C.ivory, minWidth: 18 }}>{pg.place}.</span>
+              <span style={{ flex: 1, ...archivo, fontWeight: 400, fontSize: 12.5, lineHeight: 1.3, color: C.ivoryDim }}>{pg.roomDataAvailable ? `${pg.playerCount} Spieler · ` : ""}{pg.totalRounds} Runden · {date}</span>
+              <span style={{ ...archivo, fontWeight: 800, fontSize: 17, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{pg.score}</span>
+              <span style={{ ...archivo, fontWeight: 400, fontSize: 13, lineHeight: 1, color: C.ivoryDim }}>{isOpen ? "▴" : "▾"}</span>
+            </button>
+            {isOpen && (
+              <div style={{ padding: "10px 0 4px" }}>
+                {pg.roomDataAvailable ? pg.rows.map(pr => (
+                  <div key={pr.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.14)" }}>
+                    <span style={{ ...archivo, fontWeight: 600, fontSize: 12, color: C.ivoryDim, width: 14 }}>{pr.placement}</span>
+                    <span style={{ flex: 1, ...archivo, fontWeight: 500, fontSize: 13, lineHeight: 1.2 }}>{pr.name}</span>
+                    <span style={{ ...archivo, fontWeight: 700, fontSize: 13, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{pr.score}</span>
+                  </div>
+                )) : (
+                  <div style={{ ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.14)" }}>
+                    Mitspieler-Daten für diese Partie sind nicht mehr verfügbar.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Friend Profile (read-only: avatar, member-since, user_stats) ─────────
 // user_stats is already readable for any id, not just the caller's own -
 // same broad game_stats/profiles select policies the caller's own
@@ -1003,6 +1180,7 @@ function FriendsScreen({ session, onClose, onlineUserIds, onSpectate }: { sessio
 function FriendProfileScreen({ friendId, friendName, friendAvatar, onBack }: { friendId: string; friendName: string; friendAvatar: string | null; onBack: () => void }) {
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [stats, setStats] = useState<any>(null);
+  const pastGames = usePastGames(friendId);
   useEffect(() => {
     supabase.from("profiles").select("created_at").eq("id", friendId).single().then(({ data }) => setCreatedAt(data?.created_at ?? null));
     supabase.from("user_stats").select("*").eq("id", friendId).single().then(({ data }) => setStats(data ?? null));
@@ -1051,7 +1229,7 @@ function FriendProfileScreen({ friendId, friendName, friendAvatar, onBack }: { f
         </div>
       </div>
 
-      <div style={{ padding: "22px 18px 30px" }}>
+      <div style={{ padding: "22px 18px 0" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
           <div style={flatLabel}>Trefferquote der Ansagen</div>
           <div style={{ marginLeft: "auto", ...archivo, fontWeight: 800, fontSize: 22, lineHeight: 1, color: C.gold }}>{accuracyLabel}</div>
@@ -1060,6 +1238,8 @@ function FriendProfileScreen({ friendId, friendName, friendAvatar, onBack }: { f
           <div style={{ width: `${accuracyPct}%`, background: C.gold }} />
         </div>
       </div>
+
+      <PastGamesList pastGames={pastGames} />
     </div>
   );
 }
@@ -2016,133 +2196,7 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
     supabase.from("user_stats").select("*").eq("id", session.user.id).single().then(({ data }) => setStats(data));
   }, [session.user.id]);
 
-  // One game_stats row per player per room - group by room_id to get the
-  // full standings for each of the user's own past games. game_stats has no
-  // per-game timestamp beyond played_at (that's on the user's own row,
-  // shared by all rows for that room since they're inserted together), and
-  // no direct FK to profiles.username, so a second query resolves names.
-  const [pastGames, setPastGames] = useState<{ gameKey: string; playedAt: string; edition: string | null; place: number; score: number; totalRounds: number; playerCount: number; rows: { userId: string; name: string; placement: number; score: number }[]; roomDataAvailable: boolean }[] | null>(null);
-  const [openGame, setOpenGame] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      const { data: mine } = await supabase.from("game_stats")
-        .select("room_id, manual_game_id, game_session_id, placement, final_score, total_rounds, played_at")
-        .eq("user_id", session.user.id)
-        .order("played_at", { ascending: false })
-        .limit(20);
-      if (!mine || mine.length === 0) { setPastGames([]); return; }
-
-      const roomIds = mine.map(g => g.room_id).filter((id): id is string => !!id);
-      const sessionIds = mine.map(g => g.game_session_id).filter((id): id is string => !!id);
-      // Games from before game_session_id existed that already lost room_id
-      // to room cleanup (see 022_game_session_id.sql) have no join key left
-      // at all - room_id was the only thing tying their player rows
-      // together. As a best-effort fallback, look for other orphaned rows
-      // (same total_rounds, played within a few seconds - game_stats rows
-      // for one game are inserted back-to-back at game end) and only trust
-      // the match if it forms a complete, non-overlapping placement set;
-      // legit ambiguity (e.g. two such games finishing seconds apart) then
-      // correctly falls through to "not available" instead of guessing wrong.
-      const legacyOrphans = mine.filter(g => !g.room_id && !g.manual_game_id && !g.game_session_id);
-      // Manual (Rechenblock) games have room_id null - there's no rooms row
-      // for them, and no game_stats row for guest players either (no
-      // account to attribute stats to) - so their standings can't be
-      // reconstructed from game_stats/allRows the way online games' can.
-      // manual_game_rounds isn't subject to the round_history-gets-deleted
-      // problem online rooms have (nothing cleans up manual games), so
-      // recompute the same per-player totals finishManualGame itself uses,
-      // straight from the rounds - this covers every player including
-      // guests, not just the ones with an account.
-      const manualGameIds = Array.from(new Set(mine.map(g => g.manual_game_id).filter((id): id is string => !!id)));
-      const [{ data: roomRows }, { data: sessionRows }, { data: rooms }, { data: manualPlayers }, { data: manualRounds }, ...orphanResults] = await Promise.all([
-        roomIds.length ? supabase.from("game_stats").select("room_id, user_id, placement, final_score").in("room_id", roomIds) : Promise.resolve({ data: [] }),
-        sessionIds.length ? supabase.from("game_stats").select("game_session_id, user_id, placement, final_score").in("game_session_id", sessionIds) : Promise.resolve({ data: [] }),
-        roomIds.length ? supabase.from("rooms").select("id, edition").in("id", roomIds) : Promise.resolve({ data: [] }),
-        manualGameIds.length ? supabase.from("manual_game_players").select("manual_game_id, player_index, display_name").in("manual_game_id", manualGameIds) : Promise.resolve({ data: [] }),
-        manualGameIds.length ? supabase.from("manual_game_rounds").select("manual_game_id, results").in("manual_game_id", manualGameIds) : Promise.resolve({ data: [] }),
-        ...legacyOrphans.map(g => {
-          const windowMs = 5000;
-          const lo = new Date(new Date(g.played_at).getTime() - windowMs).toISOString();
-          const hi = new Date(new Date(g.played_at).getTime() + windowMs).toISOString();
-          return supabase.from("game_stats").select("user_id, placement, final_score, played_at")
-            .is("room_id", null).is("manual_game_id", null).is("game_session_id", null)
-            .eq("total_rounds", g.total_rounds).gte("played_at", lo).lte("played_at", hi);
-        }),
-      ]);
-      const allRows = [...(roomRows ?? []), ...(sessionRows ?? []).map(r => ({ ...r, room_id: r.game_session_id }))];
-      const orphanRowsByPlayedAt = new Map(legacyOrphans.map((g, i) => [g.played_at, orphanResults[i]?.data ?? []]));
-
-      const userIds = Array.from(new Set([...allRows.map(r => r.user_id), ...[...orphanRowsByPlayedAt.values()].flat().map(r => r.user_id)]));
-      const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", userIds);
-      const nameById = new Map((profiles ?? []).map(p => [p.id, p.username]));
-      const editionByRoom = new Map((rooms ?? []).map(r => [r.id, r.edition]));
-      const manualPlayerCountByGame = new Map<string, number>();
-      for (const mp of manualPlayers ?? []) manualPlayerCountByGame.set(mp.manual_game_id, (manualPlayerCountByGame.get(mp.manual_game_id) ?? 0) + 1);
-      const manualRowsByGame = new Map<string, { userId: string; name: string; placement: number; score: number }[]>();
-      for (const gameId of manualGameIds) {
-        const playersForGame = (manualPlayers ?? []).filter(p => p.manual_game_id === gameId);
-        const roundsForGame = (manualRounds ?? []).filter(r => r.manual_game_id === gameId);
-        const totals = playersForGame.map(p => {
-          let score = 0;
-          for (const r of roundsForGame) {
-            const entry = (r.results ?? []).find((e: any) => e.playerIndex === p.player_index);
-            if (entry) score += entry.delta ?? 0;
-          }
-          return { userId: `${gameId}-${p.player_index}`, name: p.display_name, score };
-        });
-        const sorted = [...totals].sort((a, b) => b.score - a.score);
-        manualRowsByGame.set(gameId, sorted.map((t, idx) => ({ ...t, placement: idx + 1 })));
-      }
-      // Only trust a heuristic match if the candidates form a clean,
-      // complete placement set (1..N, no gaps or duplicates) - anything
-      // messier means two unrelated orphaned games probably overlapped in
-      // the time window, and guessing which rows belong together would risk
-      // showing someone's real opponent as a stranger's, or vice versa.
-      const reconstructOrphan = (candidates: { user_id: string; placement: number; final_score: number }[]) => {
-        const byUser = new Map(candidates.map(c => [c.user_id, c]));
-        const unique = [...byUser.values()];
-        const placements = unique.map(c => c.placement).sort((a, b) => a - b);
-        const isCleanSet = placements.length > 0 && placements.every((p, i) => p === i + 1);
-        if (!isCleanSet) return null;
-        return unique
-          .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
-          .sort((a, b) => a.placement - b.placement);
-      };
-
-      setPastGames(mine.map(g => {
-        const isManual = !!g.manual_game_id;
-        const groupKey = g.game_session_id ?? g.room_id;
-        const reconstructed = (!isManual && !groupKey) ? reconstructOrphan(orphanRowsByPlayedAt.get(g.played_at) ?? []) : null;
-        // An online game (no manual_game_id, no game_session_id) whose
-        // room_id is null didn't start out that way - it lost its room row
-        // to cleanup_stale_rooms() after finishing (room_id -> SET NULL, see
-        // 019), predating game_session_id (022). That also takes
-        // round_history with it, and room_id was the only link between this
-        // player's game_stats row and their opponents' - there's nothing
-        // left to join on except the best-effort played_at heuristic above.
-        const roomDataAvailable = isManual || !!groupKey || reconstructed !== null;
-        return {
-          gameKey: groupKey ?? g.played_at, playedAt: g.played_at, edition: g.room_id ? editionByRoom.get(g.room_id) ?? null : null,
-          place: g.placement, score: g.final_score, totalRounds: g.total_rounds,
-          roomDataAvailable,
-          playerCount: isManual
-            ? manualPlayerCountByGame.get(g.manual_game_id ?? "") ?? 0
-            : groupKey
-              ? allRows.filter(r => r.room_id === groupKey).length
-              : reconstructed?.length ?? 0,
-          rows: isManual
-            ? manualRowsByGame.get(g.manual_game_id ?? "") ?? []
-            : groupKey
-              ? allRows
-                .filter(r => r.room_id === groupKey)
-                .map(r => ({ userId: r.user_id, name: nameById.get(r.user_id) ?? "Spieler", placement: r.placement, score: r.final_score }))
-                .sort((a, b) => a.placement - b.placement)
-              : reconstructed ?? [],
-        };
-      }));
-    })();
-  }, [session.user.id]);
+  const pastGames = usePastGames(session.user.id);
 
   const accuracyPct = stats?.bid_accuracy_pct != null ? Math.round(stats.bid_accuracy_pct) : 0;
   const accuracyLabel = stats?.bid_accuracy_pct != null ? `${accuracyPct}%` : "–";
@@ -2183,41 +2237,7 @@ function StatsScreen({ session, onBack }: { session: Session; onBack: () => void
         </div>
       </div>
 
-      <div style={{ padding: "24px 18px 30px" }}>
-        <div style={{ ...flatLabel, marginBottom: 4 }}>Letzte Partien</div>
-        {pastGames === null && <div style={{ ...archivo, fontSize: 12, color: C.ivoryDim, padding: "20px 0" }}>Lädt…</div>}
-        {pastGames?.length === 0 && <div style={{ ...archivo, fontSize: 12, color: C.ivoryDim, padding: "20px 0" }}>Noch keine Partien gespielt.</div>}
-        {pastGames?.map((pg, i) => {
-          const isOpen = openGame === pg.gameKey;
-          const date = new Date(pg.playedAt).toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
-          return (
-            <div key={pg.gameKey} style={{ ...flatRow(i === 0), flexDirection: "column", alignItems: "stretch", gap: 0 }}>
-              <button onClick={() => setOpenGame(isOpen ? null : pg.gameKey)}
-                style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minHeight: 44, color: "inherit" }}>
-                <span style={{ ...archivo, fontWeight: 700, fontSize: 12.5, color: pg.place === 1 ? C.gold : C.ivory, minWidth: 18 }}>{pg.place}.</span>
-                <span style={{ flex: 1, ...archivo, fontWeight: 400, fontSize: 12.5, lineHeight: 1.3, color: C.ivoryDim }}>{pg.roomDataAvailable ? `${pg.playerCount} Spieler · ` : ""}{pg.totalRounds} Runden · {date}</span>
-                <span style={{ ...archivo, fontWeight: 800, fontSize: 17, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{pg.score}</span>
-                <span style={{ ...archivo, fontWeight: 400, fontSize: 13, lineHeight: 1, color: C.ivoryDim }}>{isOpen ? "▴" : "▾"}</span>
-              </button>
-              {isOpen && (
-                <div style={{ padding: "10px 0 4px" }}>
-                  {pg.roomDataAvailable ? pg.rows.map(pr => (
-                    <div key={pr.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.14)" }}>
-                      <span style={{ ...archivo, fontWeight: 600, fontSize: 12, color: C.ivoryDim, width: 14 }}>{pr.placement}</span>
-                      <span style={{ flex: 1, ...archivo, fontWeight: 500, fontSize: 13, lineHeight: 1.2 }}>{pr.name}</span>
-                      <span style={{ ...archivo, fontWeight: 700, fontSize: 13, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{pr.score}</span>
-                    </div>
-                  )) : (
-                    <div style={{ ...archivo, fontWeight: 400, fontSize: 12, color: C.ivoryDim, padding: "6px 0", borderTop: "1px solid rgba(201,168,76,0.14)" }}>
-                      Mitspieler-Daten für diese Partie sind nicht mehr verfügbar.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <PastGamesList pastGames={pastGames} />
     </div>
   );
 }
