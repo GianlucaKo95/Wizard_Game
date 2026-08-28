@@ -1734,6 +1734,16 @@ function ManualGamePlay({ session, game, players, rounds, onChange }: {
   }
 
   async function finish() {
+    // Rechenblock games have no fixed round count, so there's no way to
+    // tell "a deliberately short game" from "Beenden was tapped by mistake"
+    // from the data alone - a confirmation here is the only guard against a
+    // stray tap permanently recording a near-empty game into the user's
+    // stats (accidental early finishes were exactly this: silent and
+    // irreversible without manual DB cleanup).
+    if (rounds.length < 3) {
+      const ok = confirm(`Erst ${rounds.length} Runde${rounds.length === 1 ? "" : "n"} gespielt - Spiel trotzdem abschließen? Das wird dauerhaft in der Statistik gespeichert.`);
+      if (!ok) return;
+    }
     setFinishing(true);
     const res = await callGameAction("", "finishManualGame", { manualGameId: game.id });
     setFinishing(false);
